@@ -107,30 +107,139 @@ def get_report():
 def health_check():
     return {"status": "ok"}
 
-# --- Journal APIs ---
+from db import init_db, save_signal, check_last_signal, get_stocks, add_stock, delete_stock, add_transaction, get_transactions, update_transaction, delete_transaction
 
-@app.get("/api/journal")
-def api_get_journal():
-    entries = get_journal_entries()
-    return entries
+# ... (Previous parts)
 
-class JournalEntry(BaseModel):
-    ticker: str
-    stock_name: str = ""
-    entry_date: str # ISO string
-    entry_price: float
-    quantity: int
-    reason: str = ""
-    exit_date: str = None
-    exit_price: float = None
+@app.get("/api/report")
+def get_report():
+    try:
+        data = run_analysis()
+        return data
+    except Exception as e:
+        print(f"Error: {e}")
+        return {"error": str(e)}
 
-@app.post("/api/journal")
-def api_add_journal(entry: JournalEntry):
-    res = add_journal_entry(entry.dict())
-    if res:
+@app.get("/api/health")
+def health_check():
+    return {"status": "ok"}
+
+# --- Stock APIs ---
+class StockModel(BaseModel):
+    code: str
+    name: str
+
+@app.get("/api/stocks")
+def api_get_stocks():
+    return get_stocks()
+
+@app.post("/api/stocks")
+def api_add_stock(stock: StockModel):
+    if add_stock(stock.code, stock.name):
         return {"status": "success"}
-    else:
-        return {"status": "error"}
+    return {"status": "error"}
+
+@app.delete("/api/stocks/{code}")
+def api_delete_stock(code: str):
+    if delete_stock(code):
+        return {"status": "success"}
+    return {"status": "error"}
+
+# --- Transaction APIs ---
+class TransactionModel(BaseModel):
+    ticker: str
+    trade_type: str # BUY or SELL
+    qty: int
+    price: float
+    trade_date: str
+    memo: str = ""
+
+@app.get("/api/transactions")
+def api_get_transactions():
+    return get_transactions()
+
+@app.post("/api/transactions")
+def api_add_transaction(txn: TransactionModel):
+    if add_transaction(txn.dict()):
+        return {"status": "success"}
+    return {"status": "error"}
+
+@app.put("/api/transactions/{id}")
+def api_update_transaction(id: int, txn: TransactionModel):
+    if update_transaction(id, txn.dict()):
+        return {"status": "success"}
+    return {"status": "error"}
+
+@app.delete("/api/transactions/{id}")
+def api_delete_transaction(id: int):
+    if delete_transaction(id):
+        return {"status": "success"}
+    return {"status": "error"}
+
+@app.get("/api/transactions/stats")
+def api_get_txn_stats():
+    txns = get_transactions()
+    # Sort chronologically for calculation
+    # Only calculate stats if we have data
+    if not txns: return []
+
+    # Calculate Realized Profit based on FIFO (First-In First-Out)
+    # We need to track inventory for each stock
+    inventory = {} # {ticker: [{'price': p, 'qty': q, 'date': d}, ...]}
+    results = [] # [{'ticker', 'sell_date', 'sell_price', 'buy_avg', 'qty', 'profit', 'pct'}]
+    
+    # Sort by date asc
+    # Assuming txns are sorted desc from DB, reverse it
+    txns_sorted = sorted(txns, key=lambda x: x['trade_date'])
+    
+    for t in txns_sorted:
+        ticker = t['ticker']
+        if ticker not in inventory: inventory[ticker] = []
+        
+        if t['trade_type'] == 'BUY':
+            inventory[ticker].append({'price': t['price'], 'qty': t['qty'], 'date': t['trade_date']})
+        elif t['trade_type'] == 'SELL':
+            sell_qty = t['qty']
+            sell_price = t['price']
+            
+            # Match against inventory (FIFO)
+            cost_basis = 0
+            qty_filled = 0
+            
+            # Clone inventory to pop
+            # This is complex. We will just drain inventory.
+            
+            while sell_qty > 0 and inventory[ticker]:
+                batch = inventory[ticker][0] # First item
+                
+                if batch['qty'] <= sell_qty:
+                    # Fully consume this batch
+                    cost_basis += batch['price'] * batch['qty']
+                    qty_filled += batch['qty']
+                    sell_qty -= batch['qty']
+                    inventory[ticker].pop(0)
+                else:
+                    # Partial consume
+                    cost_basis += batch['price'] * sell_qty
+                    qty_filled += sell_qty
+                    batch['qty'] -= sell_qty
+                    sell_qty = 0
+            
+            # If we sold something
+            if qty_filled > 0:
+                avg_buy_price = cost_basis / qty_filled
+                profit = (sell_price - avg_buy_price) * qty_filled
+                pct = ((sell_price - avg_buy_price) / avg_buy_price) * 100
+                
+                results.append({
+                    "ticker": ticker,
+                    "date": t['trade_date'],
+                    "qty": qty_filled,
+                    "profit": round(profit, 2),
+                    "pct": round(pct, 2)
+                })
+                
+    return results
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

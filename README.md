@@ -42,3 +42,8 @@ npm run dev
 - **MariaDB Database Integration**: 영구적인 신호 데이터 저장 및 매매 일지 관리
 - **Real-time Monitoring & SMS**: 1분 단위 시장 감시 및 진입/돌파 신호 발생 시 SMS 발송
 - **Trading Journal**: 매매 내역 기록/수정 및 수익률 분석 차트 제공
+
+### Ver 1.3 (2024-12-29)
+- **Trading Journal Upgrade**: 종목 관리(CRUD), 매수/매도 라디오 버튼 Select Box 입력, 거래 내역 수정/삭제
+- **Dashboard Auto-refresh**: 데이터 자동 갱신 주기를 1분으로 단축
+- **Database Schema**: Stocks 마스터 및 Journal Transactions 원장 구조로 고도화

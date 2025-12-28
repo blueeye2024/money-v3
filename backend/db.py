@@ -37,116 +37,142 @@ def init_db():
             """
             cursor.execute(sql_signals)
             
-            # 2. Trading Journal Table (User manual entry)
+            # 2. Stocks Table (Master Data)
+            sql_stocks = """
+            CREATE TABLE IF NOT EXISTS stocks (
+                code VARCHAR(10) PRIMARY KEY,
+                name VARCHAR(100) NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+            cursor.execute(sql_stocks)
+
+            # 3. Journal Transactions Table (Ledger Style)
             sql_journal = """
-            CREATE TABLE IF NOT EXISTS trading_journal (
+            CREATE TABLE IF NOT EXISTS journal_transactions (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 ticker VARCHAR(10) NOT NULL,
-                stock_name VARCHAR(100),
-                entry_date DATETIME,
-                exit_date DATETIME,
-                entry_price DECIMAL(10, 2),
-                exit_price DECIMAL(10, 2),
-                quantity INT,
-                profit_loss DECIMAL(15, 2),
-                profit_pct DECIMAL(10, 2),
-                reason TEXT,
-                status VARCHAR(20) DEFAULT 'OPEN', -- OPEN, CLOSED
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                trade_type VARCHAR(10) NOT NULL, -- BUY or SELL
+                qty INT DEFAULT 1,
+                price DECIMAL(15, 2) NOT NULL,
+                trade_date DATETIME NOT NULL,
+                memo TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (ticker) REFERENCES stocks(code) ON DELETE CASCADE
             )
             """
             cursor.execute(sql_journal)
             
         conn.commit()
-        print("Database initialized successfully.")
     except Exception as e:
         print(f"DB Initialization Error: {e}")
     finally:
         conn.close()
 
-def save_signal(signal_data):
-    """Save a detected signal to DB"""
+# ... (save_signal, check_last_signal remain same)
+
+# --- Stock Management ---
+def get_stocks():
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
-            sql = """
-            INSERT INTO signal_history (ticker, name, signal_type, position_desc, price, signal_time, is_sent)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-            """
-            cursor.execute(sql, (
-                signal_data['ticker'],
-                signal_data['name'],
-                signal_data['signal_type'],
-                signal_data['position'],
-                signal_data['current_price'],
-                signal_data['signal_time_raw'], # Expecting datetime object
-                signal_data.get('is_sent', False)
-            ))
-        conn.commit()
+            cursor.execute("SELECT * FROM stocks ORDER BY name ASC")
+            return cursor.fetchall()
     finally:
         conn.close()
 
-def check_last_signal(ticker):
-    """Get the last saved signal for a ticker to prevent duplicates"""
+def add_stock(code, name):
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
-            sql = "SELECT * FROM signal_history WHERE ticker=%s ORDER BY signal_time DESC LIMIT 1"
-            cursor.execute(sql, (ticker,))
-            return cursor.fetchone()
-    finally:
-        conn.close()
-
-# Journal Functions
-def add_journal_entry(data):
-    conn = get_connection()
-    try:
-        with conn.cursor() as cursor:
-            # Calculate Profit if exit exists
-            profit_loss = 0
-            profit_pct = 0
-            status = 'OPEN'
-            
-            if data.get('exit_price') and data.get('exit_date'):
-                entry = float(data['entry_price'])
-                exit_p = float(data['exit_price'])
-                qty = int(data['quantity'])
-                profit_loss = (exit_p - entry) * qty
-                profit_pct = ((exit_p - entry) / entry) * 100
-                status = 'CLOSED'
-            
-            sql = """
-            INSERT INTO trading_journal 
-            (ticker, stock_name, entry_date, entry_price, quantity, reason, status, exit_date, exit_price, profit_loss, profit_pct)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """
-            cursor.execute(sql, (
-                data['ticker'],
-                data.get('stock_name', ''),
-                data['entry_date'],
-                data['entry_price'],
-                data['quantity'],
-                data['reason'],
-                status,
-                data.get('exit_date'),
-                data.get('exit_price'),
-                profit_loss,
-                profit_pct
-            ))
+            cursor.execute("INSERT INTO stocks (code, name) VALUES (%s, %s)", (code, name))
         conn.commit()
         return True
     except Exception as e:
-        print(f"Journal Insert Error: {e}")
+        print(f"Add Stock Error: {e}")
         return False
     finally:
         conn.close()
 
-def get_journal_entries():
+def delete_stock(code):
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
-            sql = "SELECT * FROM trading_journal ORDER BY entry_date DESC"
+            cursor.execute("DELETE FROM stocks WHERE code=%s", (code,))
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+# --- Journal Transactions ---
+def add_transaction(data):
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            sql = """
+            INSERT INTO journal_transactions (ticker, trade_type, qty, price, trade_date, memo)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            """
+            cursor.execute(sql, (
+                data['ticker'],
+                data['trade_type'],
+                data['qty'],
+                data['price'],
+                data['trade_date'],
+                data.get('memo', '')
+            ))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Add Transaction Error: {e}")
+        return False
+    finally:
+        conn.close()
+
+def get_transactions():
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            sql = """
+            SELECT j.*, s.name as stock_name 
+            FROM journal_transactions j 
+            LEFT JOIN stocks s ON j.ticker = s.code 
+            ORDER BY j.trade_date DESC
+            """
             cursor.execute(sql)
             return cursor.fetchall()
+    finally:
+        conn.close()
+
+def update_transaction(id, data):
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            sql = """
+            UPDATE journal_transactions 
+            SET ticker=%s, trade_type=%s, qty=%s, price=%s, trade_date=%s, memo=%s
+            WHERE id=%s
+            """
+            cursor.execute(sql, (
+                data['ticker'],
+                data['trade_type'],
+                data['qty'],
+                data['price'],
+                data['trade_date'],
+                data.get('memo', ''),
+                id
+            ))
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+def delete_transaction(id):
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("DELETE FROM journal_transactions WHERE id=%s", (id,))
+        conn.commit()
+        return True
     finally:
         conn.close()
