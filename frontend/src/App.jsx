@@ -52,7 +52,7 @@ function App() {
                 <div style={{ fontSize: '0.9rem', color: 'var(--accent-blue)', fontWeight: 600, letterSpacing: '1px' }}>
                     PREMIUM FINANCIAL REPORT
                 </div>
-                <h1>청안 30분봉 멀티 종목 종합 분석</h1>
+                <h1>청안 해외주식 멀티 종목 종합 분석</h1>
                 <p>분석 시점: {data?.timestamp?.full_str}</p>
             </header>
 
