@@ -74,17 +74,16 @@ def calculate_rsi(series, window=14):
 
 def check_box_pattern(df_30m):
     """
-    Check if the stock is in a box pattern for the last 12 hours.
-    Box definition: High-Low diff <= 2%.
+    Check if the stock is in a box pattern for the LAST 7 DAYS.
+    Box definition: (High Max - Low Min) / Low Min <= 5%.
     Returns: (is_box, high_val, low_val, pct_diff)
     """
     if df_30m.empty:
         return False, 0, 0, 0
 
-    # Get last 12 hours of data
-    # Assuming the index is timezone aware.
+    # Get last 7 days of data
     last_idx = df_30m.index[-1]
-    cutoff_time = last_idx - timedelta(hours=12)
+    cutoff_time = last_idx - timedelta(days=7)
     
     recent_data = df_30m[df_30m.index >= cutoff_time]
     
@@ -98,25 +97,21 @@ def check_box_pattern(df_30m):
     
     diff_pct = ((high_max - low_min) / low_min) * 100
     
-    is_box = diff_pct <= 2.0
+    # Relaxed box definition to 5%
+    is_box = diff_pct <= 5.0
     return is_box, high_max, low_min, diff_pct
 
 def analyze_ticker(ticker, df_30mRaw, df_5mRaw):
-    # Prepare DataFrames
-    # yfinance MultiIndex handling: if only one ticker is fetched, it might not be multi-index. 
-    # But we grouped by ticker.
-    
     try:
         # Extract specific ticker data
-        # Check if ticker is in columns.levels[0] or simple columns
         df_30 = None
         df_5 = None
 
         if isinstance(df_30mRaw.columns, pd.MultiIndex):
             if ticker in df_30mRaw.columns.levels[0]:
                 df_30 = df_30mRaw[ticker].copy()
-        elif ticker in df_30mRaw.columns: # Should not happen with group_by='ticker' but safe check
-             pass # Actually single ticker logic is different
+        elif ticker in df_30mRaw.columns:
+             pass 
 
         if isinstance(df_5mRaw.columns, pd.MultiIndex):
             if ticker in df_5mRaw.columns.levels[0]:
@@ -152,14 +147,9 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw):
         change_pct = ((current_price - prev_price) / prev_price) * 100
         
         # --- Signal Detection ---
-        # 1. Check Crossovers on 30m (SMA10 vs SMA30)
-        # We look at the last completed bar and the current one, or just the current relationship
-        # Let's check if crossover happened in the last bar
         
         last_sma10 = df_30['SMA10'].iloc[-1]
         last_sma30 = df_30['SMA30'].iloc[-1]
-        prev_sma10 = df_30['SMA10'].iloc[-2]
-        prev_sma30 = df_30['SMA30'].iloc[-2]
         
         # 5m Filter Data
         last_5m_sma10 = df_5['SMA10'].iloc[-1]
@@ -170,15 +160,9 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw):
         
         # Determine Position
         position = "관망"
+        recent_cross_type = None 
         signal_time = ""
-        signal_details = ""
-        
-        # Simple Logic: Check current state
-        # But request says "Recent Signal: Golden Cross KST..."
-        # We need to scan backwards to find the last cross
-        
         cross_idx = -1
-        last_cross_type = None # 'gold' or 'dead'
         
         # Scan last 50 bars for the most recent cross
         for i in range(1, 50):
@@ -188,13 +172,15 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw):
             p_sma10 = df_30['SMA10'].iloc[-(i+1)]
             p_sma30 = df_30['SMA30'].iloc[-(i+1)]
             
+            # Gold Cross: 10 crosses above 30
             if p_sma10 <= p_sma30 and c_sma10 > c_sma30:
-                last_cross_type = 'gold'
+                recent_cross_type = 'gold'
                 cross_idx = -i
                 signal_time = df_30.index[-i]
                 break
+            # Dead Cross: 10 crosses below 30
             elif p_sma10 >= p_sma30 and c_sma10 < c_sma30:
-                last_cross_type = 'dead'
+                recent_cross_type = 'dead'
                 cross_idx = -i
                 signal_time = df_30.index[-i]
                 break
@@ -203,33 +189,45 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw):
         valid = True
         reason_invalid = []
         
-        if last_cross_type == 'gold':
+        # Force signal based on current SMA alignment if no recent cross found (Trend Following)
+        if recent_cross_type is None:
+            if last_sma10 > last_sma30:
+                 recent_cross_type = 'gold' # Maintaining Uptrend
+            else:
+                 recent_cross_type = 'dead' # Maintaining Downtrend
+
+        if recent_cross_type == 'gold':
             # Buy Signal Check
-            # Invalid if 5m Dead Cross OR Box < 2%
             if last_5m_sma10 < last_5m_sma30:
                 valid = False
                 reason_invalid.append("5분봉 데드크로스")
             if is_box:
-                valid = False
-                reason_invalid.append("박스권 횡보 중")
+                # But allow if breakout
+                if current_price > box_high:
+                    pass
+                else:
+                    valid = False
+                    reason_invalid.append("박스권 횡보 중")
                 
             if valid:
-                position = "🚨 매수 진입" if cross_idx == -1 or cross_idx == -2 else "🔴 매수 유지"
+                position = "🚨 매수 진입" if cross_idx > -3 and cross_idx != -1 else "🔴 매수 유지"
             else:
                 position = "관망 (매수 신호 무효화)"
                 
-        elif last_cross_type == 'dead':
+        elif recent_cross_type == 'dead':
             # Sell Signal Check
-            # Invalid if 5m Golden Cross OR Box < 2%
             if last_5m_sma10 > last_5m_sma30:
                 valid = False
                 reason_invalid.append("5분봉 골든크로스")
             if is_box:
-                valid = False
-                reason_invalid.append("박스권 횡보 중")
+                 if current_price < box_low:
+                    pass
+                 else:
+                    valid = False
+                    reason_invalid.append("박스권 횡보 중")
                 
             if valid:
-                position = "🚨 매도 진입" if cross_idx == -1 or cross_idx == -2 else "🔵 매도 유지"
+                position = "🚨 매도 진입" if cross_idx > -3 and cross_idx != -1 else "🔵 매도 유지"
             else:
                 position = "관망 (매도 신호 무효화)"
         
@@ -261,8 +259,8 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw):
         # Simple technical probability boost
         if df_30['RSI'].iloc[-1] > 60: news_prob += 10
         if df_30['RSI'].iloc[-1] < 40: news_prob -= 10
-        if last_cross_type == 'gold': news_prob += 20
-        if last_cross_type == 'dead': news_prob -= 20
+        if recent_cross_type == 'gold': news_prob += 20
+        if recent_cross_type == 'dead': news_prob -= 20
         news_prob = max(0, min(100, news_prob))
         
         
@@ -272,7 +270,7 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw):
             "current_price": float(current_price) if pd.notnull(current_price) else None,
             "change_pct": float(change_pct) if pd.notnull(change_pct) else 0.0,
             "position": position,
-            "last_cross_type": last_cross_type,
+            "last_cross_type": recent_cross_type,
             "signal_time": formatted_signal_time,
             "is_box": bool(is_box),
             "box_high": float(box_high) if pd.notnull(box_high) else 0.0,
