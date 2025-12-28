@@ -73,17 +73,17 @@ const SignalPage = () => {
         });
     };
 
-    const sendTestSms = async (sig) => {
-        if (!confirm(`[${sig.ticker}] 신호에 대해 테스트 문자를 발송하시겠습니까?`)) return;
+    const sendSampleSms = async () => {
+        if (!confirm(`샘플 신호(SOXL 매수)로 테스트 문자를 발송하시겠습니까?`)) return;
 
         try {
             const res = await fetch('/api/sms/test', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    stock_name: sig.name,
-                    signal_type: sig.signal_type === 'BUY' ? '매수 진입' : '매도 진입',
-                    price: sig.price,
+                    stock_name: "SOXL (Sample)",
+                    signal_type: "매수 진입",
+                    price: 45.20,
                     reason: "수동 테스트 발송"
                 })
             });
@@ -112,33 +112,35 @@ const SignalPage = () => {
             {/* Filters */}
             <div className="glass-panel" style={{ padding: '2.5rem', marginBottom: '3rem' }}>
                 <h3 style={{ marginBottom: '1.5rem' }}>🔍 신호 내역 조회</h3>
-                <form onSubmit={applyFilters} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', alignItems: 'end' }}>
-                    <div className="form-group">
+                <form onSubmit={applyFilters} style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5rem', alignItems: 'end' }}>
+                    <div className="form-group" style={{ flex: '1 1 200px' }}>
                         <label>종목 필터</label>
                         <select name="ticker" value={filters.ticker} onChange={handleFilterChange} className="input-field" style={{ background: '#e2e8f0', color: 'black', fontWeight: 'bold' }}>
                             <option value="">모든 종목</option>
                             {stocks.map(s => <option key={s.code} value={s.code}>{s.name} ({s.code})</option>)}
                         </select>
                     </div>
-                    <div className="form-group">
+                    <div className="form-group" style={{ flex: '0 0 160px' }}>
                         <label>시작일</label>
                         <input type="date" name="start_date" value={filters.start_date} onChange={handleFilterChange} className="input-field" />
                     </div>
-                    <div className="form-group">
+                    <div style={{ paddingBottom: '12px', color: 'var(--text-secondary)' }}>~</div>
+                    <div className="form-group" style={{ flex: '0 0 160px' }}>
                         <label>종료일</label>
                         <input type="date" name="end_date" value={filters.end_date} onChange={handleFilterChange} className="input-field" />
                     </div>
-                    <div className="form-group">
+                    <div className="form-group" style={{ flex: '0 0 120px' }}>
                         <label>표시 개수</label>
                         <select name="limit" value={filters.limit} onChange={handleFilterChange} className="input-field" style={{ background: '#e2e8f0', color: 'black', fontWeight: 'bold' }}>
-                            <option value="30">최근 30개</option>
-                            <option value="50">최근 50개</option>
-                            <option value="100">최근 100개</option>
+                            <option value="30">30개</option>
+                            <option value="50">50개</option>
+                            <option value="100">100개</option>
                         </select>
                     </div>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <button type="submit" className="btn-submit" style={{ flex: 1, padding: '0.9rem' }}>조회하기</button>
-                        <button type="button" onClick={resetFilters} className="btn-icon" style={{ background: 'rgba(255,255,255,0.05)', height: '48px', padding: '0 1rem', borderRadius: '8px', color: 'var(--text-secondary)' }}>초기화</button>
+                    <div style={{ display: 'flex', gap: '0.8rem', flex: '1 1 auto' }}>
+                        <button type="submit" className="btn-submit" style={{ flex: 2, padding: '0.9rem' }}>조회하기</button>
+                        <button type="button" onClick={resetFilters} className="btn-icon" style={{ flex: 1, background: 'rgba(255,255,255,0.05)', height: '48px', padding: '0 1rem', borderRadius: '8px', color: 'var(--text-secondary)', border: '1px solid rgba(255,255,255,0.1)' }}>초기화</button>
+                        <button type="button" onClick={sendSampleSms} className="btn-icon" style={{ flex: 1.5, background: 'rgba(59, 130, 246, 0.1)', height: '48px', padding: '0 1rem', borderRadius: '8px', color: 'var(--accent-blue)', border: '1px solid rgba(59, 130, 246, 0.3)', fontWeight: 'bold' }}>💬 SMS 테스트</button>
                     </div>
                 </form>
             </div>
@@ -155,8 +157,7 @@ const SignalPage = () => {
                             <th style={{ padding: '1.2rem', textAlign: 'left' }}>종목</th>
                             <th style={{ padding: '1.2rem', textAlign: 'center' }}>구분</th>
                             <th style={{ padding: '1.2rem', textAlign: 'right' }}>가격</th>
-                            <th style={{ padding: '1.2rem', textAlign: 'left' }}>상태 / 비고</th>
-                            <th style={{ padding: '1.2rem 2rem', textAlign: 'right' }}>액션</th>
+                            <th style={{ padding: '1.2rem 2rem', textAlign: 'left' }}>상태 / 비고</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -186,14 +187,9 @@ const SignalPage = () => {
                                     <td style={{ padding: '1.2rem', textAlign: 'right' }}>
                                         <span style={{ fontWeight: 'bold', color: 'rgba(255,255,255,0.9)' }}>${sig.price?.toFixed(2)}</span>
                                     </td>
-                                    <td style={{ padding: '1.2rem' }}>
+                                    <td style={{ padding: '1.2rem 2rem' }}>
                                         <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{sig.position_desc}</div>
                                         {sig.is_sent && <span style={{ fontSize: '0.75rem', color: 'var(--accent-green)' }}>● 자동문자발송됨</span>}
-                                    </td>
-                                    <td style={{ padding: '1.2rem 2rem', textAlign: 'right' }}>
-                                        <button onClick={() => sendTestSms(sig)} className="btn-icon" title="테스트 문자 발송" style={{ background: 'rgba(59, 130, 246, 0.1)', padding: '0.5rem 0.8rem', borderRadius: '6px', fontSize: '0.85rem', color: 'var(--accent-blue)', border: '1px solid rgba(59, 130, 246, 0.3)' }}>
-                                            💬 테스트전송
-                                        </button>
                                     </td>
                                 </tr>
                             ))

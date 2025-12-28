@@ -311,7 +311,7 @@ const JournalPage = () => {
 
                             <div className="form-group">
                                 <label>거래 일시</label>
-                                <input type="datetime-local" value={formData.trade_date} onChange={e => setFormData({ ...formData, trade_date: e.target.value })} required className="input-field" style={{ height: '48px' }} />
+                                <input type="datetime-local" value={formData.trade_date} onChange={e => setFormData({ ...formData, trade_date: e.target.value })} required className="input-field" style={{ height: '48px', background: 'rgba(0,0,0,0.2)', color: 'white' }} />
                             </div>
 
                             {/* Row 2 */}
