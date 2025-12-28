@@ -22,18 +22,24 @@ sudo apt install -y nodejs
 ```
 
 ## 3. 프로젝트 클론 및 설정
-서버의 홈 디렉토리 또는 `/var/www`에 프로젝트를 업로드합니다. (GitHub을 이용하거나 FTP/SCP 사용)
-예: `/home/ubuntu/cheongan-app`
+서버의 프로젝트 디렉토리로 이동하여 프로젝트를 다운로드합니다.
+
+```bash
+mkdir -p /home/blue/blue/my_project
+cd /home/blue/blue/my_project
+git clone https://github.com/blueeye2024/money.git
+cd money
+```
 
 ### 3-1. 백엔드 설정 (Python)
 프로덕션 환경에서는 `gunicorn`과 `uvicorn`을 함께 사용하여 성능을 높입니다.
 
 ```bash
-cd /home/ubuntu/cheongan-app/backend
+cd /home/blue/blue/my_project/money/backend
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-pip install gunicorn  # 프로덕션 서버용 추가 설치
+pip install gunicorn
 ```
 
 **시스템 서비스 등록 (백그라운드 실행)**
@@ -45,11 +51,11 @@ Description=Cheongan Backend Service
 After=network.target
 
 [Service]
-User=ubuntu
+User=blue
 Group=www-data
-WorkingDirectory=/home/ubuntu/cheongan-app/backend
-Environment="PATH=/home/ubuntu/cheongan-app/backend/venv/bin"
-ExecStart=/home/ubuntu/cheongan-app/backend/venv/bin/gunicorn -k uvicorn.workers.UvicornWorker main:app --bind 0.0.0.0:8000 --workers 2
+WorkingDirectory=/home/blue/blue/my_project/money/backend
+Environment="PATH=/home/blue/blue/my_project/money/backend/venv/bin"
+ExecStart=/home/blue/blue/my_project/money/backend/venv/bin/gunicorn -k uvicorn.workers.UvicornWorker main:app --bind 0.0.0.0:8000 --workers 2
 
 [Install]
 WantedBy=multi-user.target
@@ -65,7 +71,7 @@ sudo systemctl enable cheongan-backend
 React 앱을 정적 파일(HTML/CSS/JS)로 변환합니다.
 
 ```bash
-cd /home/ubuntu/cheongan-app/frontend
+cd /home/blue/blue/my_project/money/frontend
 npm install
 npm run build
 ```
@@ -81,7 +87,7 @@ server {
     server_name your-domain.com; # 보유한 도메인 입력
 
     location / {
-        root /home/ubuntu/cheongan-app/frontend/dist;
+        root /home/blue/blue/my_project/money/frontend/dist;
         index index.html;
         try_files $uri $uri/ /index.html;
     }
