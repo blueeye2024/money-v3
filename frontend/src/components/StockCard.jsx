@@ -7,15 +7,24 @@ const StockCard = ({ data }) => {
         rsi, macd, macd_sig, prob_up
     } = data;
 
-    const isBuy = position.includes('매수') || position.includes('상단');
-    const isSell = position.includes('매도') || position.includes('하단');
+    const isBuy = position?.includes('매수') || position?.includes('상단');
+    const isSell = position?.includes('매도') || position?.includes('하단');
     const isObserving = !isBuy && !isSell;
+
+    if (data.error) {
+        return (
+            <div className="glass-panel" style={{ padding: '1.5rem', borderLeft: `4px solid var(--accent-red)` }}>
+                <h3 style={{ margin: 0 }}>{ticker}</h3>
+                <p style={{ color: 'var(--accent-red)' }}>Error: {data.error}</p>
+            </div>
+        );
+    }
 
     let borderColor = 'var(--glass-border)';
     if (isBuy) borderColor = 'var(--accent-red)';
     if (isSell) borderColor = 'var(--accent-blue)';
 
-    if (position.includes('진입')) {
+    if (position?.includes('진입')) {
         // Stronger border for entry
     }
 
