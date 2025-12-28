@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
+import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import StockCard from './components/StockCard';
 import SummaryTable from './components/SummaryTable';
 import FinalSignal from './components/FinalSignal';
 import MarketStats from './components/MarketStats';
 import MarketInsight from './components/MarketInsight';
+import JournalPage from './JournalPage';
 import './index.css';
 
-function App() {
+function Dashboard() {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -32,7 +34,7 @@ function App() {
     };
 
     if (loading) return (
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh', flexDirection: 'column' }}>
             <div className="animate-pulse-slow" style={{ fontSize: '2rem', fontWeight: 700 }}>청안 시스템 가동 중...</div>
             <div style={{ color: 'var(--text-secondary)', marginTop: '1rem' }}>데이터를 수집하고 분석하고 있습니다.</div>
         </div>
@@ -47,7 +49,7 @@ function App() {
     );
 
     return (
-        <div className="container">
+        <div>
             <header>
                 <div style={{ fontSize: '0.9rem', color: 'var(--accent-blue)', fontWeight: 600, letterSpacing: '1px' }}>
                     PREMIUM FINANCIAL REPORT
@@ -75,6 +77,47 @@ function App() {
                 © 2024 Cheong-An Financial Intelligence. All rights reserved.
             </footer>
         </div>
+    );
+}
+
+function NavBar() {
+    const location = useLocation();
+
+    const linkStyle = (path) => ({
+        padding: '0.8rem 1.5rem',
+        textDecoration: 'none',
+        color: location.pathname === path ? 'white' : 'var(--text-secondary)',
+        fontWeight: location.pathname === path ? 'bold' : 'normal',
+        borderBottom: location.pathname === path ? '2px solid var(--accent-blue)' : '2px solid transparent',
+        transition: 'all 0.3s'
+    });
+
+    return (
+        <nav style={{
+            display: 'flex',
+            justifyContent: 'center',
+            gap: '1rem',
+            padding: '1rem 0',
+            marginBottom: '2rem',
+            borderBottom: '1px solid var(--glass-border)'
+        }}>
+            <Link to="/" style={linkStyle('/')}>대시보드</Link>
+            <Link to="/journal" style={linkStyle('/journal')}>매매 일지</Link>
+        </nav>
+    );
+}
+
+function App() {
+    return (
+        <Router>
+            <div className="container">
+                <NavBar />
+                <Routes>
+                    <Route path="/" element={<Dashboard />} />
+                    <Route path="/journal" element={<JournalPage />} />
+                </Routes>
+            </div>
+        </Router>
     );
 }
 

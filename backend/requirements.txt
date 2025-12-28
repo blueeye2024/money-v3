@@ -5,3 +5,7 @@ pandas
 pytz
 lxml
 numpy
+pymysql
+apscheduler
+requests
+cryptography

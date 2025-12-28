@@ -235,7 +235,8 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw):
         if recent_cross_type == 'dead': news_prob -= 20
         news_prob = max(0, min(100, news_prob))
         
-        return {
+        # Sanitize and Return
+        result = {
             "ticker": ticker,
             "name": stock_name,
             "current_price": float(current_price) if pd.notnull(current_price) else None,
@@ -243,6 +244,7 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw):
             "position": position,
             "last_cross_type": recent_cross_type,
             "signal_time": formatted_signal_time,
+            "signal_time_raw": signal_time if signal_time != "" else None, # Add Raw Time
             "is_box": bool(is_box),
             "box_high": float(box_high) if pd.notnull(box_high) else 0.0,
             "box_low": float(box_low) if pd.notnull(box_low) else 0.0,
@@ -251,6 +253,7 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw):
             "macd_sig": float(df_30['Signal'].iloc[-1]) if pd.notnull(df_30['Signal'].iloc[-1]) else None,
             "prob_up": float(news_prob)
         }
+        return result
     
     except Exception as e:
         print(f"Error analyzing {ticker}: {e}")
