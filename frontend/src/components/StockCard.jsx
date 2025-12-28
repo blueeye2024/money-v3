@@ -12,8 +12,8 @@ const StockCard = ({ data }) => {
     const isObserving = !isBuy && !isSell;
 
     let borderColor = 'var(--glass-border)';
-    if (isBuy) borderColor = 'var(--accent-green)';
-    if (isSell) borderColor = 'var(--accent-red)';
+    if (isBuy) borderColor = 'var(--accent-red)';
+    if (isSell) borderColor = 'var(--accent-blue)';
 
     if (position.includes('진입')) {
         // Stronger border for entry
@@ -38,8 +38,8 @@ const StockCard = ({ data }) => {
                 <span style={{
                     padding: '4px 12px',
                     borderRadius: '99px',
-                    backgroundColor: isBuy ? 'rgba(52, 211, 153, 0.2)' : isSell ? 'rgba(248, 113, 113, 0.2)' : 'rgba(148, 163, 184, 0.2)',
-                    color: isBuy ? 'var(--accent-green)' : isSell ? 'var(--accent-red)' : 'var(--text-secondary)',
+                    backgroundColor: isBuy ? 'rgba(248, 113, 113, 0.2)' : isSell ? 'rgba(59, 130, 246, 0.2)' : 'rgba(148, 163, 184, 0.2)',
+                    color: isBuy ? 'var(--accent-red)' : isSell ? 'var(--accent-blue)' : 'var(--text-secondary)',
                     fontWeight: 600,
                     fontSize: '0.9rem'
                 }}>

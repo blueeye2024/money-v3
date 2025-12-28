@@ -34,33 +34,37 @@ def get_current_time_str():
     }
 
 def fetch_data():
-    # Fetch 30m data (Main)
-    # Combined fetch for Stocks + Market to reduce HTTP/Overhead
-    
+    # Fetch 30m data (Main) for Stocks
     tickers_str = " ".join(TARGET_TICKERS)
-    market_str = " ".join(MARKET_INDICATORS.values())
-    combined_str = f"{tickers_str} {market_str}"
     
-    # 30m data for main analysis
-    print("Fetching 30m data (Combined)...")
-    data_30m_combined = yf.download(combined_str, period="5d", interval="30m", prepost=True, group_by='ticker', threads=True)
+    print("Fetching 30m data for Stocks...")
+    # Hide progress to keep logs clean
+    data_30m = yf.download(tickers_str, period="5d", interval="30m", prepost=True, group_by='ticker', threads=True, progress=False)
     
-    # Separate them manually
-    data_30m = data_30m_combined
-    # Market Intraday (reuse the combined fetch)
-    market_data_intraday = data_30m_combined
+    print("Fetching 5m data for Stocks...")
+    data_5m = yf.download(tickers_str, period="5d", interval="5m", prepost=True, group_by='ticker', threads=True, progress=False)
     
-    # 5m data for invalidation checks (Only for stocks really needed, but okay to fetch all or just stock)
-    print("Fetching 5m data...")
-    # Only fetching TARGET_TICKERS for 5m to save time.
-    data_5m = yf.download(tickers_str, period="5d", interval="5m", prepost=True, group_by='ticker', threads=True)
-    
-    # Market indicators Daily
-    print("Fetching market data (Daily)...")
-    market_data = yf.download(market_str, period="5d", interval="1d", group_by='ticker', threads=True) 
-    
+    # Market indicators - Use Ticker.history for stability
+    print("Fetching market data (Indices)...")
+    market_data = {}
+    for name, ticker in MARKET_INDICATORS.items():
+        try:
+            t = yf.Ticker(ticker)
+            # Fetch history
+            hist = t.history(period="5d")
+            if not hist.empty:
+                market_data[name] = hist
+                # Debug print
+                # print(f"Fetched {name}: {hist['Close'].iloc[-1]}")
+            else:
+                print(f"Warning: No data for {name}")
+                market_data[name] = pd.DataFrame()
+        except Exception as e:
+            print(f"Failed to fetch {name}: {e}")
+            market_data[name] = pd.DataFrame()
+            
     print("Data fetch complete.")
-    return data_30m, data_5m, market_data, market_data_intraday
+    return data_30m, data_5m, market_data, None
 
 def calculate_sma(series, window):
     return series.rolling(window=window).mean()
@@ -195,6 +199,8 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw):
                  recent_cross_type = 'gold' # Maintaining Uptrend
             else:
                  recent_cross_type = 'dead' # Maintaining Downtrend
+            # For maintained trend, set signal time to NOW (Latest Bar) instead of empty
+            signal_time = df_30.index[-1]
 
         if recent_cross_type == 'gold':
             # Buy Signal Check
@@ -247,7 +253,7 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw):
             st_utc = signal_time.replace(tzinfo=pytz.utc)
             st_kst = st_utc.astimezone(pytz.timezone('Asia/Seoul'))
             st_est = st_utc.astimezone(pytz.timezone('US/Eastern'))
-            formatted_signal_time = f"{st_kst.strftime('%H:%M')} KST ({st_est.strftime('%m/%d %H:%M')})"
+            formatted_signal_time = f"{st_kst.strftime('%m/%d %H:%M')} KST ({st_est.strftime('%m/%d %H:%M')} EST)"
 
         # News Probability Mock (Real sentiment analysis is heavy, we will randomize slightly based on RSI or Trend for this demo or just return N/A if no API)
         # However, prompts asks for "Google Search Based". 
@@ -289,7 +295,7 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw):
         return {"error": str(e)}
 
 def run_analysis():
-    data_30m, data_5m, market_data, market_data_intraday = fetch_data()
+    data_30m, data_5m, market_data, _ = fetch_data()
     results = []
     
     for ticker in TARGET_TICKERS:
@@ -298,21 +304,16 @@ def run_analysis():
         
     # Get Market Indicators Data
     indicators = {}
-    for name, sym in MARKET_INDICATORS.items():
+    for name, df in market_data.items():
         try:
-            val = None
-            if sym in market_data.columns.levels[0]:
-                val = market_data[sym]['Close'].iloc[-1]
-            # yfinance fallbacks/variations
-            elif isinstance(market_data.columns, pd.MultiIndex) == False:
-                 if sym in market_data.columns:
-                     val = market_data[sym].iloc[-1]
+            val = 0.0
+            if not df.empty and 'Close' in df.columns:
+                val = df['Close'].iloc[-1]
             
-            # Sanitize
             indicators[name] = float(val) if val is not None and pd.notnull(val) else 0.0
             
         except Exception as e:
-             # print(e)
+             # print(f"Error extracting market data for {name}: {e}")
              indicators[name] = 0.0
 
     return {
