@@ -37,3 +37,8 @@ npm run dev
 - **기술적 신호 감지**: 30분봉/5분봉 SMA 골든/데드 크로스 자동 포착
 - **박스권 필터링**: 최근 12시간 변동폭 2% 이내 박스권 자동 감지
 - **종합 리포트**: 한국어 기반의 상세 분석 및 포트폴리오 최종 추천
+
+## Update History [Ver 1.2]
+- **MariaDB Database Integration**: 영구적인 신호 데이터 저장 및 매매 일지 관리
+- **Real-time Monitoring & SMS**: 1분 단위 시장 감시 및 진입/돌파 신호 발생 시 SMS 발송
+- **Trading Journal**: 매매 내역 기록/수정 및 수익률 분석 차트 제공
