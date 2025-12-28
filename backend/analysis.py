@@ -74,7 +74,44 @@ def fetch_data():
     print("Data fetch complete.")
     return data_30m, data_5m, market_data, None
 
-# ... (Previous helper functions remain the same: calculate_sma, calculate_rsi, check_box_pattern)
+def calculate_sma(series, window):
+    return series.rolling(window=window).mean()
+
+def calculate_rsi(series, window=14):
+    delta = series.diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
+    rs = gain / loss
+    return 100 - (100 / (1 + rs))
+
+def check_box_pattern(df_30m):
+    """
+    Check if the stock is in a box pattern for the LAST 7 DAYS.
+    Box definition: (High Max - Low Min) / Low Min <= 5%.
+    Returns: (is_box, high_val, low_val, pct_diff)
+    """
+    if df_30m.empty:
+        return False, 0, 0, 0
+
+    # Get last 7 days of data
+    last_idx = df_30m.index[-1]
+    cutoff_time = last_idx - timedelta(days=7)
+    
+    recent_data = df_30m[df_30m.index >= cutoff_time]
+    
+    if recent_data.empty:
+        return False, 0, 0, 0
+        
+    high_max = recent_data['High'].max()
+    low_min = recent_data['Low'].min()
+    
+    if low_min == 0: return False, 0, 0, 0
+    
+    diff_pct = ((high_max - low_min) / low_min) * 100
+    
+    # Relaxed box definition to 5%
+    is_box = diff_pct <= 5.0
+    return is_box, high_max, low_min, diff_pct
 
 def analyze_ticker(ticker, df_30mRaw, df_5mRaw):
     # Retrieve Stock Name
