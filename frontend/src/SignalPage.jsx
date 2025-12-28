@@ -120,14 +120,14 @@ const SignalPage = () => {
                             {stocks.map(s => <option key={s.code} value={s.code}>{s.name} ({s.code})</option>)}
                         </select>
                     </div>
-                    <div className="form-group" style={{ flex: '0 0 160px' }}>
+                    <div className="form-group" style={{ flex: '1 1 150px', minWidth: '150px' }}>
                         <label>시작일</label>
-                        <input type="date" name="start_date" value={filters.start_date} onChange={handleFilterChange} className="input-field" />
+                        <input type="date" name="start_date" value={filters.start_date} onChange={handleFilterChange} className="input-field" style={{ padding: '0.6rem 0.9rem' }} />
                     </div>
-                    <div style={{ paddingBottom: '12px', color: 'var(--text-secondary)' }}>~</div>
-                    <div className="form-group" style={{ flex: '0 0 160px' }}>
+                    <div style={{ paddingBottom: '12px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center' }}>~</div>
+                    <div className="form-group" style={{ flex: '1 1 150px', minWidth: '150px' }}>
                         <label>종료일</label>
-                        <input type="date" name="end_date" value={filters.end_date} onChange={handleFilterChange} className="input-field" />
+                        <input type="date" name="end_date" value={filters.end_date} onChange={handleFilterChange} className="input-field" style={{ padding: '0.6rem 0.9rem' }} />
                     </div>
                     <div className="form-group" style={{ flex: '0 0 120px' }}>
                         <label>표시 개수</label>

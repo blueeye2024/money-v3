@@ -200,7 +200,7 @@ const JournalPage = () => {
 
                     {/* Add Stock Form */}
                     <form onSubmit={handleStockSubmit} style={{
-                        display: 'grid', gridTemplateColumns: 'minmax(150px, 1fr) minmax(300px, 2fr) auto', gap: '20px', alignItems: 'end', marginBottom: '3rem'
+                        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', alignItems: 'end', marginBottom: '3rem'
                     }}>
                         <div className="form-group">
                             <label>종목 코드 (Symbol)</label>
@@ -209,7 +209,8 @@ const JournalPage = () => {
                                 value={stockForm.code}
                                 onChange={e => setStockForm({ ...stockForm, code: e.target.value.toUpperCase() })}
                                 required
-                                className="input-field-lg"
+                                className="input-field"
+                                style={{ height: '48px' }}
                             />
                         </div>
                         <div className="form-group">
@@ -219,10 +220,11 @@ const JournalPage = () => {
                                 value={stockForm.name}
                                 onChange={e => setStockForm({ ...stockForm, name: e.target.value })}
                                 required
-                                className="input-field-lg"
+                                className="input-field"
+                                style={{ height: '48px' }}
                             />
                         </div>
-                        <button type="submit" className="btn-primary-lg">＋ 종목 등록</button>
+                        <button type="submit" className="btn-submit" style={{ height: '48px' }}>＋ 종목 등록</button>
                     </form>
 
                     {/* Stock List */}
@@ -311,7 +313,7 @@ const JournalPage = () => {
 
                             <div className="form-group">
                                 <label>거래 일시</label>
-                                <input type="datetime-local" value={formData.trade_date} onChange={e => setFormData({ ...formData, trade_date: e.target.value })} required className="input-field" style={{ height: '48px', background: 'rgba(0,0,0,0.2)', color: 'white' }} />
+                                <input type="datetime-local" value={formData.trade_date} onChange={e => setFormData({ ...formData, trade_date: e.target.value })} required className="input-field" style={{ height: '48px', padding: '0.6rem 0.9rem', background: 'rgba(0,0,0,0.2)', color: 'white' }} />
                             </div>
 
                             {/* Row 2 */}
