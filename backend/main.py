@@ -1,14 +1,15 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from analysis import run_analysis, fetch_data, analyze_ticker, TARGET_TICKERS
-from db import init_db, save_signal, check_last_signal, add_journal_entry, get_journal_entries
-from sms import send_sms
+from pydantic import BaseModel
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime
 import pandas as pd
 import pytz
 import uvicorn
-from pydantic import BaseModel
+
+from analysis import run_analysis, fetch_data, analyze_ticker, TARGET_TICKERS
+from sms import send_sms
+from db import init_db, save_signal, check_last_signal, get_stocks, add_stock, delete_stock, add_transaction, get_transactions, update_transaction, delete_transaction
 
 app = FastAPI()
 
@@ -47,24 +48,13 @@ def monitor_signals():
                 # Get last saved signal to avoid duplicates
                 last_sig = check_last_signal(ticker)
                 
-                # Logic to determine if this is a NEW signal
-                # We compare the 'signal_time_raw' (datetime obj)
-                # Note: DB stores datetime.
-                
                 is_new = True
                 current_raw_time = res.get('signal_time_raw')
                 
                 if current_raw_time is None: continue
 
                 if last_sig:
-                    # last_sig['signal_time'] is usually datetime from pymysql
-                    # Ensure both are comparable (timezone aware vs naive)
-                    # Often easier to compare string representation or timestamp
                     last_time = last_sig['signal_time']
-                    
-                    # Simple equality check
-                    # Note: You might need to handle timezone alignment if DB converts to naive UTC
-                    # But if we just save what we get, it should be comparable.
                     if last_time == current_raw_time:
                         is_new = False
                 
@@ -87,29 +77,12 @@ def monitor_signals():
                         stock_name=res['name'], 
                         signal_type=res['position'], 
                         price=res['current_price'], 
-                        signal_time=res['signal_time'], # String format for SMS is fine
+                        signal_time=res['signal_time'], 
                         reason=f"RSI:{res['rsi']:.1f}"
                     )
 
     except Exception as e:
         print(f"Monitor Error: {e}")
-
-@app.get("/api/report")
-def get_report():
-    try:
-        data = run_analysis()
-        return data
-    except Exception as e:
-        print(f"Error: {e}")
-        return {"error": str(e)}
-
-@app.get("/api/health")
-def health_check():
-    return {"status": "ok"}
-
-from db import init_db, save_signal, check_last_signal, get_stocks, add_stock, delete_stock, add_transaction, get_transactions, update_transaction, delete_transaction
-
-# ... (Previous parts)
 
 @app.get("/api/report")
 def get_report():
@@ -179,17 +152,13 @@ def api_delete_transaction(id: int):
 @app.get("/api/transactions/stats")
 def api_get_txn_stats():
     txns = get_transactions()
-    # Sort chronologically for calculation
-    # Only calculate stats if we have data
     if not txns: return []
 
-    # Calculate Realized Profit based on FIFO (First-In First-Out)
-    # We need to track inventory for each stock
-    inventory = {} # {ticker: [{'price': p, 'qty': q, 'date': d}, ...]}
-    results = [] # [{'ticker', 'sell_date', 'sell_price', 'buy_avg', 'qty', 'profit', 'pct'}]
+    # Calculate Realized Profit based on FIFO
+    inventory = {} 
+    results = [] 
     
     # Sort by date asc
-    # Assuming txns are sorted desc from DB, reverse it
     txns_sorted = sorted(txns, key=lambda x: x['trade_date'])
     
     for t in txns_sorted:
@@ -202,24 +171,18 @@ def api_get_txn_stats():
             sell_qty = t['qty']
             sell_price = t['price']
             
-            # Match against inventory (FIFO)
             cost_basis = 0
             qty_filled = 0
-            
-            # Clone inventory to pop
-            # This is complex. We will just drain inventory.
             
             while sell_qty > 0 and inventory[ticker]:
                 batch = inventory[ticker][0] # First item
                 
                 if batch['qty'] <= sell_qty:
-                    # Fully consume this batch
                     cost_basis += batch['price'] * batch['qty']
                     qty_filled += batch['qty']
                     sell_qty -= batch['qty']
                     inventory[ticker].pop(0)
                 else:
-                    # Partial consume
                     cost_basis += batch['price'] * sell_qty
                     qty_filled += sell_qty
                     batch['qty'] -= sell_qty

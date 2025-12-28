@@ -69,7 +69,40 @@ def init_db():
     finally:
         conn.close()
 
-# ... (save_signal, check_last_signal remain same)
+
+def save_signal(signal_data):
+    """Save a detected signal to DB"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            sql = """
+            INSERT INTO signal_history (ticker, name, signal_type, position_desc, price, signal_time, is_sent)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """
+            cursor.execute(sql, (
+                signal_data['ticker'],
+                signal_data['name'],
+                signal_data['signal_type'],
+                signal_data['position'],
+                signal_data['current_price'],
+                signal_data['signal_time_raw'], # Expecting datetime object
+                signal_data.get('is_sent', False)
+            ))
+        conn.commit()
+    finally:
+        conn.close()
+
+def check_last_signal(ticker):
+    """Get the last saved signal for a ticker to prevent duplicates"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            sql = "SELECT * FROM signal_history WHERE ticker=%s ORDER BY signal_time DESC LIMIT 1"
+            cursor.execute(sql, (ticker,))
+            return cursor.fetchone()
+    finally:
+        conn.close()
+
 
 # --- Stock Management ---
 def get_stocks():

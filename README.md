@@ -47,3 +47,11 @@ npm run dev
 - **Trading Journal Upgrade**: 종목 관리(CRUD), 매수/매도 라디오 버튼 Select Box 입력, 거래 내역 수정/삭제
 - **Dashboard Auto-refresh**: 데이터 자동 갱신 주기를 1분으로 단축
 - **Database Schema**: Stocks 마스터 및 Journal Transactions 원장 구조로 고도화
+
+### Ver 1.4 (2024-12-29)
+- **UI/UX Overhaul**: 매매 일지 및 종목 관리 디자인 대폭 개선 (Grid Layout, Larger Inputs)
+- **Features**: 
+    - 종목별 거래 내역 그룹화 (Grouped List)
+    - 종목별 합산 손익 및 거래 기간 표시
+    - 전체 실현 손익 (Total Realized Profit) 요약 카드 추가
+- **Bug Fix**: 거래 내역 저장 시 데이터 타입 오류(422 Error) 수정
