@@ -27,14 +27,35 @@ const FinalSignal = ({ stocks }) => {
 
     if (!bestStock) return null;
 
+    const isBuy = bestStock.position.includes('매수') || bestStock.position.includes('상단');
+    const isSell = bestStock.position.includes('매도') || bestStock.position.includes('하단');
+
+    let borderColor = 'var(--accent-blue)';
+    let shadowColor = 'rgba(56, 189, 248, 0.2)';
+    let signalColor = 'var(--text-primary)';
+
+    if (isBuy) {
+        borderColor = 'var(--accent-red)';
+        shadowColor = 'rgba(248, 113, 113, 0.3)';
+        signalColor = 'var(--accent-red)';
+    } else if (isSell) {
+        borderColor = 'var(--accent-blue)';
+        shadowColor = 'rgba(59, 130, 246, 0.3)';
+        signalColor = 'var(--accent-blue)';
+    }
+
     return (
         <div className="glass-panel" style={{
             padding: '2rem',
             marginBottom: '2rem',
             textAlign: 'center',
-            background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.9))',
-            border: '2px solid var(--accent-blue)',
-            boxShadow: '0 0 20px rgba(56, 189, 248, 0.2)'
+            background: isBuy
+                ? 'linear-gradient(135deg, rgba(40, 20, 20, 0.8), rgba(15, 10, 10, 0.9))'
+                : isSell
+                    ? 'linear-gradient(135deg, rgba(20, 30, 50, 0.8), rgba(10, 15, 30, 0.9))'
+                    : 'linear-gradient(135deg, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.9))',
+            border: `2px solid ${borderColor}`,
+            boxShadow: `0 0 20px ${shadowColor}`
         }}>
             <h2 style={{ fontSize: '1.2rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', letterSpacing: '2px' }}>
                 PORTFOLIO LEVEL FINAL DECISION
@@ -42,7 +63,7 @@ const FinalSignal = ({ stocks }) => {
             <div style={{ fontSize: '3rem', fontWeight: 800, margin: '1rem 0' }} className="text-gradient">
                 {bestStock.ticker}
             </div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 600, marginBottom: '1rem', color: bestStock.score >= 80 ? 'var(--accent-green)' : 'var(--text-primary)' }}>
+            <div style={{ fontSize: '1.5rem', fontWeight: 600, marginBottom: '1rem', color: signalColor }}>
                 FINAL SIGNAL: {bestStock.position}
             </div>
 

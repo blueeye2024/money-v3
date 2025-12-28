@@ -69,7 +69,7 @@ function App() {
 
             {data?.stocks && <SummaryTable stocks={data.stocks} />}
 
-            {data?.market && <MarketInsight market={data.market} />}
+            {data?.market && <MarketInsight market={{ ...data.market, insight: data.insight }} />}
 
             <footer style={{ textAlign: 'center', marginTop: '4rem', color: 'var(--text-secondary)', fontSize: '0.8rem', paddingBottom: '2rem' }}>
                 © 2024 Cheong-An Financial Intelligence. All rights reserved.

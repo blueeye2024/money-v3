@@ -22,7 +22,12 @@ const StockCard = ({ data }) => {
     return (
         <div className="glass-panel" style={{ padding: '1.5rem', borderLeft: `4px solid ${borderColor}` }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                <h3 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700 }}>{ticker}</h3>
+                <div>
+                    <h3 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700 }}>{ticker}</h3>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px', maxWidth: '180px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {data.name || ticker}
+                    </div>
+                </div>
                 <div style={{ textAlign: 'right' }}>
                     <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>${current_price?.toFixed(2)}</div>
                     <div style={{
