@@ -200,7 +200,7 @@ const JournalPage = () => {
 
                     {/* Add Stock Form */}
                     <form onSubmit={handleStockSubmit} style={{
-                        display: 'grid', gridTemplateColumns: 'minmax(150px, 1fr) minmax(300px, 2fr) auto', gap: '1.5rem', alignItems: 'end', marginBottom: '3rem'
+                        display: 'grid', gridTemplateColumns: 'minmax(150px, 1fr) minmax(300px, 2fr) auto', gap: '20px', alignItems: 'end', marginBottom: '3rem'
                     }}>
                         <div className="form-group">
                             <label>종목 코드 (Symbol)</label>
@@ -311,18 +311,18 @@ const JournalPage = () => {
 
                             <div className="form-group">
                                 <label>거래 일시</label>
-                                <input type="datetime-local" value={formData.trade_date} onChange={e => setFormData({ ...formData, trade_date: e.target.value })} required className="input-field" />
+                                <input type="datetime-local" value={formData.trade_date} onChange={e => setFormData({ ...formData, trade_date: e.target.value })} required className="input-field" style={{ height: '48px' }} />
                             </div>
 
                             {/* Row 2 */}
                             <div className="form-group">
                                 <label>가 격 ($)</label>
-                                <input type="number" placeholder="0.00" step="0.01" value={formData.price} onChange={e => setFormData({ ...formData, price: e.target.value })} required className="input-field" />
+                                <input type="number" placeholder="0.00" step="0.01" value={formData.price} onChange={e => setFormData({ ...formData, price: e.target.value })} required className="input-field" style={{ height: '48px' }} />
                             </div>
 
                             <div className="form-group">
                                 <label>수 량</label>
-                                <input type="number" placeholder="0" value={formData.qty} onChange={e => setFormData({ ...formData, qty: e.target.value })} required className="input-field" />
+                                <input type="number" placeholder="0" value={formData.qty} onChange={e => setFormData({ ...formData, qty: e.target.value })} required className="input-field" style={{ height: '48px' }} />
                             </div>
 
                             <div className="form-group" style={{ gridColumn: 'span 2' }}>

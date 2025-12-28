@@ -2,7 +2,9 @@ import React, { useState, useEffect } from 'react';
 
 const SignalPage = () => {
     const [signals, setSignals] = useState([]);
+    const [smsLogs, setSmsLogs] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [logsLoading, setLogsLoading] = useState(true);
     const [stocks, setStocks] = useState([]);
     const [filters, setFilters] = useState({
         ticker: '',
@@ -14,6 +16,7 @@ const SignalPage = () => {
     useEffect(() => {
         fetchStocks();
         fetchSignals();
+        fetchSmsLogs();
     }, []);
 
     const fetchStocks = async () => {
@@ -39,6 +42,18 @@ const SignalPage = () => {
         }
     };
 
+    const fetchSmsLogs = async () => {
+        setLogsLoading(true);
+        try {
+            const res = await fetch('/api/sms/history');
+            if (res.ok) setSmsLogs(await res.json());
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setLogsLoading(false);
+        }
+    };
+
     const handleFilterChange = (e) => {
         const { name, value } = e.target;
         setFilters(prev => ({ ...prev, [name]: value }));
@@ -56,18 +71,47 @@ const SignalPage = () => {
             end_date: '',
             limit: 30
         });
-        // We need to wait for state update or use dummy
+    };
+
+    const sendTestSms = async (sig) => {
+        if (!confirm(`[${sig.ticker}] 신호에 대해 테스트 문자를 발송하시겠습니까?`)) return;
+
+        try {
+            const res = await fetch('/api/sms/test', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    stock_name: sig.name,
+                    signal_type: sig.signal_type === 'BUY' ? '매수 진입' : '매도 진입',
+                    price: sig.price,
+                    reason: "수동 테스트 발송"
+                })
+            });
+
+            if (res.ok) {
+                alert("테스트 문자가 발송 요청되었습니다.");
+                fetchSmsLogs();
+            } else {
+                alert("발송 실패");
+            }
+        } catch (e) {
+            console.error(e);
+            alert("오류 발생");
+        }
     };
 
     return (
-        <div style={{ maxWidth: '1200px', margin: '0 auto', paddingBottom: '4rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-                <h1 className="text-gradient" style={{ fontSize: '2.2rem', margin: 0, fontWeight: 700 }}>실시간 신호 포착 내역</h1>
-                <p style={{ color: 'var(--text-secondary)' }}>시스템이 자동으로 탐지한 매수/매도 신호 기록입니다.</p>
+        <div style={{ maxWidth: '1200px', margin: '0 auto', paddingBottom: '6rem', fontFamily: "'Inter', sans-serif" }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', marginTop: '2rem' }}>
+                <div>
+                    <h1 className="text-gradient" style={{ fontSize: '2.2rem', margin: 0, fontWeight: 700 }}>실시간 신호 포착 & 알림 내역</h1>
+                    <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>시스템이 자동으로 탐지한 매수/매도 신호와 발송된 문자 기록입니다.</p>
+                </div>
             </div>
 
             {/* Filters */}
-            <div className="glass-panel" style={{ padding: '2rem', marginBottom: '2.5rem' }}>
+            <div className="glass-panel" style={{ padding: '2.5rem', marginBottom: '3rem' }}>
+                <h3 style={{ marginBottom: '1.5rem' }}>🔍 신호 내역 조회</h3>
                 <form onSubmit={applyFilters} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', alignItems: 'end' }}>
                     <div className="form-group">
                         <label>종목 필터</label>
@@ -90,33 +134,36 @@ const SignalPage = () => {
                             <option value="30">최근 30개</option>
                             <option value="50">최근 50개</option>
                             <option value="100">최근 100개</option>
-                            <option value="500">최근 500개</option>
                         </select>
                     </div>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <button type="submit" className="btn-submit" style={{ flex: 2, padding: '0.8rem' }}>조회</button>
-                        <button type="button" onClick={resetFilters} className="input-field" style={{ flex: 1, padding: '0.8rem', background: 'transparent' }}>초기화</button>
+                        <button type="submit" className="btn-submit" style={{ flex: 1, padding: '0.9rem' }}>조회하기</button>
+                        <button type="button" onClick={resetFilters} className="btn-icon" style={{ background: 'rgba(255,255,255,0.05)', height: '48px', padding: '0 1rem', borderRadius: '8px', color: 'var(--text-secondary)' }}>초기화</button>
                     </div>
                 </form>
             </div>
 
             {/* Signals Table */}
-            <div className="glass-panel" style={{ padding: '0', overflow: 'hidden' }}>
+            <div className="glass-panel" style={{ padding: '0', overflow: 'hidden', marginBottom: '4rem' }}>
+                <div style={{ padding: '1.5rem 2rem', background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                    <h3 style={{ margin: 0 }}>📊 신호 발생 히스토리</h3>
+                </div>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
-                        <tr style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-secondary)' }}>
-                            <th style={{ padding: '1.2rem 2rem', textAlign: 'left' }}>시간</th>
+                        <tr style={{ background: 'rgba(0,0,0,0.2)', color: 'var(--text-secondary)' }}>
+                            <th style={{ padding: '1.2rem 2rem', textAlign: 'left' }}>발생 시간</th>
                             <th style={{ padding: '1.2rem', textAlign: 'left' }}>종목</th>
                             <th style={{ padding: '1.2rem', textAlign: 'center' }}>구분</th>
                             <th style={{ padding: '1.2rem', textAlign: 'right' }}>가격</th>
-                            <th style={{ padding: '1.2rem 2rem', textAlign: 'left' }}>사유 / 상세 정보</th>
+                            <th style={{ padding: '1.2rem', textAlign: 'left' }}>상태 / 비고</th>
+                            <th style={{ padding: '1.2rem 2rem', textAlign: 'right' }}>액션</th>
                         </tr>
                     </thead>
                     <tbody>
                         {loading ? (
-                            <tr><td colSpan="5" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-secondary)' }}>데이터 로딩 중...</td></tr>
+                            <tr><td colSpan="6" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-secondary)' }}>데이터 로딩 중...</td></tr>
                         ) : signals.length === 0 ? (
-                            <tr><td colSpan="5" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-secondary)' }}>신호 내역이 없습니다.</td></tr>
+                            <tr><td colSpan="6" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-secondary)' }}>신호 내역이 없습니다.</td></tr>
                         ) : (
                             signals.map(sig => (
                                 <tr key={sig.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
@@ -136,11 +183,58 @@ const SignalPage = () => {
                                             {sig.signal_type === 'BUY' ? '매수' : '매도'}
                                         </span>
                                     </td>
-                                    <td style={{ padding: '1.2rem', textAlign: 'right', fontWeight: 'bold' }}>
-                                        ${sig.price?.toFixed(2)}
+                                    <td style={{ padding: '1.2rem', textAlign: 'right' }}>
+                                        <span style={{ fontWeight: 'bold', color: 'rgba(255,255,255,0.9)' }}>${sig.price?.toFixed(2)}</span>
                                     </td>
-                                    <td style={{ padding: '1.2rem 2rem' }}>
-                                        <div style={{ color: 'var(--text-primary)' }}>{sig.position_desc}</div>
+                                    <td style={{ padding: '1.2rem' }}>
+                                        <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{sig.position_desc}</div>
+                                        {sig.is_sent && <span style={{ fontSize: '0.75rem', color: 'var(--accent-green)' }}>● 자동문자발송됨</span>}
+                                    </td>
+                                    <td style={{ padding: '1.2rem 2rem', textAlign: 'right' }}>
+                                        <button onClick={() => sendTestSms(sig)} className="btn-icon" title="테스트 문자 발송" style={{ background: 'rgba(59, 130, 246, 0.1)', padding: '0.5rem 0.8rem', borderRadius: '6px', fontSize: '0.85rem', color: 'var(--accent-blue)', border: '1px solid rgba(59, 130, 246, 0.3)' }}>
+                                            💬 테스트전송
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))
+                        )}
+                    </tbody>
+                </table>
+            </div>
+
+            {/* SMS Logs Section */}
+            <div className="glass-panel" style={{ padding: '0', overflow: 'hidden' }}>
+                <div style={{ padding: '1.5rem 2rem', background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                    <h3 style={{ margin: 0 }}>📱 문자 발송 히스토리 (최근 30개)</h3>
+                </div>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                        <tr style={{ background: 'rgba(0,0,0,0.2)', color: 'var(--text-secondary)' }}>
+                            <th style={{ padding: '1rem 2rem', textAlign: 'left', width: '200px' }}>전송 일시</th>
+                            <th style={{ padding: '1rem', textAlign: 'left', width: '150px' }}>수신 번호</th>
+                            <th style={{ padding: '1rem', textAlign: 'left' }}>메시지 내용</th>
+                            <th style={{ padding: '1rem 2rem', textAlign: 'center', width: '120px' }}>상태</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {logsLoading ? (
+                            <tr><td colSpan="4" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>로딩 중...</td></tr>
+                        ) : smsLogs.length === 0 ? (
+                            <tr><td colSpan="4" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>발송 기록이 없습니다.</td></tr>
+                        ) : (
+                            smsLogs.map(log => (
+                                <tr key={log.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                    <td style={{ padding: '1rem 2rem', fontSize: '0.85rem' }}>{new Date(log.created_at).toLocaleString()}</td>
+                                    <td style={{ padding: '1rem', fontSize: '0.9rem' }}>{log.receiver}</td>
+                                    <td style={{ padding: '1rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{log.message}</td>
+                                    <td style={{ padding: '1rem 2rem', textAlign: 'center' }}>
+                                        <span style={{
+                                            padding: '2px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold',
+                                            background: log.status === 'Success' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                                            color: log.status === 'Success' ? '#10b981' : '#ef4444'
+                                        }}>
+                                            {log.status}
+                                        </span>
                                     </td>
                                 </tr>
                             ))
@@ -156,9 +250,49 @@ const SignalPage = () => {
                     gap: 0.5rem;
                 }
                 .form-group label {
-                    font-size: 0.85rem;
+                    font-size: 0.9rem;
                     color: var(--text-secondary);
                     margin-left: 2px;
+                }
+                .input-field {
+                    background: rgba(0,0,0,0.2);
+                    border: 1px solid rgba(255,255,255,0.1);
+                    color: white;
+                    padding: 0.9rem;
+                    border-radius: 8px;
+                    width: 100%;
+                    outline: none;
+                    transition: all 0.2s;
+                    height: 48px;
+                }
+                .input-field:focus {
+                    border-color: var(--accent-blue);
+                    background: rgba(59, 130, 246, 0.05);
+                }
+                .btn-submit {
+                    padding: 1.2rem;
+                    background: linear-gradient(90deg, var(--accent-blue), var(--accent-purple));
+                    color: white;
+                    border: none;
+                    border-radius: 8px;
+                    font-weight: bold;
+                    font-size: 1rem;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                    height: 48px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                }
+                .btn-submit:hover {
+                    filter: brightness(1.1);
+                    transform: translateY(-1px);
+                }
+                .btn-icon {
+                    background: none;
+                    border: none;
+                    cursor: pointer;
+                    transition: background 0.2s;
                 }
             `}</style>
         </div>

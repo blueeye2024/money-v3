@@ -62,6 +62,18 @@ def init_db():
             )
             """
             cursor.execute(sql_journal)
+
+            # 4. SMS Logs Table
+            sql_sms_logs = """
+            CREATE TABLE IF NOT EXISTS sms_logs (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                receiver VARCHAR(20),
+                message TEXT,
+                status VARCHAR(20),
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+            cursor.execute(sql_sms_logs)
             
         conn.commit()
     except Exception as e:
@@ -127,6 +139,29 @@ def get_signals(ticker=None, start_date=None, end_date=None, limit=30):
             return cursor.fetchall()
     finally:
         conn.close()
+
+def save_sms_log(receiver, message, status):
+    """Save SMS send log"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            sql = "INSERT INTO sms_logs (receiver, message, status) VALUES (%s, %s, %s)"
+            cursor.execute(sql, (receiver, message, status))
+        conn.commit()
+    finally:
+        conn.close()
+
+def get_sms_logs(limit=30):
+    """Fetch recent SMS logs"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            sql = "SELECT * FROM sms_logs ORDER BY created_at DESC LIMIT %s"
+            cursor.execute(sql, (limit,))
+            return cursor.fetchall()
+    finally:
+        conn.close()
+
 
 
 # --- Stock Management ---

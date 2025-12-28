@@ -9,7 +9,7 @@ import uvicorn
 
 from analysis import run_analysis, fetch_data, analyze_ticker, TARGET_TICKERS
 from sms import send_sms
-from db import init_db, save_signal, check_last_signal, get_stocks, add_stock, delete_stock, add_transaction, get_transactions, update_transaction, delete_transaction, get_signals
+from db import init_db, save_signal, check_last_signal, get_stocks, add_stock, delete_stock, add_transaction, get_transactions, update_transaction, delete_transaction, get_signals, save_sms_log, get_sms_logs
 
 app = FastAPI()
 
@@ -73,13 +73,17 @@ def monitor_signals():
                     
                     # Send SMS
                     # Format: [12/29 10:30] [SOXL] [매수 진입] [45.20] [RSI: 30.5]
-                    send_sms(
+                    reason = f"RSI:{res['rsi']:.1f}"
+                    success = send_sms(
                         stock_name=res['name'], 
                         signal_type=res['position'], 
                         price=res['current_price'], 
                         signal_time=res['signal_time'], 
-                        reason=f"RSI:{res['rsi']:.1f}"
+                        reason=reason
                     )
+                    
+                    msg = f"[{res['signal_time']}] [{res['name']}] [{res['position']}] [${res['current_price']}] [{reason}]"
+                    save_sms_log(receiver="01044900528", message=msg, status="Success" if success else "Failed")
 
     except Exception as e:
         print(f"Monitor Error: {e}")
@@ -113,6 +117,35 @@ def api_get_exchange_rate():
         return {"rate": 1350.0}
     except:
         return {"rate": 1350.0}
+
+class SMSPostModel(BaseModel):
+    stock_name: str
+    signal_type: str
+    price: float
+    reason: str = "테스트 전송"
+
+@app.post("/api/sms/test")
+def api_test_sms(data: SMSPostModel):
+    from sms import send_sms
+    from datetime import datetime
+    
+    signal_time = datetime.now().strftime("%m/%d %H:%M")
+    success = send_sms(
+        stock_name=data.stock_name,
+        signal_type=data.signal_type,
+        price=data.price,
+        signal_time=signal_time,
+        reason=data.reason
+    )
+    
+    msg = f"[{signal_time}] [{data.stock_name}] [{data.signal_type}] [${data.price}] [{data.reason}]"
+    save_sms_log(receiver="01044900528", message=msg, status="Success" if success else "Failed")
+    
+    return {"status": "success" if success else "error"}
+
+@app.get("/api/sms/history")
+def api_get_sms_history():
+    return get_sms_logs(limit=30)
 
 # --- Stock APIs ---
 class StockModel(BaseModel):
