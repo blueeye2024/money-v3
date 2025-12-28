@@ -7,6 +7,7 @@ const JournalPage = () => {
     const [transactions, setTransactions] = useState([]);
     const [stats, setStats] = useState([]);
     const [view, setView] = useState('journal'); // 'journal' | 'stocks'
+    const [exchangeRate, setExchangeRate] = useState(1350);
 
     // Form State (Journal)
     const [formData, setFormData] = useState({
@@ -27,7 +28,18 @@ const JournalPage = () => {
         fetchStocks();
         fetchTransactions();
         fetchStats();
+        fetchExchangeRate();
     }, []);
+
+    const fetchExchangeRate = async () => {
+        try {
+            const res = await fetch('/api/exchange-rate');
+            if (res.ok) {
+                const data = await res.json();
+                setExchangeRate(data.rate);
+            }
+        } catch (e) { console.error(e); }
+    };
 
     // === API Calls ===
     const fetchStocks = async () => {
@@ -236,8 +248,13 @@ const JournalPage = () => {
                     <div className="glass-panel" style={{ padding: '2rem', marginBottom: '2rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'linear-gradient(135deg, rgba(30,41,59,0.7) 0%, rgba(15,23,42,0.8) 100%)' }}>
                         <div>
                             <h3 style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Total Realized Profit</h3>
-                            <div style={{ fontSize: '2.5rem', fontWeight: '800', color: getTotalProfit() >= 0 ? 'var(--accent-red)' : 'var(--accent-blue)' }}>
-                                ${getTotalProfit().toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            <div style={{ display: 'flex', alignItems: 'baseline', gap: '1rem' }}>
+                                <div style={{ fontSize: '2.5rem', fontWeight: '800', color: getTotalProfit() >= 0 ? 'var(--accent-red)' : 'var(--accent-blue)' }}>
+                                    ${getTotalProfit().toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                </div>
+                                <div style={{ fontSize: '1.2rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                                    (약 {(getTotalProfit() * exchangeRate).toLocaleString(undefined, { maximumFractionDigits: 0 })}원)
+                                </div>
                             </div>
                         </div>
                         <div style={{ textAlign: 'right' }}>
@@ -251,7 +268,7 @@ const JournalPage = () => {
                         <h3 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                             {formData.id ? '✏️ 매매 기록 수정' : '✨ 새 매매 기록 추가'}
                         </h3>
-                        <form onSubmit={handleTxSubmit} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '1.5rem' }}>
+                        <form onSubmit={handleTxSubmit} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '2rem' }}>
 
                             {/* Row 1 */}
                             <div className="form-group">
@@ -261,9 +278,10 @@ const JournalPage = () => {
                                     onChange={e => setFormData({ ...formData, ticker: e.target.value })}
                                     required
                                     className="input-field"
+                                    style={{ background: '#e2e8f0', color: 'black', fontWeight: 'bold' }}
                                 >
-                                    <option value="">-- 종목을 선택하세요 --</option>
-                                    {stocks.map(s => <option key={s.code} value={s.code}>{s.name} ({s.code})</option>)}
+                                    <option value="" style={{ color: 'gray' }}>-- 종목을 선택하세요 --</option>
+                                    {stocks.map(s => <option key={s.code} value={s.code} style={{ color: 'black' }}>{s.name} ({s.code})</option>)}
                                 </select>
                             </div>
 
@@ -309,7 +327,7 @@ const JournalPage = () => {
 
                             <div className="form-group" style={{ gridColumn: 'span 2' }}>
                                 <label>메 모 (선택)</label>
-                                <input placeholder="매매 사유나 특이사항 입력" value={formData.memo} onChange={e => setFormData({ ...formData, memo: e.target.value })} className="input-field" />
+                                <input placeholder="매매 사유나 특이사항 입력" value={formData.memo} onChange={e => setFormData({ ...formData, memo: e.target.value })} className="input-field" style={{ height: '48px' }} />
                             </div>
 
                             {/* Submit Button */}
@@ -377,6 +395,9 @@ const JournalPage = () => {
                                                 <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>합산 실현손익</div>
                                                 <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: profit >= 0 ? 'var(--accent-red)' : 'var(--accent-blue)' }}>
                                                     {profit > 0 ? '+' : ''}{profit.toLocaleString(undefined, { minimumFractionDigits: 2 })}$
+                                                </div>
+                                                <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                                                    ≈ {(profit * exchangeRate).toLocaleString(undefined, { maximumFractionDigits: 0 })}원
                                                 </div>
                                             </div>
                                         </div>

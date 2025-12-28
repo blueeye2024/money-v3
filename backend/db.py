@@ -103,6 +103,31 @@ def check_last_signal(ticker):
     finally:
         conn.close()
 
+def get_signals(ticker=None, start_date=None, end_date=None, limit=30):
+    """Fetch signal history with filtering"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            sql = "SELECT * FROM signal_history WHERE 1=1"
+            params = []
+            if ticker:
+                sql += " AND ticker = %s"
+                params.append(ticker)
+            if start_date:
+                sql += " AND signal_time >= %s"
+                params.append(start_date)
+            if end_date:
+                sql += " AND signal_time <= %s"
+                params.append(end_date)
+            
+            sql += " ORDER BY signal_time DESC LIMIT %s"
+            params.append(limit)
+            
+            cursor.execute(sql, params)
+            return cursor.fetchall()
+    finally:
+        conn.close()
+
 
 # --- Stock Management ---
 def get_stocks():

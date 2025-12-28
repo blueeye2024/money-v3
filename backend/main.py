@@ -9,7 +9,7 @@ import uvicorn
 
 from analysis import run_analysis, fetch_data, analyze_ticker, TARGET_TICKERS
 from sms import send_sms
-from db import init_db, save_signal, check_last_signal, get_stocks, add_stock, delete_stock, add_transaction, get_transactions, update_transaction, delete_transaction
+from db import init_db, save_signal, check_last_signal, get_stocks, add_stock, delete_stock, add_transaction, get_transactions, update_transaction, delete_transaction, get_signals
 
 app = FastAPI()
 
@@ -96,6 +96,23 @@ def get_report():
 @app.get("/api/health")
 def health_check():
     return {"status": "ok"}
+
+@app.get("/api/signals")
+def api_get_signals(ticker: str = None, start_date: str = None, end_date: str = None, limit: int = 30):
+    return get_signals(ticker, start_date, end_date, limit)
+
+@app.get("/api/exchange-rate")
+def api_get_exchange_rate():
+    from analysis import MARKET_INDICATORS
+    import yfinance as yf
+    try:
+        t = yf.Ticker(MARKET_INDICATORS["KRW"])
+        hist = t.history(period="1d")
+        if not hist.empty:
+            return {"rate": float(hist['Close'].iloc[-1])}
+        return {"rate": 1350.0}
+    except:
+        return {"rate": 1350.0}
 
 # --- Stock APIs ---
 class StockModel(BaseModel):

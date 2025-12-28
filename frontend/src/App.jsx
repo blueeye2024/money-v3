@@ -6,6 +6,7 @@ import FinalSignal from './components/FinalSignal';
 import MarketStats from './components/MarketStats';
 import MarketInsight from './components/MarketInsight';
 import JournalPage from './JournalPage';
+import SignalPage from './SignalPage';
 import './index.css';
 
 function Dashboard() {
@@ -102,6 +103,7 @@ function NavBar() {
             borderBottom: '1px solid var(--glass-border)'
         }}>
             <Link to="/" style={linkStyle('/')}>대시보드</Link>
+            <Link to="/signals" style={linkStyle('/signals')}>신호 포착</Link>
             <Link to="/journal" style={linkStyle('/journal')}>매매 일지</Link>
         </nav>
     );
@@ -114,6 +116,7 @@ function App() {
                 <NavBar />
                 <Routes>
                     <Route path="/" element={<Dashboard />} />
+                    <Route path="/signals" element={<SignalPage />} />
                     <Route path="/journal" element={<JournalPage />} />
                 </Routes>
             </div>
