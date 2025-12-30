@@ -265,6 +265,36 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0):
             base_score += 10
         else:
             base_score -= 10
+            
+        # Auxiliary Indicators (Max 20) - User Request
+        aux_score = 0
+        bb_mid = float(df_30['BB_Mid'].iloc[-1])
+        
+        # (1) RSI (+5)
+        # Buy/Up: 45~75 (Healthy Momentum), Sell/Down: 25~55
+        if is_buy_signal or (is_observing and t30=='UP'):
+            if 45 <= rsi_val <= 75: aux_score += 5
+        elif is_sell_signal or (is_observing and t30=='DOWN'):
+            if 25 <= rsi_val <= 55: aux_score += 5
+            
+        # (2) MACD (+5)
+        if is_buy_signal or (is_observing and t30=='UP'):
+            if macd > macd_sig: aux_score += 5
+        elif is_sell_signal or (is_observing and t30=='DOWN'):
+            if macd < macd_sig: aux_score += 5
+            
+        # (3) Bollinger Trend (+5)
+        if is_buy_signal or (is_observing and t30=='UP'):
+            if current_price > bb_mid: aux_score += 5
+        elif is_sell_signal or (is_observing and t30=='DOWN'):
+            if current_price < bb_mid: aux_score += 5
+            
+        # (4) Cross Type Match (+5)
+        if (is_buy_signal and recent_cross_type == 'gold') or \
+           (is_sell_signal and recent_cross_type == 'dead'):
+            aux_score += 5
+            
+        base_score += aux_score
         
         base_score = max(0, base_score)
 
