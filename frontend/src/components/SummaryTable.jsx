@@ -11,6 +11,7 @@ const SummaryTable = ({ stocks }) => {
                         <th style={{ textAlign: 'left', padding: '1rem' }}>종목명</th>
                         <th style={{ textAlign: 'right', padding: '1rem' }}>현재가</th>
                         <th style={{ textAlign: 'right', padding: '1rem' }}>등락 (%)</th>
+                        <th style={{ textAlign: 'center', padding: '1rem' }}>보유 여부</th>
                         <th style={{ textAlign: 'center', padding: '1rem' }}>기술적 신호</th>
                         <th style={{ textAlign: 'center', padding: '1rem' }}>박스권/돌파</th>
                         <th style={{ textAlign: 'center', padding: '1rem' }}>점수</th>
@@ -36,13 +37,16 @@ const SummaryTable = ({ stocks }) => {
                                         {stock.change_pct >= 0 ? '+' : ''}{stock.change_pct ? stock.change_pct.toFixed(2) : '0.00'}%
                                     </td>
                                     <td style={{ textAlign: 'center', padding: '1rem' }}>
+                                        {stock.is_held ? <span style={{ color: 'var(--accent-gold)' }}>✔ 보유</span> : <span style={{ color: '#555', fontSize: '0.8rem' }}>미보유</span>}
+                                    </td>
+                                    <td style={{ textAlign: 'center', padding: '1rem' }}>
                                         <span style={{
                                             fontWeight: 700,
                                             padding: '4px 12px', borderRadius: '6px',
                                             background: isBuy ? 'rgba(248, 113, 113, 0.1)' : isSell ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
                                             color: isBuy ? 'var(--accent-red)' : isSell ? 'var(--accent-blue)' : 'var(--text-secondary)'
                                         }}>
-                                            {isBuy ? '매수' : isSell ? '매도' : '관망'}
+                                            {isBuy ? '매수' : isSell ? '매도' : stock.position.includes('미보유') ? '미보유' : '관망'}
                                         </span>
                                     </td>
                                     <td style={{ textAlign: 'center', padding: '1rem' }}>

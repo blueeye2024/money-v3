@@ -348,3 +348,26 @@ def delete_transaction(id):
         return True
     finally:
         conn.close()
+
+def get_current_holdings():
+    """Returns a list of tickers currently held (Net Qty > 0)"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            sql = """
+            SELECT ticker, 
+                   SUM(CASE WHEN trade_type = 'BUY' THEN qty 
+                            WHEN trade_type = 'SELL' THEN -qty 
+                            ELSE 0 END) as net_qty
+            FROM journal_transactions
+            GROUP BY ticker
+            HAVING net_qty > 0
+            """
+            cursor.execute(sql)
+            results = cursor.fetchall()
+            return [row['ticker'] for row in results]
+    except Exception as e:
+        print(f"Error fetching holdings: {e}")
+        return []
+    finally:
+        conn.close()

@@ -114,7 +114,7 @@ def check_box_pattern(df_30m):
     is_box = diff_pct <= 5.0
     return is_box, high_max, low_min, diff_pct
 
-def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0):
+def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0, is_held=False):
     # Retrieve Stock Name
     stock_name = TICKER_NAMES.get(ticker, ticker)
     
@@ -217,9 +217,55 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0):
                  else: valid = False
             position = "🚨 매도 진입" if cross_idx > -3 and cross_idx != -1 else "🔵 매도 유지" if valid else "관망 (매도 신호 무효화)"
             
-        if is_box:
             if current_price > box_high: position = "✨ 박스권 돌파 성공 (상단)"
             elif current_price < box_low: position = "✨ 박스권 돌파 성공 (하단)"
+            
+        # === User Holding Based Position Overlay ===
+        # If Held: Buy/Hold/Observe -> "매수 유지", Sell -> "매도"
+        # If Not Held: Buy -> "매수", Sell/Observe -> "미보유"
+        
+        algo_position = position # Save algo string for scoring?
+        # Actually score depends on `is_buy_signal` derived from `position` text.
+        # Refined Logic:
+        # We need to construct a display string (`final_position`) AND ensure scoring logic uses the ALGO signal, not the display string?
+        # User said "보유하고 있지 않은 종목은 ... 미보유라고 하면되". 
+        # But for Scoring? "미보유" typically scores 0 (Base 20 if observes?).
+        # If I change `position` string, downstream logic (`is_buy_signal`) changes.
+        
+        # Let's derive `is_buy_signal` etc. from `position` BEFORE overriding it for display?
+        # But `analyze_ticker` returns `position` for display.
+        # I should keep `position` as the final display string.
+        # But calculate Scores based on technicals (Algo Position).
+        # However, if I display "미보유", the Dashboard shouldn't show "Buy Score 80".
+        # If "미보유" (Not Held & Sell/Observe), maybe score should reflect that?
+        # User didn't specify Score changes for Holding status. "종목별 상세분석에서도 매수하고 있는 경우 매수 유지로 하고 ... " -> talking about Display.
+        # But logic says "없는 종목의 경우 매수 신호가 나오면 매수".
+        
+        # Strategy:
+        # 1. Calculate Technical Position (`tech_position`).
+        # 2. Derive User Display Position (`user_position`) based on `is_held`.
+        # 3. Use `tech_position` for Scoring? Or `user_position`?
+        # If I have "미보유", it generally means "Do nothing".
+        
+        # Let's implement the User Rules for `position` string variable.
+        
+        tech_position = position
+        
+        if is_held:
+            # Holding
+            if "매도" in tech_position or "하단" in tech_position:
+                 position = "🚨 매도"
+            else:
+                 # Buy, Buy Hold, Observe -> Maintain Buy
+                 position = "🔵 매수 유지"
+        else:
+            # Not Holding
+            if "매수" in tech_position or "상단" in tech_position:
+                 position = "🚨 매수"
+            else:
+                 # Sell, Sell Hold, Observe -> Not Held
+                 position = "미보유"
+
             
         # Format Time
         formatted_signal_time = "-"
@@ -403,7 +449,10 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0):
             "prob_up": float(news_prob),
             "score": final_score,
             "score_details": score_details,
-            "news_items": stock_news
+            "score": final_score,
+            "score_details": score_details,
+            "news_items": stock_news,
+            "is_held": is_held
         }
         return result
     
@@ -430,7 +479,7 @@ def generate_market_insight(results, market_data):
     
     return insight
 
-def run_analysis():
+def run_analysis(held_tickers=[]):
     data_30m, data_5m, market_data, _ = fetch_data()
     # Calculate Market Volatility Score
     market_vol_score = -5 # Default: Neutral/Flat (Bad? User says High Volatility is Good (+5))
@@ -450,7 +499,8 @@ def run_analysis():
     results = []
     
     for ticker in TARGET_TICKERS:
-        res = analyze_ticker(ticker, data_30m, data_5m, market_vol_score)
+        is_held = ticker in held_tickers
+        res = analyze_ticker(ticker, data_30m, data_5m, market_vol_score, is_held)
         results.append(res)
         
     # Get Market Indicators Data with Change %

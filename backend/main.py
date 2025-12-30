@@ -152,8 +152,11 @@ def monitor_signals():
 @app.get("/api/report")
 def get_report():
     try:
+        from db import get_current_holdings
+        holdings = get_current_holdings()
+
         # Run standard analysis
-        data = run_analysis()
+        data = run_analysis(holdings)
         
         # Add Cheongan Market Insight (User Request)
         # 1. Prediction (S&P 500 based)
