@@ -126,12 +126,14 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0, is_held=Fals
         if isinstance(df_30mRaw.columns, pd.MultiIndex):
             if ticker in df_30mRaw.columns.levels[0]:
                 df_30 = df_30mRaw[ticker].copy()
+                df_30.dropna(subset=['Close'], inplace=True)
         elif ticker in df_30mRaw.columns:
              pass 
 
         if isinstance(df_5mRaw.columns, pd.MultiIndex):
             if ticker in df_5mRaw.columns.levels[0]:
                 df_5 = df_5mRaw[ticker].copy()
+                df_5.dropna(subset=['Close'], inplace=True)
         
         if df_30 is None or df_5 is None or df_30.empty or df_5.empty:
             return {"ticker": ticker, "name": stock_name, "error": "No data"}
@@ -168,6 +170,14 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0, is_held=Fals
         last_sma30 = df_30['SMA30'].iloc[-1]
         last_5m_sma10 = df_5['SMA10'].iloc[-1]
         last_5m_sma30 = df_5['SMA30'].iloc[-1]
+        
+        if ticker == 'UFO':
+            print(f"DEBUG UFO Data Check:")
+            print(f"Price: {current_price}, SMA10: {last_sma10}, SMA30: {last_sma30}")
+            try:
+                print(df_30.tail(3)[['Close', 'SMA10', 'SMA30']])
+            except:
+                pass
         is_box, box_high, box_low, box_pct = check_box_pattern(df_30)
         
         position = "관망"
