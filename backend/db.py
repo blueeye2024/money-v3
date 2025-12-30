@@ -150,6 +150,16 @@ def get_signals(ticker=None, start_date=None, end_date=None, limit=30):
     finally:
         conn.close()
 
+def delete_signal(id):
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("DELETE FROM signal_history WHERE id=%s", (id,))
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
 def save_sms_log(receiver, message, status):
     """Save SMS send log"""
     conn = get_connection()

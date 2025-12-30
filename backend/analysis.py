@@ -236,40 +236,55 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw):
         if recent_cross_type == 'dead': news_prob -= 20
         news_prob = max(0, min(100, news_prob))
         
-        # Comprehensive Scoring Logic (0-100)
-        # 1. Trend (Gold/Dead)
-        # 2. RSI Stability
-        # 3. Box Breakout Bonus
-        score = 50 # Base
+        # === Scoring Logic (User Request) ===
+        # Criteria:
+        # If News exists: Tech 60%, Aux 20%, News 20%
+        # If News missing: Tech 70%, Aux 30%
+        # We assume News is missing for now.
         
-        # Trend Score
-        if position.startswith("🚨 매수") or "상단" in position:
-            score += 30
-        elif position.startswith("🔴 매수"):
-            score += 20
-        elif position.startswith("🚨 매도") or "하단" in position:
-            # Sell signals are also "High Relevance" for trading, even if direction is down.
-            # Use 'Signal Strength' concept?
-            # User asks for "Best Selection". Usually means 'Buy'.
-            # If user plays inverse, 'Sell' is good. But let's assume 'Best actionable signal'.
-             score += 30
-        
-        # RSI Score (Prefer not overbought/sold too much for entry)
-        rsi_val = float(df_30['RSI'].iloc[-1])
-        if 40 <= rsi_val <= 60: score += 10 
-        elif rsi_val > 70 or rsi_val < 30: score -= 5 # Risky
-        
-        # Box Breakout is very strong
-        if is_box and ("돌파" in position): score += 20
-        
-        # MACD Strength
-        macd = float(df_30['MACD'].iloc[-1])
-        signal = float(df_30['Signal'].iloc[-1])
-        if abs(macd - signal) > 0.1: score += 5 # Diverging strongly
-        
-        score = min(100, max(0, score))
+        # 1. Cheongan Tech Score (0-100)
+        tech_score = 50
+        if "진입" in position or "돌파" in position:
+            tech_score = 100 # Strongest
+        elif "유지" in position:
+            tech_score = 70 # Good
+        else:
+            tech_score = 30 # Neutral/Watch
 
-        # Sanitize and Return
+        # 2. Aux Charts Score (0-100)
+        # RSI (0-100), MACD
+        aux_score = 50
+        # RSI: 40-60 is stable entry zone (100), 30-70 acceptable (70), else low (30)
+        if 40 <= rsi_val <= 60: aux_score = 100
+        elif 30 <= rsi_val <= 70: aux_score = 70
+        else: aux_score = 30
+        
+        # MACD Bonus
+        if recent_cross_type == 'gold' and macd > signal: aux_score = min(100, aux_score + 20)
+        if recent_cross_type == 'dead' and macd < signal: aux_score = min(100, aux_score + 20)
+
+        # 3. Final weighted score (News missing -> 70% Tech, 30% Aux)
+        final_score = (tech_score * 0.7) + (aux_score * 0.3)
+        final_score = round(final_score)
+        
+        # Change Pct (Attempt to use previous day close)
+        # Resample to daily to find prev close? 
+        # approximate using last close - 1 day idx?
+        # For now, keep current logic but ensure it's robust.
+        # User asked for "Previous Regular Market Close".
+        # 30m data might have pre-post.
+        
+        prev_close = df_30['Close'].iloc[-2] # Default fallback
+        # Try to find last bar of previous day
+        try:
+            current_date = df_30.index[-1].date()
+            prev_day_data = df_30[df_30.index.date < current_date]
+            if not prev_day_data.empty:
+                prev_close = prev_day_data['Close'].iloc[-1]
+                change_pct = ((current_price - prev_close) / prev_close) * 100
+        except:
+             pass
+
         result = {
             "ticker": ticker,
             "name": stock_name,
@@ -286,7 +301,7 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw):
             "macd": float(macd) if pd.notnull(macd) else None,
             "macd_sig": float(signal) if pd.notnull(signal) else None,
             "prob_up": float(news_prob),
-            "score": score
+            "score": final_score
         }
         return result
     

@@ -8,10 +8,16 @@ const SignalPage = () => {
     const [stocks, setStocks] = useState([]);
     const [smsEnabled, setSmsEnabled] = useState(true);
 
-    // Filters (Removed Ticker)
+    // Filters (Default: Today)
+    const getTodayString = () => {
+        const now = new Date();
+        const offset = now.getTimezoneOffset() * 60000;
+        return (new Date(now - offset)).toISOString().slice(0, 10);
+    };
+
     const [filters, setFilters] = useState({
-        start_date: '',
-        end_date: '',
+        start_date: getTodayString(),
+        end_date: getTodayString(),
         limit: 30
     });
 
@@ -96,10 +102,24 @@ const SignalPage = () => {
 
     const resetFilters = () => {
         setFilters({
-            start_date: '',
-            end_date: '',
+            start_date: getTodayString(),
+            end_date: getTodayString(),
             limit: 30
         });
+    };
+
+    const deleteSignal = async (id) => {
+        if (!confirm("이 신호 기록을 삭제하시겠습니까?")) return;
+        try {
+            const res = await fetch(`/api/signals/${id}`, { method: 'DELETE' });
+            if (res.ok) {
+                fetchSignals();
+            } else {
+                alert("삭제 실패");
+            }
+        } catch (e) {
+            console.error(e);
+        }
     };
 
     const sendSampleSms = async () => {
@@ -208,7 +228,10 @@ const SignalPage = () => {
                                 signals.map(sig => (
                                     <tr key={sig.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                                         <td style={{ padding: '1.2rem 2rem', fontSize: '0.9rem' }}>
-                                            {new Date(sig.signal_time).toLocaleString()}
+                                            {new Date(sig.signal_time).toLocaleString('ko-KR', {
+                                                year: 'numeric', month: '2-digit', day: '2-digit',
+                                                hour: '2-digit', minute: '2-digit', hour12: false
+                                            }).replace(/\. /g, '-').replace('.', '')}
                                         </td>
                                         <td style={{ padding: '1.2rem' }}>
                                             <div style={{ fontWeight: 'bold' }}>{sig.ticker}</div>
@@ -224,11 +247,16 @@ const SignalPage = () => {
                                             </span>
                                         </td>
                                         <td style={{ padding: '1.2rem', textAlign: 'right' }}>
-                                            <span style={{ fontWeight: 'bold', color: 'rgba(255,255,255,0.9)' }}>${sig.price?.toFixed(2)}</span>
+                                            <span style={{ fontWeight: 'bold', color: 'rgba(255,255,255,0.9)' }}>
+                                                ${sig.price ? sig.price.toFixed(2) : '0.00'}
+                                            </span>
                                         </td>
-                                        <td style={{ padding: '1.2rem 2rem' }}>
-                                            <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{sig.position_desc}</div>
-                                            {sig.is_sent && <span style={{ fontSize: '0.75rem', color: 'var(--accent-green)' }}>● 자동문자발송됨</span>}
+                                        <td style={{ padding: '1.2rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <div>
+                                                <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{sig.position_desc}</div>
+                                                {sig.is_sent && <span style={{ fontSize: '0.75rem', color: 'var(--accent-green)' }}>● 자동문자발송됨</span>}
+                                            </div>
+                                            <button onClick={() => deleteSignal(sig.id)} className="btn-icon" style={{ color: 'var(--accent-red)', marginLeft: '1rem' }}>🗑️</button>
                                         </td>
                                     </tr>
                                 ))

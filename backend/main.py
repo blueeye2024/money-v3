@@ -147,6 +147,14 @@ def health_check():
 def api_get_signals(ticker: str = None, start_date: str = None, end_date: str = None, limit: int = 30):
     return get_signals(ticker, start_date, end_date, limit)
 
+@app.delete("/api/signals/{id}")
+def api_delete_signal(id: int):
+    # Import delete_signal from db
+    from db import delete_signal
+    if delete_signal(id):
+        return {"status": "success"}
+    return {"status": "error"}
+
 @app.get("/api/exchange-rate")
 def api_get_exchange_rate():
     from analysis import MARKET_INDICATORS
