@@ -245,9 +245,11 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0, is_held=Fals
                  recent_cross_type = 'dead'
             signal_time = df_30.index[-1]
 
-        # Force Signal Time to Latest Data Time (User Request)
-        # Display the timestamp of the latest data point to show current status time
-        signal_time = df_30.index[-1]
+        # Force Signal Time to Current Real-time Update (User Request)
+        # Since we use Real-time Price and re-evaluate Breakout/Position,
+        # we update the signal timestamp to reflect the latest analysis time.
+        kst = pytz.timezone('Asia/Seoul')
+        signal_time = datetime.now(kst)
 
         # Validation
         valid = True
