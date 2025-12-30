@@ -56,9 +56,9 @@ def get_current_time_str():
     now_est = now_utc.astimezone(est)
     
     return {
-        "kst": now_kst.strftime("%Y-%m-%d %H:%M"),
-        "est": now_est.strftime("%m/%d %H:%M"),
-        "full_str": f"{now_kst.strftime('%Y-%m-%d %H:%M')} KST (EST: {now_est.strftime('%m/%d %H:%M')})"
+        "kst": now_kst.strftime("%Y-%m-%d %H:%M:%S"),
+        "est": now_est.strftime("%m/%d %H:%M:%S"),
+        "full_str": f"{now_kst.strftime('%Y-%m-%d %H:%M:%S')} KST (EST: {now_est.strftime('%m/%d %H:%M:%S')})"
     }
 
 def fetch_data():
