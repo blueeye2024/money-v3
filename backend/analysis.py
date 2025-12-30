@@ -567,6 +567,7 @@ def run_analysis(held_tickers=[]):
     
     for ticker in TARGET_TICKERS:
         is_held = ticker in held_tickers
+        rt_info = real_time_map.get(ticker)
         # held_tickers is the dict from db.get_current_holdings
         res = analyze_ticker(ticker, data_30m, data_5m, market_vol_score, is_held, real_time_info=rt_info, holdings_data=held_tickers)
         results.append(res)
