@@ -105,31 +105,31 @@ function Dashboard() {
     return (
         <div className="container">
             <header>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '1rem', marginBottom: '2rem' }}>
-                    <div>
-                        <div style={{ fontSize: '0.85rem', color: 'var(--accent-blue)', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
-                            PREMIUM FINANCIAL REPORTING
-                        </div>
-                        <h1 style={{ margin: 0, fontSize: 'clamp(1.5rem, 5vw, 2.5rem)', fontWeight: 800, letterSpacing: '-1px' }}>
-                            청안 해외주식 종합 분석 대시보드
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '2.5rem', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '1.5rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div style={{ width: '4px', height: '24px', background: 'var(--accent-blue)', borderRadius: '2px' }}></div>
+                        <h1 style={{ margin: 0, fontSize: '1.8rem', fontWeight: 700, letterSpacing: '-0.5px', background: 'linear-gradient(135deg, #fff 0%, #a5b4fc 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                            청안 해외주식 종합 분석
                         </h1>
                     </div>
-                    <div style={{
-                        background: 'rgba(255, 255, 255, 0.05)',
-                        padding: '0.6rem 1.2rem',
-                        borderRadius: '99px',
-                        border: '1px solid rgba(255, 255, 255, 0.1)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        fontSize: '0.85rem',
-                        color: 'var(--text-secondary)',
-                        backdropFilter: 'blur(10px)'
-                    }}>
-                        <span style={{ display: 'inline-block', width: '8px', height: '8px', background: 'var(--accent-green)', borderRadius: '50%', boxShadow: '0 0 10px var(--accent-green)' }}></span>
-                        <strong>분석 시점:</strong> {data?.timestamp?.full_str || '연결 중...'}
-                    </div>
+                    {data?.timestamp?.full_str && (
+                        <div style={{
+                            background: 'rgba(255, 255, 255, 0.03)',
+                            padding: '0.5rem 1rem',
+                            borderRadius: '12px',
+                            border: '1px solid rgba(255, 255, 255, 0.08)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            fontSize: '0.8rem',
+                            color: 'var(--text-secondary)',
+                        }}>
+                            <span style={{ display: 'inline-block', width: '6px', height: '6px', background: '#10b981', borderRadius: '50%', boxShadow: '0 0 8px #10b981' }}></span>
+                            <strong>분석 시점:</strong> {data.timestamp.full_str}
+                        </div>
+                    )}
                 </div>
+
 
             </header>
 

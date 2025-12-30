@@ -444,7 +444,7 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0, is_held=Fals
         if is_sell_signal:
             if market_vol_score < 5: market_score = -10
             if t5 == 'UP': market_score -= 10
-            if is_box: market_score -= 10
+            if is_box: market_score -= 20
 
         # PnL Score Adjustment
         pnl_impact = 0
