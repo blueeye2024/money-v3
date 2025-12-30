@@ -17,7 +17,7 @@ function Dashboard() {
 
     useEffect(() => {
         fetchData();
-        const interval = setInterval(fetchData, 60000); // 1 min refresh
+        const interval = setInterval(fetchData, 30000); // 30 seconds
         return () => clearInterval(interval);
     }, []);
 

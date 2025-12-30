@@ -5,6 +5,15 @@ import numpy as np
 from datetime import datetime, timedelta
 import pytz
 import os
+import time
+
+# Global Cache for Historical Data
+_DATA_CACHE = {
+    "30m": None,
+    "5m": None,
+    "market": None,
+    "last_fetch": 0
+}
 
 
 def get_score_interpretation(score, position_text=""):
@@ -53,14 +62,21 @@ def get_current_time_str():
     }
 
 def fetch_data():
+    global _DATA_CACHE
+    
+    # Check Cache (5 Minutes = 300 Seconds)
+    if time.time() - _DATA_CACHE["last_fetch"] < 300 and _DATA_CACHE["30m"] is not None:
+        # Return cached data
+        return _DATA_CACHE["30m"], _DATA_CACHE["5m"], _DATA_CACHE["market"], None
+
     # Fetch 30m data (Main) for Stocks
     tickers_str = " ".join(TARGET_TICKERS)
     
-    print("Fetching 30m data for Stocks...")
+    print("Fetching 30m data for Stocks (Fresh)...")
     # Hide progress to keep logs clean
     data_30m = yf.download(tickers_str, period="5d", interval="30m", prepost=True, group_by='ticker', threads=False, progress=False)
     
-    print("Fetching 5m data for Stocks...")
+    print("Fetching 5m data for Stocks (Fresh)...")
     data_5m = yf.download(tickers_str, period="5d", interval="5m", prepost=True, group_by='ticker', threads=False, progress=False)
     
     # Market indicators - Use Ticker.history for stability
@@ -81,6 +97,14 @@ def fetch_data():
             market_data[name] = pd.DataFrame()
             
     print("Data fetch complete.")
+    
+    # Update Cache
+    _DATA_CACHE["30m"] = data_30m
+    _DATA_CACHE["5m"] = data_5m
+    _DATA_CACHE["market"] = market_data
+    _DATA_CACHE["last_fetch"] = time.time()
+    
+    return data_30m, data_5m, market_data, None
     return data_30m, data_5m, market_data, None
 
 def calculate_sma(series, window):
