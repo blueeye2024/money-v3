@@ -153,7 +153,7 @@ const SignalPage = () => {
     const deleteAllSignals = async () => {
         if (!confirm('정말로 모든 신호 내역을 삭제하시겠습니까?')) return;
         try {
-            await axios.delete(`${API_BASE_URL}/api/signals/all`);
+            await axios.delete(`/api/signals/all`);
             fetchSignals();
         } catch (err) {
             console.error("Delete All Signals Error", err);
@@ -163,7 +163,7 @@ const SignalPage = () => {
     const deleteSmsLog = async (id) => {
         if (!confirm('이 기록을 삭제하시겠습니까?')) return;
         try {
-            await axios.delete(`${API_BASE_URL}/api/sms/history/${id}`);
+            await axios.delete(`/api/sms/history/${id}`);
             fetchSmsLogs();
         } catch (err) {
             console.error("Delete SMS Log Error", err);
@@ -173,7 +173,7 @@ const SignalPage = () => {
     const deleteAllSmsLogs = async () => {
         if (!confirm('정말로 모든 문자 발송 기록을 삭제하시겠습니까?')) return;
         try {
-            await axios.delete(`${API_BASE_URL}/api/sms/history/all`);
+            await axios.delete(`/api/sms/history/all`);
             fetchSmsLogs();
         } catch (err) {
             console.error("Delete All SMS Logs Error", err);
