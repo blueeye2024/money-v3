@@ -9,13 +9,14 @@ const getScoreInterpretation = (score, position) => {
     return isSell ? "📉 조정" : "⚪ 관망";
 };
 
-const SummaryTable = ({ stocks }) => {
+const SummaryTable = ({ stocks, onToggleVisibility }) => {
     return (
         <div className="glass-panel" style={{ padding: '2rem', marginTop: '2rem', overflowX: 'auto' }}>
             <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>종합 분석 요약표</h2>
             <table>
                 <thead>
                     <tr>
+                        <th style={{ textAlign: 'center', padding: '1rem', width: '40px' }}>표시</th>
                         <th style={{ textAlign: 'left', padding: '1rem' }}>종목</th>
                         <th style={{ textAlign: 'left', padding: '1rem' }}>종목명</th>
                         <th style={{ textAlign: 'right', padding: '1rem' }}>현재가</th>
@@ -29,15 +30,27 @@ const SummaryTable = ({ stocks }) => {
                 </thead>
                 <tbody>
                     {stocks
-                        .sort((a, b) => (b.score || 0) - (a.score || 0))
                         .map(stock => {
                             const pos = stock.position || '';
                             const isBuy = pos.includes('매수') || pos.includes('상단');
                             const isSell = pos.includes('매도') || pos.includes('하단');
                             const details = stock.score_details || { base: 0, trend: 0, reliability: 0, breakout: 0, market: 0 };
+                            const isVisible = stock.is_visible !== false;
 
                             return (
-                                <tr key={stock.ticker} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                <tr key={stock.ticker} style={{
+                                    borderBottom: '1px solid rgba(255,255,255,0.05)',
+                                    opacity: isVisible ? 1 : 0.5,
+                                    transition: 'opacity 0.2s'
+                                }}>
+                                    <td style={{ textAlign: 'center', padding: '1rem' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={isVisible}
+                                            onChange={(e) => onToggleVisibility(stock.ticker, e.target.checked)}
+                                            style={{ cursor: 'pointer', width: '18px', height: '18px' }}
+                                        />
+                                    </td>
                                     <td style={{ fontWeight: 700, padding: '1rem', color: 'var(--accent-blue)' }}>{stock.ticker}</td>
                                     <td style={{ padding: '1rem', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
                                         {stock.name.length > 20 ? stock.name.substring(0, 20) + '...' : stock.name}

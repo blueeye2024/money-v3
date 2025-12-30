@@ -9,7 +9,7 @@ import uvicorn
 
 from analysis import run_analysis, fetch_data, analyze_ticker, TARGET_TICKERS
 from sms import send_sms
-from db import init_db, save_signal, check_last_signal, get_stocks, add_stock, delete_stock, add_transaction, get_transactions, update_transaction, delete_transaction, get_signals, save_sms_log, get_sms_logs, delete_all_signals, delete_sms_log, delete_all_sms_logs
+from db import init_db, save_signal, check_last_signal, get_stocks, add_stock, delete_stock, add_transaction, get_transactions, update_transaction, delete_transaction, get_signals, save_sms_log, get_sms_logs, delete_all_signals, delete_sms_log, delete_all_sms_logs, get_ticker_settings, update_ticker_setting
 
 app = FastAPI()
 
@@ -38,6 +38,10 @@ SMS_THROTTLE_MINUTES = 30
 
 class SMSSettingModel(BaseModel):
     enabled: bool
+
+class TickerSettingUpdate(BaseModel):
+    ticker: str
+    is_visible: bool
 
 @app.get("/api/settings/sms")
 def get_sms_setting():
@@ -161,11 +165,17 @@ def monitor_signals():
 @app.get("/api/report")
 def get_report():
     try:
-        from db import get_current_holdings
+        from db import get_current_holdings, get_ticker_settings
         holdings = get_current_holdings()
+        settings = get_ticker_settings()
 
         # Run standard analysis
         data = run_analysis(holdings)
+        
+        # Add visibility flag to each stock
+        for stock in data.get('stocks', []):
+            ticker = stock['ticker']
+            stock['is_visible'] = settings.get(ticker, True) # Default to True
         
         # Add Cheongan Market Insight (User Request)
         # 1. Prediction (S&P 500 based)
@@ -237,6 +247,16 @@ def api_delete_signal(id: int):
     # Import delete_signal from db
     from db import delete_signal
     if delete_signal(id):
+        return {"status": "success"}
+    return {"status": "error"}
+
+@app.get("/api/dashboard-settings")
+def api_get_dashboard_settings():
+    return get_ticker_settings()
+
+@app.post("/api/dashboard-settings")
+def api_update_dashboard_setting(setting: TickerSettingUpdate):
+    if update_ticker_setting(setting.ticker, setting.is_visible):
         return {"status": "success"}
     return {"status": "error"}
 

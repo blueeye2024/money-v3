@@ -74,6 +74,16 @@ def init_db():
             )
             """
             cursor.execute(sql_sms_logs)
+
+            # 5. Ticker Settings (Dashboard Visibility)
+            sql_ticker_settings = """
+            CREATE TABLE IF NOT EXISTS ticker_settings (
+                ticker VARCHAR(10) PRIMARY KEY,
+                is_visible BOOLEAN DEFAULT TRUE,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )
+            """
+            cursor.execute(sql_ticker_settings)
             
         conn.commit()
     except Exception as e:
@@ -394,5 +404,38 @@ def get_current_holdings():
     except Exception as e:
         print(f"Error fetching holdings: {e}")
         return {}
+    finally:
+        conn.close()
+
+def get_ticker_settings():
+    """Returns a dict of ticker settings {ticker: is_visible}"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT ticker, is_visible FROM ticker_settings")
+            rows = cursor.fetchall()
+            return {row['ticker']: bool(row['is_visible']) for row in rows}
+    except Exception as e:
+        print(f"Error fetching ticker settings: {e}")
+        return {}
+    finally:
+        conn.close()
+
+def update_ticker_setting(ticker, is_visible):
+    """Updates visibility for a ticker. Inserts if not exists."""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            sql = """
+            INSERT INTO ticker_settings (ticker, is_visible)
+            VALUES (%s, %s)
+            ON DUPLICATE KEY UPDATE is_visible = VALUES(is_visible)
+            """
+            cursor.execute(sql, (ticker, is_visible))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Error updating ticker setting: {e}")
+        return False
     finally:
         conn.close()

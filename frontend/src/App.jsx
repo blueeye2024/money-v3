@@ -35,6 +35,25 @@ function Dashboard() {
         }
     };
 
+    const toggleTickerVisibility = async (ticker, isVisible) => {
+        try {
+            await fetch('/api/dashboard-settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ticker, is_visible: isVisible })
+            });
+            setData(prev => {
+                if (!prev) return prev;
+                return {
+                    ...prev,
+                    stocks: prev.stocks.map(s => s.ticker === ticker ? { ...s, is_visible: isVisible } : s)
+                };
+            });
+        } catch (err) {
+            console.error("Failed to update ticker visibility:", err);
+        }
+    };
+
     if (loading) return (
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh', flexDirection: 'column' }}>
             <div style={{ fontSize: '2.5rem', fontWeight: 800, marginBottom: '2rem', background: 'linear-gradient(to right, #60a5fa, #34d399)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
@@ -81,6 +100,8 @@ function Dashboard() {
         return (b.score || 0) - (a.score || 0);
     }) : [];
 
+    const visibleStocks = sortedStocks.filter(s => s.is_visible !== false);
+
     return (
         <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
             <header>
@@ -97,18 +118,18 @@ function Dashboard() {
 
             {data?.market && <MarketStats market={data.market} />}
 
-            {data?.stocks && <FinalSignal stocks={data.stocks} />}
+            {data?.stocks && <FinalSignal stocks={visibleStocks} />}
 
             {data?.market && <MarketInsight market={{ ...data.market, insight: data.insight }} />}
 
             <h2 style={{ fontSize: '1.5rem', marginBottom: '1.5rem', marginTop: '3rem' }}>종목별 상세 분석</h2>
             <div className="grid-cards">
-                {sortedStocks.map(stock => (
+                {visibleStocks.map(stock => (
                     <StockCard key={stock.ticker} data={stock} />
                 ))}
             </div>
 
-            {data?.stocks && <SummaryTable stocks={data.stocks} />}
+            {data?.stocks && <SummaryTable stocks={sortedStocks} onToggleVisibility={toggleTickerVisibility} />}
         </div>
     );
 }
