@@ -221,14 +221,14 @@ const SignalPage = () => {
     };
 
     return (
-        <div style={{ maxWidth: '1200px', margin: '0 auto', paddingBottom: '6rem', fontFamily: "'Inter', sans-serif" }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '2rem', marginTop: '2rem' }}>
-                <h1 className="text-gradient" style={{ fontSize: '2.2rem', margin: 0, fontWeight: 700 }}>실시간 신호 포착 & 알림 내역</h1>
+        <div className="container" style={{ paddingBottom: '6rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '2rem' }}>
+                <h1 className="text-gradient" style={{ margin: 0, fontWeight: 700 }}>실시간 신호 포착 & 알림 내역</h1>
                 <p style={{ color: 'var(--text-secondary)', margin: 0 }}>시스템이 자동으로 탐지한 매수/매도 신호와 발송된 문자 기록입니다.</p>
             </div>
 
             {/* Filters & SMS Control */}
-            <div className="glass-panel" style={{ padding: '2rem', marginBottom: '3rem' }}>
+            <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '3rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
                     <h3 style={{ margin: 0 }}>🔍 신호 내역 조회</h3>
 
@@ -237,28 +237,25 @@ const SignalPage = () => {
                         <span style={{ fontWeight: 'bold', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>SMS 전체 가동:</span>
                         <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: smsEnabled ? 'var(--accent-green)' : 'var(--text-secondary)' }}>
                             <input type="radio" checked={smsEnabled} onChange={() => toggleSms(true)} />
-                            ON (가동)
+                            ON
                         </label>
                         <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: !smsEnabled ? 'var(--accent-red)' : 'var(--text-secondary)' }}>
                             <input type="radio" checked={!smsEnabled} onChange={() => toggleSms(false)} />
-                            OFF (중지)
+                            OFF
                         </label>
                     </div>
                 </div>
 
-                <form onSubmit={applyFilters} style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5rem', alignItems: 'end' }}>
-                    {/* Ticker Filter Removed */}
-
-                    <div className="form-group" style={{ flex: '1 1 150px', minWidth: '150px' }}>
+                <form onSubmit={applyFilters} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', alignItems: 'end' }}>
+                    <div className="form-group">
                         <label>시작일</label>
-                        <input type="date" name="start_date" value={filters.start_date} onChange={handleFilterChange} className="input-field" style={{ padding: '0.6rem 0.9rem' }} />
+                        <input type="date" name="start_date" value={filters.start_date} onChange={handleFilterChange} className="input-field" />
                     </div>
-                    <div style={{ paddingBottom: '12px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center' }}>~</div>
-                    <div className="form-group" style={{ flex: '1 1 150px', minWidth: '150px' }}>
+                    <div className="form-group">
                         <label>종료일</label>
-                        <input type="date" name="end_date" value={filters.end_date} onChange={handleFilterChange} className="input-field" style={{ padding: '0.6rem 0.9rem' }} />
+                        <input type="date" name="end_date" value={filters.end_date} onChange={handleFilterChange} className="input-field" />
                     </div>
-                    <div className="form-group" style={{ flex: '0 0 120px' }}>
+                    <div className="form-group">
                         <label>표시 개수</label>
                         <select name="limit" value={filters.limit} onChange={handleFilterChange} className="input-field" style={{ background: '#e2e8f0', color: 'black', fontWeight: 'bold' }}>
                             <option value="30">30개</option>
@@ -266,46 +263,46 @@ const SignalPage = () => {
                             <option value="100">100개</option>
                         </select>
                     </div>
-                    <div style={{ display: 'flex', gap: '0.8rem', flex: '1 1 auto', flexWrap: 'wrap' }}>
-                        <button type="submit" className="btn-submit" style={{ flex: 1, padding: '0.9rem', whiteSpace: 'nowrap' }}>조회하기</button>
-                        <button type="button" onClick={resetFilters} className="btn-icon" style={{ flex: 1, background: 'rgba(255,255,255,0.05)', height: '48px', padding: '0 1rem', borderRadius: '8px', color: 'var(--text-secondary)', border: '1px solid rgba(255,255,255,0.1)', whiteSpace: 'nowrap' }}>초기화</button>
-                        <button type="button" onClick={sendSampleSms} className="btn-icon" style={{ flex: 1, background: 'rgba(59, 130, 246, 0.1)', height: '48px', padding: '0 1rem', borderRadius: '8px', color: 'var(--accent-blue)', border: '1px solid rgba(59, 130, 246, 0.3)', fontWeight: 'bold', whiteSpace: 'nowrap' }}>💬 SMS 테스트</button>
+                    <div style={{ display: 'flex', gap: '0.8rem', flexWrap: 'wrap' }}>
+                        <button type="submit" className="btn-submit" style={{ flex: 1 }}>조회</button>
+                        <button type="button" onClick={sendSampleSms} className="btn-icon" style={{ flex: 1, background: 'rgba(59, 130, 246, 0.1)', height: '44px', padding: '0 1rem', borderRadius: '8px', color: 'var(--accent-blue)', border: '1px solid rgba(59, 130, 246, 0.3)', fontWeight: 'bold' }}>테스트</button>
                     </div>
                 </form>
             </div>
 
             {/* Signals Table */}
             <div className="glass-panel" style={{ padding: '0', overflow: 'hidden', marginBottom: '4rem' }}>
-                <div style={{ padding: '1.5rem 2rem', background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ padding: '1.2rem 1.5rem', background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <h3 style={{ margin: 0 }}>📊 신호 발생 히스토리</h3>
                     <button onClick={deleteAllSignals} style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--accent-red)', border: '1px solid var(--accent-red)', borderRadius: '6px', padding: '0.4rem 0.8rem', cursor: 'pointer' }}>전체 삭제</button>
                 </div>
-                <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '600px' }}>
+                <div className="table-container">
+                    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '800px' }}>
                         <thead>
                             <tr style={{ background: 'rgba(0,0,0,0.2)', color: 'var(--text-secondary)' }}>
-                                <th style={{ padding: '1.2rem 2rem', textAlign: 'left' }}>발생 시간</th>
+                                <th style={{ padding: '1.2rem', textAlign: 'left' }}>발생 시간</th>
                                 <th style={{ padding: '1.2rem', textAlign: 'left' }}>종목</th>
                                 <th style={{ padding: '1.2rem', textAlign: 'center' }}>구분</th>
                                 <th style={{ padding: '1.2rem', textAlign: 'right' }}>신호가</th>
                                 <th style={{ padding: '1.2rem', textAlign: 'right' }}>현재가</th>
                                 <th style={{ padding: '1.2rem', textAlign: 'center' }}>수익률</th>
-                                <th style={{ padding: '1.2rem 2rem', textAlign: 'left' }}>점수 / 상태</th>
+                                <th style={{ padding: '1.2rem', textAlign: 'left' }}>점수 / 상태</th>
+                                <th style={{ padding: '1.2rem', textAlign: 'center' }}>관리</th>
                             </tr>
                         </thead>
                         <tbody>
                             {loading ? (
-                                <tr><td colSpan="6" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-secondary)' }}>데이터 로딩 중...</td></tr>
+                                <tr><td colSpan="8" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-secondary)' }}>데이터 로딩 중...</td></tr>
                             ) : signals.length === 0 ? (
-                                <tr><td colSpan="6" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-secondary)' }}>신호 내역이 없습니다. (모든 종목 조회 중)</td></tr>
+                                <tr><td colSpan="8" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-secondary)' }}>신호 내역이 없습니다.</td></tr>
                             ) : (
                                 signals.map(sig => (
                                     <tr key={sig.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                                        <td style={{ padding: '1.2rem 2rem', fontSize: '0.9rem' }}>
+                                        <td style={{ padding: '1.2rem', fontSize: '0.9rem' }}>
                                             {new Date(sig.signal_time).toLocaleString('ko-KR', {
-                                                year: 'numeric', month: '2-digit', day: '2-digit',
+                                                month: '2-digit', day: '2-digit',
                                                 hour: '2-digit', minute: '2-digit', hour12: false
-                                            }).replace(/\. /g, '-').replace('.', '')}
+                                            })}
                                         </td>
                                         <td style={{ padding: '1.2rem' }}>
                                             <div style={{ fontWeight: 'bold' }}>{sig.ticker}</div>
@@ -327,31 +324,16 @@ const SignalPage = () => {
                                         <td style={{ padding: '1.2rem', textAlign: 'center', fontWeight: 'bold', color: getProfitColor(sig.price, prices[sig.ticker], sig.signal_type) }}>
                                             {calcProfit(sig.price, prices[sig.ticker], sig.signal_type)}
                                         </td>
-                                        <td style={{ padding: '1.2rem 2rem' }}>
+                                        <td style={{ padding: '1.2rem' }}>
                                             <div style={{ fontSize: '0.9rem' }}>{sig.position_desc}</div>
                                             {sig.score > 0 && (
                                                 <div style={{ fontSize: '0.8rem', color: 'var(--accent-gold)', marginTop: '4px' }}>
                                                     ⭐ {sig.score}점 ({sig.interpretation || '-'})
                                                 </div>
                                             )}
-                                            {Boolean(sig.is_sent) && <span style={{ fontSize: '0.75rem', color: 'var(--accent-green)' }}>● 자동문자발송됨</span>}
                                         </td>
                                         <td style={{ padding: '1.2rem', textAlign: 'center' }}>
-                                            <button
-                                                onClick={() => deleteSignal(sig.id)}
-                                                style={{
-                                                    background: 'rgba(255, 50, 50, 0.2)',
-                                                    border: '1px solid rgba(255, 50, 50, 0.3)',
-                                                    color: '#ff6b6b',
-                                                    padding: '0.4rem 0.8rem',
-                                                    borderRadius: '6px',
-                                                    cursor: 'pointer',
-                                                    fontSize: '0.8rem',
-                                                    transition: 'all 0.2s'
-                                                }}
-                                            >
-                                                삭제
-                                            </button>
+                                            <button onClick={() => deleteSignal(sig.id)} style={{ background: 'rgba(255, 50, 50, 0.1)', border: 'none', color: '#ff6b6b', padding: '0.4rem 0.8rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem' }}>삭제</button>
                                         </td>
                                     </tr>
                                 ))
@@ -363,18 +345,18 @@ const SignalPage = () => {
 
             {/* SMS Logs Section */}
             <div className="glass-panel" style={{ padding: '0', overflow: 'hidden' }}>
-                <div style={{ padding: '1.5rem 2rem', background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <h3 style={{ margin: 0 }}>📱 문자 발송 히스토리 (최근 30개)</h3>
+                <div style={{ padding: '1.2rem 1.5rem', background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <h3 style={{ margin: 0 }}>📱 문자 발송 히스토리</h3>
                     <button onClick={deleteAllSmsLogs} style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--accent-red)', border: '1px solid var(--accent-red)', borderRadius: '6px', padding: '0.4rem 0.8rem', cursor: 'pointer' }}>전체 삭제</button>
                 </div>
-                <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '600px' }}>
+                <div className="table-container">
+                    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '800px' }}>
                         <thead>
                             <tr style={{ background: 'rgba(0,0,0,0.2)', color: 'var(--text-secondary)' }}>
-                                <th style={{ padding: '1rem 2rem', textAlign: 'left', width: '200px' }}>전송 일시</th>
-                                <th style={{ padding: '1rem', textAlign: 'left', width: '150px' }}>수신 번호</th>
+                                <th style={{ padding: '1rem', textAlign: 'left', width: '150px' }}>전송 일시</th>
+                                <th style={{ padding: '1rem', textAlign: 'left', width: '130px' }}>수신 번호</th>
                                 <th style={{ padding: '1rem', textAlign: 'left' }}>메시지 내용</th>
-                                <th style={{ padding: '1rem 2rem', textAlign: 'center', width: '120px' }}>상태</th>
+                                <th style={{ padding: '1rem', textAlign: 'center', width: '120px' }}>관리</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -385,21 +367,21 @@ const SignalPage = () => {
                             ) : (
                                 smsLogs.map(log => (
                                     <tr key={log.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                                        <td style={{ padding: '1rem 2rem', fontSize: '0.85rem' }}>
+                                        <td style={{ padding: '1rem', fontSize: '0.85rem' }}>
                                             {new Date(log.created_at).toLocaleString('ko-KR', {
-                                                year: 'numeric', month: '2-digit', day: '2-digit',
+                                                month: '2-digit', day: '2-digit',
                                                 hour: '2-digit', minute: '2-digit', hour12: false
-                                            }).replace(/\. /g, '-').replace('.', '')}
+                                            })}
                                         </td>
                                         <td style={{ padding: '1rem', fontSize: '0.9rem' }}>{log.receiver}</td>
                                         <td style={{ padding: '1rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{log.message}</td>
-                                        <td style={{ padding: '1rem 2rem', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+                                        <td style={{ padding: '1rem', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
                                             <span style={{
                                                 padding: '2px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold',
                                                 background: log.status === 'Success' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
                                                 color: log.status === 'Success' ? '#10b981' : '#ef4444'
                                             }}>
-                                                {log.status}
+                                                OK
                                             </span>
                                             <button onClick={() => deleteSmsLog(log.id)} style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer' }}>🗑️</button>
                                         </td>
@@ -412,65 +394,24 @@ const SignalPage = () => {
             </div>
 
             <style>{`
-                .form-group {
-                    display: flex;
-                    flex-direction: column;
-                    gap: 0.5rem;
-                }
-                .form-group label {
-                    font-size: 0.9rem;
-                    color: var(--text-secondary);
-                    margin-left: 2px;
-                }
+                .form-group { display: flex; flex-direction: column; gap: 0.5rem; }
+                .form-group label { font-size: 0.9rem; color: var(--text-secondary); margin-left: 2px; }
                 .input-field {
-                    background: rgba(0,0,0,0.2);
-                    border: 1px solid rgba(255,255,255,0.1);
-                    color: white;
-                    padding: 0.9rem;
-                    border-radius: 8px;
-                    width: 100%;
-                    outline: none;
-                    transition: all 0.2s;
-                    height: 48px;
+                    background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); color: white;
+                    padding: 0.75rem; border-radius: 8px; width: 100%; outline: none; transition: all 0.2s;
+                    min-height: 44px;
                 }
-                .input-field:focus {
-                    border-color: var(--accent-blue);
-                    background: rgba(59, 130, 246, 0.05);
-                }
+                .input-field:focus { border-color: var(--accent-blue); background: rgba(59, 130, 246, 0.05); }
                 .btn-submit {
-                    padding: 1.2rem;
-                    background: linear-gradient(90deg, var(--accent-blue), var(--accent-purple));
-                    color: white;
-                    border: none;
-                    border-radius: 8px;
-                    font-weight: bold;
-                    font-size: 1rem;
-                    cursor: pointer;
-                    transition: all 0.2s;
-                    height: 48px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
+                    padding: 0.75rem 1.5rem; background: linear-gradient(90deg, var(--accent-blue), var(--accent-purple));
+                    color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;
+                    min-height: 44px;
                 }
-                .btn-submit:hover {
-                    filter: brightness(1.1);
-                    transform: translateY(-1px);
-                }
-                .btn-icon {
-                    background: none;
-                    border: none;
-                    cursor: pointer;
-                    transition: background 0.2s;
-                }
-                
-                @media (max-width: 768px) {
-                    .form-group, .btn-submit, .btn-icon {
-                        flex: 1 1 100% !important;
-                    }
-                }
+                .btn-submit:hover { filter: brightness(1.1); }
             `}</style>
         </div>
     );
 };
+
 
 export default SignalPage;

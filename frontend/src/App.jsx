@@ -103,7 +103,7 @@ function Dashboard() {
     const visibleStocks = sortedStocks.filter(s => s.is_visible !== false);
 
     return (
-        <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+        <div className="container">
             <header>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div style={{ fontSize: '0.9rem', color: 'var(--accent-blue)', fontWeight: 600, letterSpacing: '1px' }}>
@@ -111,7 +111,7 @@ function Dashboard() {
                     </div>
                 </div>
                 <h1>청안 해외주식 멀티 종목 종합 분석</h1>
-                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', color: 'var(--text-secondary)' }}>
+                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
                     <p style={{ margin: 0 }}>분석 시점: {data?.timestamp?.full_str}</p>
                 </div>
             </header>
@@ -136,27 +136,34 @@ function Dashboard() {
 
 function Layout() {
     const location = useLocation();
+    const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+    // Close menu when route changes
+    useEffect(() => {
+        setIsMenuOpen(false);
+    }, [location]);
 
     return (
         <div className="app-container">
-            <nav style={{
-                display: 'flex', justifyContent: 'center', gap: '2rem', padding: '1.5rem 0',
-                borderBottom: '1px solid var(--glass-border)', marginBottom: '2rem'
-            }}>
-                <Link to="/" style={{
+            <button
+                className="mobile-menu-btn"
+                onClick={() => setIsMenuOpen(!isMenuOpen)}
+                aria-label="Toggle Menu"
+            >
+                {isMenuOpen ? '✕' : '☰'}
+            </button>
+            <nav className={`main-nav ${isMenuOpen ? 'active' : ''}`}>
+                <Link to="/" className="nav-link" style={{
                     color: location.pathname === '/' ? 'var(--accent-blue)' : 'var(--text-primary)',
                     fontWeight: location.pathname === '/' ? 'bold' : 'normal',
-                    fontSize: '1.1rem'
                 }}>대시보드</Link>
-                <Link to="/signals" style={{
+                <Link to="/signals" className="nav-link" style={{
                     color: location.pathname === '/signals' ? 'var(--accent-blue)' : 'var(--text-primary)',
                     fontWeight: location.pathname === '/signals' ? 'bold' : 'normal',
-                    fontSize: '1.1rem'
                 }}>신호 포착</Link>
-                <Link to="/journal" style={{
+                <Link to="/journal" className="nav-link" style={{
                     color: location.pathname === '/journal' ? 'var(--accent-blue)' : 'var(--text-primary)',
                     fontWeight: location.pathname === '/journal' ? 'bold' : 'normal',
-                    fontSize: '1.1rem'
                 }}>매매 일지</Link>
             </nav>
 
@@ -165,6 +172,7 @@ function Layout() {
                 <Route path="/signals" element={<SignalPage />} />
                 <Route path="/journal" element={<JournalPage />} />
             </Routes>
+
 
             <footer style={{
                 textAlign: 'center', padding: '2rem', marginTop: '4rem',

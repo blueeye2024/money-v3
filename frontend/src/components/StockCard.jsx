@@ -67,20 +67,21 @@ const StockCard = ({ data }) => {
 
             <div style={{ marginBottom: '1rem' }}>
                 <span style={{
-                    padding: '4px 12px',
+                    padding: '6px 14px',
                     borderRadius: '99px',
                     backgroundColor: isBuy ? 'rgba(248, 113, 113, 0.2)' : isSell ? 'rgba(59, 130, 246, 0.2)' : 'rgba(148, 163, 184, 0.2)',
                     color: isBuy ? 'var(--accent-red)' : isSell ? 'var(--accent-blue)' : 'var(--text-secondary)',
                     fontWeight: 600,
-                    fontSize: '0.9rem',
-                    display: 'inline-flex', alignItems: 'center', gap: '8px'
+                    fontSize: 'clamp(0.75rem, 2.5vw, 0.9rem)',
+                    display: 'inline-flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap'
                 }}>
-                    <span>{(position || '').includes('매수') ? (position || '').replace('🔵', '🔴') : position}</span>
-                    <span style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.8)', fontWeight: 'normal' }}>
+                    <span style={{ whiteSpace: 'nowrap' }}>{(position || '').includes('매수') ? (position || '').replace('🔵', '🔴') : position}</span>
+                    <span style={{ fontSize: '0.85em', color: 'rgba(255,255,255,0.8)', fontWeight: 'normal', whiteSpace: 'nowrap' }}>
                         Score: <strong>{score}</strong> ({getScoreInterpretation(score, position)})
                     </span>
                 </span>
             </div>
+
 
             <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
                 <strong>최근 신호:</strong> {signal_time}

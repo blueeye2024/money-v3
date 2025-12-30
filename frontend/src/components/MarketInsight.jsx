@@ -24,12 +24,12 @@ const MarketInsight = ({ market }) => {
                 <h2 style={{ margin: 0, fontSize: '1.2rem' }}>Cheongan Market Insight</h2>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', position: 'relative', zIndex: 1 }}>
+            <div className="market-insight-grid" style={{ position: 'relative', zIndex: 1 }}>
 
                 {/* Left: Market Prediction */}
                 <div style={{ background: 'rgba(0,0,0,0.2)', padding: '1.5rem', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
                     <h3 style={{ margin: '0 0 1rem 0', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>📈 AI Market Prediction (S&P 500)</h3>
-                    <div style={{ fontSize: '1.8rem', fontWeight: 800, color: predColor, marginBottom: '0.5rem' }}>
+                    <div style={{ fontSize: 'clamp(1.5rem, 4vw, 1.8rem)', fontWeight: 800, color: predColor, marginBottom: '0.5rem' }}>
                         {prediction || 'Analyzing...'}
                     </div>
                     <p style={{ lineHeight: 1.6, color: '#e2e8f0', margin: 0, fontSize: '0.95rem' }}>
@@ -61,6 +61,21 @@ const MarketInsight = ({ market }) => {
                     </ul>
                 </div>
             </div>
+
+            <style>{`
+                .market-insight-grid {
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 2rem;
+                }
+                @media (max-width: 768px) {
+                    .market-insight-grid {
+                        grid-template-columns: 1fr;
+                        gap: 1.5rem;
+                    }
+                }
+            `}</style>
+
         </div>
     );
 };

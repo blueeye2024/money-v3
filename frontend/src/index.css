@@ -8,8 +8,10 @@
   --text-primary: #f1f5f9;
   --text-secondary: #94a3b8;
   --accent-blue: #38bdf8;
-  --accent-green: #34d399; /* Buy */
-  --accent-red: #f87171;   /* Sell */
+  --accent-green: #34d399;
+  /* Buy */
+  --accent-red: #f87171;
+  /* Sell */
   --accent-purple: #818cf8;
   --glass-bg: rgba(30, 41, 59, 0.7);
   --glass-border: rgba(148, 163, 184, 0.1);
@@ -22,7 +24,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
   background-color: var(--bg-primary);
   color: var(--text-primary);
-  background-image: 
+  background-image:
     radial-gradient(at 0% 0%, rgba(56, 189, 248, 0.1) 0px, transparent 50%),
     radial-gradient(at 100% 0%, rgba(129, 140, 248, 0.1) 0px, transparent 50%);
   background-attachment: fixed;
@@ -36,15 +38,18 @@ code {
 ::-webkit-scrollbar {
   width: 8px;
 }
+
 ::-webkit-scrollbar-track {
-  background: var(--bg-primary); 
+  background: var(--bg-primary);
 }
+
 ::-webkit-scrollbar-thumb {
-  background: var(--bg-secondary); 
+  background: var(--bg-secondary);
   border-radius: 4px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--text-secondary); 
+  background: var(--text-secondary);
 }
 
 /* Utilities */
@@ -62,58 +67,166 @@ code {
   -webkit-text-fill-color: transparent;
 }
 
-.buy-signal { color: var(--accent-green); }
-.sell-signal { color: var(--accent-red); }
-.neutral-signal { color: var(--text-secondary); }
+.buy-signal {
+  color: var(--accent-green);
+}
+
+.sell-signal {
+  color: var(--accent-red);
+}
+
+.neutral-signal {
+  color: var(--text-secondary);
+}
 
 .animate-pulse-slow {
   animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: .7; }
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: .7;
+  }
 }
 
 /* Layout */
+.app-container {
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
 .container {
+  width: 100%;
   max-width: 1200px;
   margin: 0 auto;
-  padding: 2rem;
+  padding: 2rem 1rem;
 }
 
 .grid-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 1.5rem;
 }
 
-/* Header */
-header {
-  margin-bottom: 2rem;
-  text-align: center;
-}
-header h1 {
-  font-size: 2.25rem;
-  font-weight: 700;
-  margin-bottom: 0.5rem;
-}
-header p {
-  color: var(--text-secondary);
+/* Touch Targets & Optimization */
+button,
+.nav-link,
+input,
+select {
+  min-height: 44px;
+  padding: 0.75rem 1rem;
 }
 
-/* Table */
-table {
+/* Responsive Table */
+.table-container {
   width: 100%;
-  border-collapse: collapse;
+  overflow-x: auto;
+  margin-top: 1.5rem;
+  border-radius: 12px;
 }
-th, td {
-  padding: 1rem;
-  text-align: left;
+
+/* Header & Typography */
+header h1 {
+  font-size: clamp(1.5rem, 5vw, 2.75rem);
+  line-height: 1.2;
+}
+
+/* Navigation */
+.main-nav {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 2rem;
+  padding: 1.5rem 0;
   border-bottom: 1px solid var(--glass-border);
+  margin-bottom: 2rem;
+  position: relative;
 }
-th {
-  color: var(--text-secondary);
-  font-weight: 600;
-  font-size: 0.9rem;
+
+.mobile-menu-btn {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  font-size: 1.5rem;
+  cursor: pointer;
+  z-index: 1001;
+}
+
+/* Media Queries */
+
+/* Tablet (768px) */
+@media (max-width: 1024px) {
+  .grid-cards {
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .main-nav {
+    flex-direction: column;
+    position: fixed;
+    top: 0;
+    right: -100%;
+    width: 280px;
+    height: 100vh;
+    background: var(--bg-secondary);
+    box-shadow: -4px 0 20px rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    justify-content: flex-start;
+    padding-top: 5rem;
+    transition: 0.3s ease-in-out;
+  }
+
+  .main-nav.active {
+    right: 0;
+  }
+
+  .mobile-menu-btn {
+    display: block;
+    position: absolute;
+    top: 1.5rem;
+    right: 1rem;
+  }
+
+  .grid-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .container {
+    padding: 1.5rem 0.75rem;
+  }
+
+  header {
+    text-align: left;
+  }
+}
+
+/* Mobile (480px) */
+@media (max-width: 480px) {
+  :root {
+    --glass-bg: rgba(30, 41, 59, 0.9);
+  }
+
+  header h1 {
+    font-size: 1.5rem;
+  }
+
+  .glass-panel {
+    padding: 1rem !important;
+  }
+
+  th,
+  td {
+    padding: 0.75rem 0.5rem;
+    font-size: 0.85rem;
+  }
 }

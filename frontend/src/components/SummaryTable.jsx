@@ -11,26 +11,26 @@ const getScoreInterpretation = (score, position) => {
 
 const SummaryTable = ({ stocks, onToggleVisibility }) => {
     return (
-        <div className="glass-panel" style={{ padding: '2rem', marginTop: '2rem', overflowX: 'auto' }}>
-            <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>종합 분석 요약표</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th style={{ textAlign: 'center', padding: '1rem', width: '40px' }}>표시</th>
-                        <th style={{ textAlign: 'left', padding: '1rem' }}>종목</th>
-                        <th style={{ textAlign: 'left', padding: '1rem' }}>종목명</th>
-                        <th style={{ textAlign: 'right', padding: '1rem' }}>현재가</th>
-                        <th style={{ textAlign: 'right', padding: '1rem' }}>등락 (%)</th>
-                        <th style={{ textAlign: 'center', padding: '1rem' }}>보유 여부</th>
-                        <th style={{ textAlign: 'center', padding: '1rem' }}>기술적 신호</th>
-                        <th style={{ textAlign: 'center', padding: '1rem' }}>박스권/돌파</th>
-                        <th style={{ textAlign: 'center', padding: '1rem' }}>점수</th>
-                        <th style={{ textAlign: 'left', padding: '1rem' }}>세부 점수</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {stocks
-                        .map(stock => {
+        <div className="glass-panel" style={{ marginTop: '2rem' }}>
+            <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem', padding: '1.5rem 1.5rem 0' }}>종합 분석 요약표</h2>
+            <div className="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style={{ textAlign: 'center', padding: '1rem', width: '40px' }}>표시</th>
+                            <th style={{ textAlign: 'left', padding: '1rem' }}>종목</th>
+                            <th style={{ textAlign: 'left', padding: '1rem' }}>종목명</th>
+                            <th style={{ textAlign: 'right', padding: '1rem' }}>현재가</th>
+                            <th style={{ textAlign: 'right', padding: '1rem' }}>등락 (%)</th>
+                            <th style={{ textAlign: 'center', padding: '1rem' }}>보유 여부</th>
+                            <th style={{ textAlign: 'center', padding: '1rem' }}>기술적 신호</th>
+                            <th style={{ textAlign: 'center', padding: '1rem' }}>박스권/돌파</th>
+                            <th style={{ textAlign: 'center', padding: '1rem' }}>점수</th>
+                            <th style={{ textAlign: 'left', padding: '1rem' }}>세부 점수</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {stocks.map(stock => {
                             const pos = stock.position || '';
                             const isBuy = pos.includes('매수') || pos.includes('상단');
                             const isSell = pos.includes('매도') || pos.includes('하단');
@@ -90,8 +90,9 @@ const SummaryTable = ({ stocks, onToggleVisibility }) => {
                                 </tr>
                             );
                         })}
-                </tbody>
-            </table>
+                    </tbody>
+                </table>
+            </div>
         </div>
     );
 };
