@@ -32,9 +32,30 @@ def on_startup():
     scheduler.add_job(monitor_signals, 'interval', minutes=1)
     scheduler.start()
 
+# Global SMS Control
+SMS_ENABLED = True
+SMS_THROTTLE_MINUTES = 30
+
+class SMSSettingModel(BaseModel):
+    enabled: bool
+
+@app.get("/api/settings/sms")
+def get_sms_setting():
+    global SMS_ENABLED
+    return {"enabled": SMS_ENABLED}
+
+@app.post("/api/settings/sms")
+def set_sms_setting(setting: SMSSettingModel):
+    global SMS_ENABLED
+    SMS_ENABLED = setting.enabled
+    print(f"SMS System Enabled: {SMS_ENABLED}")
+    return {"status": "success", "enabled": SMS_ENABLED}
+
 # 2. Monitor Logic (Runs every 1 min)
 def monitor_signals():
-    print(f"[{datetime.now()}] Monitoring Signals...")
+    global SMS_ENABLED
+    print(f"[{datetime.now()}] Monitoring Signals... SMS Enabled: {SMS_ENABLED}")
+    
     try:
         # Fetch fresh data
         data_30m, data_5m, _, _ = fetch_data()
@@ -55,12 +76,41 @@ def monitor_signals():
 
                 if last_sig:
                     last_time = last_sig['signal_time']
-                    if last_time == current_raw_time:
+                    # Compare only if both available. Check logic.
+                    # Usually db returns datetime.
+                    if str(last_time) == str(current_raw_time):
                         is_new = False
                 
                 if is_new:
                     print(f"NEW SIGNAL DETECTED: {ticker} {res['position']}")
-                    # Save to DB
+                    
+                    # 1. Send SMS (if enabled and not throttled)
+                    is_sent = False
+                    if SMS_ENABLED:
+                        from db import check_recent_sms_log
+                        
+                        # Throttle Check
+                        # Check if we sent a similar message for this stock recently
+                        recent = check_recent_sms_log(res['name'], res['position'], SMS_THROTTLE_MINUTES)
+                        
+                        if recent:
+                            print(f"SMS Throttled for {ticker}: Already sent in last {SMS_THROTTLE_MINUTES} mins.")
+                        else:
+                            # Send
+                            reason = f"RSI:{res['rsi']:.1f}"
+                            success = send_sms(
+                                stock_name=res['name'], 
+                                signal_type=res['position'], 
+                                price=res['current_price'], 
+                                signal_time=res['signal_time'], 
+                                reason=reason
+                            )
+                            if success:
+                                is_sent = True
+                                msg = f"[{res['signal_time']}] [{res['name']}] [{res['position']}] [${res['current_price']}] [{reason}]"
+                                save_sms_log(receiver="01044900528", message=msg, status="Success")
+
+                    # 2. Save Signal to DB (Always save if new, record if sent)
                     save_signal({
                         'ticker': ticker,
                         'name': res['name'],
@@ -68,25 +118,13 @@ def monitor_signals():
                         'position': res['position'],
                         'current_price': res['current_price'],
                         'signal_time_raw': current_raw_time,
-                        'is_sent': True
+                        'is_sent': is_sent
                     })
-                    
-                    # Send SMS
-                    # Format: [12/29 10:30] [SOXL] [매수 진입] [45.20] [RSI: 30.5]
-                    reason = f"RSI:{res['rsi']:.1f}"
-                    success = send_sms(
-                        stock_name=res['name'], 
-                        signal_type=res['position'], 
-                        price=res['current_price'], 
-                        signal_time=res['signal_time'], 
-                        reason=reason
-                    )
-                    
-                    msg = f"[{res['signal_time']}] [{res['name']}] [{res['position']}] [${res['current_price']}] [{reason}]"
-                    save_sms_log(receiver="01044900528", message=msg, status="Success" if success else "Failed")
 
     except Exception as e:
         print(f"Monitor Error: {e}")
+        import traceback
+        traceback.print_exc()
 
 @app.get("/api/report")
 def get_report():
@@ -126,6 +164,8 @@ class SMSPostModel(BaseModel):
 
 @app.post("/api/sms/test")
 def api_test_sms(data: SMSPostModel):
+    # Check enabled? User might want to force test even if disabled. 
+    # Let's allow test.
     from sms import send_sms
     from datetime import datetime
     

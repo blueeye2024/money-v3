@@ -55,3 +55,7 @@ npm run dev
     - 종목별 합산 손익 및 거래 기간 표시
     - 전체 실현 손익 (Total Realized Profit) 요약 카드 추가
 - **Bug Fix**: 거래 내역 저장 시 데이터 타입 오류(422 Error) 수정
+
+### Ver 1.9 (2025-12-30)
+- **One-click Deploy System**: `sync_deploy.sh` 스크립트 복구 및 Git 업로드/배포 자동화 구현
+- **Auto Deploy Integration**: `web-run100` 명령어를 통한 원격 자동 배포 연동

@@ -8,6 +8,7 @@ import MarketInsight from './components/MarketInsight';
 import JournalPage from './JournalPage';
 import SignalPage from './SignalPage';
 import './index.css';
+import packageJson from '../package.json'; // Version Import
 
 function Dashboard() {
     const [data, setData] = useState(null);
@@ -16,7 +17,7 @@ function Dashboard() {
 
     useEffect(() => {
         fetchData();
-        const interval = setInterval(fetchData, 60000); // 1 min refresh (changed from 5min)
+        const interval = setInterval(fetchData, 60000); // 1 min refresh
         return () => clearInterval(interval);
     }, []);
 
@@ -52,11 +53,15 @@ function Dashboard() {
     return (
         <div>
             <header>
-                <div style={{ fontSize: '0.9rem', color: 'var(--accent-blue)', fontWeight: 600, letterSpacing: '1px' }}>
-                    PREMIUM FINANCIAL REPORT
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ fontSize: '0.9rem', color: 'var(--accent-blue)', fontWeight: 600, letterSpacing: '1px' }}>
+                        PREMIUM FINANCIAL REPORT
+                    </div>
                 </div>
                 <h1>청안 해외주식 멀티 종목 종합 분석</h1>
-                <p>분석 시점: {data?.timestamp?.full_str}</p>
+                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', color: 'var(--text-secondary)' }}>
+                    <p style={{ margin: 0 }}>분석 시점: {data?.timestamp?.full_str}</p>
+                </div>
             </header>
 
             {data?.market && <MarketStats market={data.market} />}
@@ -75,7 +80,7 @@ function Dashboard() {
             {data?.market && <MarketInsight market={{ ...data.market, insight: data.insight }} />}
 
             <footer style={{ textAlign: 'center', marginTop: '4rem', color: 'var(--text-secondary)', fontSize: '0.8rem', paddingBottom: '2rem' }}>
-                © 2024 Cheong-An Financial Intelligence. All rights reserved.
+                © 2024 Cheong-An Financial Intelligence. All rights reserved. v{packageJson.version}
             </footer>
         </div>
     );
@@ -90,21 +95,29 @@ function NavBar() {
         color: location.pathname === path ? 'white' : 'var(--text-secondary)',
         fontWeight: location.pathname === path ? 'bold' : 'normal',
         borderBottom: location.pathname === path ? '2px solid var(--accent-blue)' : '2px solid transparent',
-        transition: 'all 0.3s'
+        transition: 'all 0.3s',
+        whiteSpace: 'nowrap'
     });
 
     return (
         <nav style={{
             display: 'flex',
-            justifyContent: 'center',
-            gap: '1rem',
+            justifyContent: 'space-between',
+            alignItems: 'center',
             padding: '1rem 0',
             marginBottom: '2rem',
-            borderBottom: '1px solid var(--glass-border)'
+            borderBottom: '1px solid var(--glass-border)',
+            flexWrap: 'wrap',
+            gap: '1rem'
         }}>
-            <Link to="/" style={linkStyle('/')}>대시보드</Link>
-            <Link to="/signals" style={linkStyle('/signals')}>신호 포착</Link>
-            <Link to="/journal" style={linkStyle('/journal')}>매매 일지</Link>
+            <div style={{ display: 'flex', gap: '1rem', overflowX: 'auto' }}>
+                <Link to="/" style={linkStyle('/')}>대시보드</Link>
+                <Link to="/signals" style={linkStyle('/signals')}>신호 포착</Link>
+                <Link to="/journal" style={linkStyle('/journal')}>매매 일지</Link>
+            </div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', padding: '0.5rem' }}>
+                Ver {packageJson.version}
+            </div>
         </nav>
     );
 }

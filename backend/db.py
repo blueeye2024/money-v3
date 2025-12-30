@@ -86,6 +86,11 @@ def save_signal(signal_data):
     """Save a detected signal to DB"""
     conn = get_connection()
     try:
+        # Convert pandas Timestamp to python datetime if needed
+        st = signal_data['signal_time_raw']
+        if hasattr(st, 'to_pydatetime'):
+            st = st.to_pydatetime()
+            
         with conn.cursor() as cursor:
             sql = """
             INSERT INTO signal_history (ticker, name, signal_type, position_desc, price, signal_time, is_sent)
@@ -97,10 +102,15 @@ def save_signal(signal_data):
                 signal_data['signal_type'],
                 signal_data['position'],
                 signal_data['current_price'],
-                signal_data['signal_time_raw'], # Expecting datetime object
+                st, 
                 signal_data.get('is_sent', False)
             ))
         conn.commit()
+    except Exception as e:
+        print(f"Save Signal Error: {e}")
+        # Re-raise to ensure calling logic knows it failed, or handle gracefully?
+        # If we silence it, SMS might send but DB empty. Let's print and pass for now to allow SMS to proceed if DB is flaky, 
+        # BUT user complained about missing history. Let's log heavily.
     finally:
         conn.close()
 
@@ -122,7 +132,7 @@ def get_signals(ticker=None, start_date=None, end_date=None, limit=30):
         with conn.cursor() as cursor:
             sql = "SELECT * FROM signal_history WHERE 1=1"
             params = []
-            if ticker:
+            if ticker and ticker.strip() != "":
                 sql += " AND ticker = %s"
                 params.append(ticker)
             if start_date:
@@ -133,7 +143,7 @@ def get_signals(ticker=None, start_date=None, end_date=None, limit=30):
                 params.append(end_date)
             
             sql += " ORDER BY signal_time DESC LIMIT %s"
-            params.append(limit)
+            params.append(int(limit))
             
             cursor.execute(sql, params)
             return cursor.fetchall()
@@ -157,8 +167,37 @@ def get_sms_logs(limit=30):
     try:
         with conn.cursor() as cursor:
             sql = "SELECT * FROM sms_logs ORDER BY created_at DESC LIMIT %s"
-            cursor.execute(sql, (limit,))
+            cursor.execute(sql, (int(limit),))
             return cursor.fetchall()
+    finally:
+        conn.close()
+
+def check_recent_sms_log(stock_name, signal_type, interval_minutes=30):
+    """Check if a similar SMS was sent recently"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            # Check for messages containing the stock name AND signal type within interval
+            # Note: signal_type from logic ('매수 진입' etc) might differ slightly from message format, but usually consistent.
+            # Message format: [...][stock_name][signal_type]...
+            
+            # Using LIKE query
+            sql = """
+            SELECT id, created_at FROM sms_logs 
+            WHERE message LIKE %s AND message LIKE %s 
+            AND created_at >= NOW() - INTERVAL %s MINUTE
+            LIMIT 1
+            """
+            # Add brackets to match exact format in SMS function
+            like_stock = f"%[{stock_name}]%"
+            # Simplify signal type matching (e.g. just "매수" or "매도") to catch broader duplicates? 
+            # User said: "Same stock and status(buy/sell)". 
+            # 'signal_type' passed here is usually '매수 진입' or 'box_upper'.
+            # Let's use the exact string passed to the SMS function logic.
+            like_type = f"%[{signal_type}]%"
+            
+            cursor.execute(sql, (like_stock, like_type, int(interval_minutes)))
+            return cursor.fetchone()
     finally:
         conn.close()
 

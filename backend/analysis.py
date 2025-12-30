@@ -235,6 +235,39 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw):
         if recent_cross_type == 'dead': news_prob -= 20
         news_prob = max(0, min(100, news_prob))
         
+        # Comprehensive Scoring Logic (0-100)
+        # 1. Trend (Gold/Dead)
+        # 2. RSI Stability
+        # 3. Box Breakout Bonus
+        score = 50 # Base
+        
+        # Trend Score
+        if position.startswith("🚨 매수") or "상단" in position:
+            score += 30
+        elif position.startswith("🔴 매수"):
+            score += 20
+        elif position.startswith("🚨 매도") or "하단" in position:
+            # Sell signals are also "High Relevance" for trading, even if direction is down.
+            # Use 'Signal Strength' concept?
+            # User asks for "Best Selection". Usually means 'Buy'.
+            # If user plays inverse, 'Sell' is good. But let's assume 'Best actionable signal'.
+             score += 30
+        
+        # RSI Score (Prefer not overbought/sold too much for entry)
+        rsi_val = float(df_30['RSI'].iloc[-1])
+        if 40 <= rsi_val <= 60: score += 10 
+        elif rsi_val > 70 or rsi_val < 30: score -= 5 # Risky
+        
+        # Box Breakout is very strong
+        if is_box and ("돌파" in position): score += 20
+        
+        # MACD Strength
+        macd = float(df_30['MACD'].iloc[-1])
+        signal = float(df_30['Signal'].iloc[-1])
+        if abs(macd - signal) > 0.1: score += 5 # Diverging strongly
+        
+        score = min(100, max(0, score))
+
         # Sanitize and Return
         result = {
             "ticker": ticker,
@@ -248,10 +281,11 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw):
             "is_box": bool(is_box),
             "box_high": float(box_high) if pd.notnull(box_high) else 0.0,
             "box_low": float(box_low) if pd.notnull(box_low) else 0.0,
-            "rsi": float(df_30['RSI'].iloc[-1]) if pd.notnull(df_30['RSI'].iloc[-1]) else None,
-            "macd": float(df_30['MACD'].iloc[-1]) if pd.notnull(df_30['MACD'].iloc[-1]) else None,
-            "macd_sig": float(df_30['Signal'].iloc[-1]) if pd.notnull(df_30['Signal'].iloc[-1]) else None,
-            "prob_up": float(news_prob)
+            "rsi": float(rsi_val) if pd.notnull(rsi_val) else None,
+            "macd": float(macd) if pd.notnull(macd) else None,
+            "macd_sig": float(signal) if pd.notnull(signal) else None,
+            "prob_up": float(news_prob),
+            "score": score
         }
         return result
     
