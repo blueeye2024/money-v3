@@ -539,18 +539,27 @@ def run_analysis(held_tickers=[]):
 
     real_time_map = {}
     try:
-        # Helper to map Exchange manually for specific tickers if needed
-        # Commonly: NVDA, TSLA, AAPL, MSFT, GOOGL -> NAS
-        # IONQ -> NYS? No, IONQ is NYSE.
-        # Let's trust get_price default search order (NAS->NYS->AMS) which covers 99%.
-        def fetch_wrapper(t):
-             return t, kis_client.get_price(t)
+        # Exchange Mapping for Speed (Avoid 3 sequential requests)
+        EXCHANGE_MAP_KIS = {
+            "TSLA": "NAS", "GOOGL": "NAS", "AMZU": "NAS", "UFO": "NAS", "NVDA": "NAS", "AAPL": "NAS", "MSFT": "NAS", "AMZN": "NAS", "NFLX": "NAS", "AMD": "NAS", "INTC": "NAS", "QQQ": "NAS", "TQQQ": "NAS", "SQQQ": "NAS",
+            "SOXL": "NYS", "SOXS": "NYS", "UPRO": "NYS", "AAAU": "NYS", "IONQ": "NYS", "SPY": "NYS", "IVV": "NYS", "VOO": "NYS"
+        }
         
-        with ThreadPoolExecutor(max_workers=5) as executor:
+        def fetch_wrapper(t):
+             excd = EXCHANGE_MAP_KIS.get(t)
+             return t, kis_client.get_price(t, exchange=excd)
+        
+        # Increase workers slightly as we have fast timeout
+        with ThreadPoolExecutor(max_workers=8) as executor:
              futs = [executor.submit(fetch_wrapper, t) for t in TARGET_TICKERS]
+             # Add total timeout for entire batch to prevent hanging
+             # We rely on individual timeouts (1.5s)
              for f in futs:
-                 t, info = f.result()
-                 if info: real_time_map[t] = info
+                 try:
+                     t, info = f.result(timeout=4) # Max wait per task
+                     if info: real_time_map[t] = info
+                 except: pass
+
     except Exception as e:
         print(f"KIS Price Fetch Error: {e}")
 

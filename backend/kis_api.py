@@ -67,7 +67,6 @@ class KisApi:
                     'rate': float(out['rate']),
                     'exchange': excd
                 }
-            time.sleep(0.05) # Rate limit safety
             
         return None
 
@@ -85,11 +84,12 @@ class KisApi:
             "SYMB": symbol
         }
         try:
-            res = requests.get(f"{self.URL_BASE}/uapi/overseas-price/v1/quotations/price", headers=headers, params=params, timeout=5)
+            res = requests.get(f"{self.URL_BASE}/uapi/overseas-price/v1/quotations/price", headers=headers, params=params, timeout=1.5)
             if res.status_code == 200:
                 return res.json()
         except Exception as e:
-            print(f"KIS API Request Error: {e}")
+            # print(f"KIS API Request Error: {e}")
+            pass
         return None
 
 # Singleton instance
