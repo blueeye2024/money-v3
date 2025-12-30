@@ -32,7 +32,8 @@ MARKET_INDICATORS = {
 def get_current_time_str():
     kst = pytz.timezone('Asia/Seoul')
     est = pytz.timezone('US/Eastern')
-    now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
+    from datetime import timezone
+    now_utc = datetime.now(timezone.utc)
     
     now_kst = now_utc.astimezone(kst)
     now_est = now_utc.astimezone(est)
@@ -49,10 +50,10 @@ def fetch_data():
     
     print("Fetching 30m data for Stocks...")
     # Hide progress to keep logs clean
-    data_30m = yf.download(tickers_str, period="5d", interval="30m", prepost=True, group_by='ticker', threads=True, progress=False)
+    data_30m = yf.download(tickers_str, period="5d", interval="30m", prepost=True, group_by='ticker', threads=False, progress=False)
     
     print("Fetching 5m data for Stocks...")
-    data_5m = yf.download(tickers_str, period="5d", interval="5m", prepost=True, group_by='ticker', threads=True, progress=False)
+    data_5m = yf.download(tickers_str, period="5d", interval="5m", prepost=True, group_by='ticker', threads=False, progress=False)
     
     # Market indicators - Use Ticker.history for stability
     print("Fetching market data (Indices)...")

@@ -63,8 +63,12 @@ def monitor_signals():
         for ticker in TARGET_TICKERS:
             res = analyze_ticker(ticker, data_30m, data_5m)
             
+            # Skip if analysis failed
+            if 'error' in res or 'position' not in res:
+                print(f"Skipping {ticker} due to analysis error: {res.get('error', 'No position data')}")
+                continue
+
             # Check for specific signals to alert
-            # "진입" (Entry) or "돌파" (Breakout) are actionable
             if "진입" in res['position'] or "돌파" in res['position']:
                 # Get last saved signal to avoid duplicates
                 last_sig = check_last_signal(ticker)
@@ -210,6 +214,7 @@ def api_delete_stock(code: str):
 
 # --- Transaction APIs ---
 class TransactionModel(BaseModel):
+    id: int = None 
     ticker: str
     trade_type: str # BUY or SELL
     qty: int

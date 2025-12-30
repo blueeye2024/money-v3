@@ -10,13 +10,19 @@ const JournalPage = () => {
     const [exchangeRate, setExchangeRate] = useState(1350);
 
     // Form State (Journal)
+    const getLocalISOString = () => {
+        const now = new Date();
+        const offset = now.getTimezoneOffset() * 60000;
+        return (new Date(now - offset)).toISOString().slice(0, 16);
+    };
+
     const [formData, setFormData] = useState({
         id: null,
         ticker: '',
         trade_type: 'BUY',
         qty: '',
         price: '',
-        trade_date: new Date().toISOString().slice(0, 16),
+        trade_date: getLocalISOString(),
         memo: ''
     });
 
@@ -90,11 +96,19 @@ const JournalPage = () => {
     const handleTxSubmit = async (e) => {
         e.preventDefault();
 
-        // Validation & Type Conversion
+        // Type Conversion & Basic Validation
+        const qty = parseInt(formData.qty);
+        const price = parseFloat(formData.price);
+
+        if (isNaN(qty) || isNaN(price)) {
+            alert("수량과 가격을 정확히 입력해주세요.");
+            return;
+        }
+
         const payload = {
             ...formData,
-            qty: parseInt(formData.qty),
-            price: parseFloat(formData.price)
+            qty: qty,
+            price: price
         };
 
         // Remove ID for POST (create) to match Pydantic model if strictly checking, 
@@ -113,9 +127,9 @@ const JournalPage = () => {
         if (res.ok) {
             alert(formData.id ? "수정되었습니다." : "등록되었습니다.");
             setFormData({
-                id: null, ticker: formData.ticker, // Keep ticker for convenience
+                id: null, ticker: formData.ticker,
                 trade_type: 'BUY', qty: '', price: '',
-                trade_date: new Date().toISOString().slice(0, 16), memo: ''
+                trade_date: getLocalISOString(), memo: ''
             });
             fetchTransactions();
             fetchStats();
