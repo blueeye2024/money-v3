@@ -449,17 +449,29 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0, is_held=Fals
             elif is_sell_signal and current_price <= prev_12h_low:
                 breakout_score = 10
 
-        # PnL Score Adjustment (User Request: -5 points per 1% PnL if Sell Signal & Held)
-        pnl_adjustment = 0
+        # PnL Score Adjustment (Revised: Higher Score for Profit-Taking & Stop-Loss)
+        pnl_impact = 0
         pnl_pct_held = 0.0
         if is_held and is_sell_signal and holdings_data and ticker in holdings_data and isinstance(holdings_data[ticker], dict):
              avg_price = holdings_data[ticker].get('avg_price', 0)
              if avg_price > 0:
                  pnl_pct_held = ((current_price - avg_price) / avg_price) * 100
-                 pnl_adjustment = pnl_pct_held * 5
+                 if pnl_pct_held > 0:
+                     # 수익 실현 (Lock-in): 1%당 +5점 가산
+                     pnl_impact = pnl_pct_held * 5
+                 else:
+                     # 리스크 관리 (Stop-loss): 1%당 +10점 가산 (손절은 더 강력하게 권고)
+                     pnl_impact = abs(pnl_pct_held) * 10
+
+        # Technical Sell Proposal Boost (+10)
+        # 만약 가격이 볼린저 밴드 하단을 건드리면 하락 가속화로 판단, 매도 점수 추가 가산
+        if is_sell_signal:
+            bb_low = float(df_30['BB_Lower'].iloc[-1])
+            if current_price < bb_low:
+                pnl_impact += 10
 
         # 6. Total Score
-        final_score = base_score + trend_score + reliability_score + breakout_score + market_score - pnl_adjustment
+        final_score = base_score + trend_score + reliability_score + breakout_score + market_score + pnl_impact
         final_score = int(max(0, min(100, final_score)))
         
         score_details = {
@@ -468,7 +480,7 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0, is_held=Fals
             "reliability": reliability_score,
             "breakout": breakout_score,
             "market": market_score,
-            "pnl_adj": -round(pnl_adjustment, 1),
+            "pnl_adj": round(pnl_impact, 1),
             "total": final_score
         }
 
