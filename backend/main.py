@@ -139,11 +139,12 @@ def monitor_signals():
                                 msg = f"[{res['signal_time']}] [{res['name']}] [{res['position']}] [${res['current_price']}] [{reason}]"
                                 save_sms_log(receiver="01044900528", message=msg, status="Success")
 
-                    # 2. Save Signal to DB (Always save if new, record if sent)
-                    save_signal({
-                        'ticker': ticker,
-                        'name': res['name'],
-                        'signal_type': "BUY" if "매수" in res['position'] or "상단" in res['position'] else "SELL",
+                    # 2. Save Signal to DB (Only if SMS sent, per user request)
+                    if is_sent:
+                        save_signal({
+                            'ticker': ticker,
+                            'name': res['name'],
+                            'signal_type': "BUY" if "매수" in res['position'] or "상단" in res['position'] else "SELL",
                         'position': res['position'],
                         'current_price': res['current_price'],
                         'signal_time_raw': current_raw_time, # Assuming KST or adjusted

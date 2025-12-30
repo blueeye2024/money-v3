@@ -7,7 +7,9 @@ const JournalPage = () => {
     const [transactions, setTransactions] = useState([]);
     const [stats, setStats] = useState([]);
     const [view, setView] = useState('journal'); // 'journal' | 'stocks'
+
     const [exchangeRate, setExchangeRate] = useState(1350);
+    const [prices, setPrices] = useState({}); // {ticker: current_price}
 
     // Form State (Journal)
     const getLocalISOString = () => {
@@ -33,9 +35,28 @@ const JournalPage = () => {
     useEffect(() => {
         fetchStocks();
         fetchTransactions();
+        fetchStocks();
+        fetchTransactions();
         fetchStats();
         fetchExchangeRate();
+        fetchCurrentPrices();
     }, []);
+
+    const fetchCurrentPrices = async () => {
+        try {
+            const res = await fetch('/api/report');
+            if (res.ok) {
+                const data = await res.json();
+                const priceMap = {};
+                if (data.stocks) {
+                    data.stocks.forEach(s => {
+                        priceMap[s.ticker] = s.current_price;
+                    });
+                }
+                setPrices(priceMap);
+            }
+        } catch (e) { console.error(e); }
+    };
 
     const fetchExchangeRate = async () => {
         try {
@@ -388,9 +409,40 @@ const JournalPage = () => {
                         ) : (
                             sortedTickers.map(ticker => {
                                 const stockTxs = groupedTransactions[ticker];
-                                const profit = getStockProfit(ticker);
+                                const profit = getStockProfit(ticker); // Realized
                                 const period = getPeriod(stockTxs);
                                 const stockName = stockTxs[0].stock_name || ticker;
+
+                                // --- Calc Live Holdings (FIFO) ---
+                                let netQty = 0;
+                                let costBasis = 0;
+                                const queue = [];
+                                // Sort by date ascending for calc
+                                [...stockTxs].sort((a, b) => new Date(a.trade_date) - new Date(b.trade_date)).forEach(tx => {
+                                    if (tx.trade_type === 'BUY') {
+                                        queue.push({ price: tx.price, qty: tx.qty });
+                                    } else {
+                                        let sellQty = tx.qty;
+                                        while (sellQty > 0 && queue.length > 0) {
+                                            let batch = queue[0];
+                                            if (batch.qty > sellQty) {
+                                                batch.qty -= sellQty;
+                                                sellQty = 0; // Filled
+                                            } else {
+                                                sellQty -= batch.qty;
+                                                queue.shift(); // Batch used up
+                                            }
+                                        }
+                                    }
+                                });
+                                netQty = queue.reduce((acc, q) => acc + q.qty, 0);
+                                costBasis = queue.reduce((acc, q) => acc + (q.price * q.qty), 0);
+
+                                const curPrice = prices[ticker];
+                                const evalValue = curPrice ? netQty * curPrice : 0;
+                                const unrealizedProfit = evalValue - costBasis;
+                                const unrealizedRate = costBasis > 0 ? (unrealizedProfit / costBasis) * 100 : 0;
+                                // ----------------------------------
 
                                 return (
                                     <div key={ticker} className="glass-panel" style={{ padding: '0', overflow: 'hidden' }}>
@@ -407,13 +459,32 @@ const JournalPage = () => {
                                                     거래 기간: {period}
                                                 </div>
                                             </div>
-                                            <div style={{ textAlign: 'right' }}>
-                                                <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>합산 실현손익</div>
-                                                <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: profit >= 0 ? 'var(--accent-red)' : 'var(--accent-blue)' }}>
-                                                    {profit > 0 ? '+' : ''}{profit.toLocaleString(undefined, { minimumFractionDigits: 2 })}$
-                                                </div>
-                                                <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                                                    ≈ {(profit * exchangeRate).toLocaleString(undefined, { maximumFractionDigits: 0 })}원
+                                            <div style={{ textAlign: 'right', display: 'flex', gap: '2rem' }}>
+                                                {/* Live Holdings Info */}
+                                                {netQty > 0 && (
+                                                    <div style={{ textAlign: 'right', paddingRight: '2rem', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
+                                                        <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>보유 현황 (Live)</div>
+                                                        <div style={{ fontSize: '0.9rem', marginTop: '0.2rem', color: '#ccc' }}>
+                                                            {netQty}주 ({curPrice ? `$${curPrice}` : '-'})
+                                                        </div>
+                                                        <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: unrealizedProfit >= 0 ? 'var(--accent-red)' : 'var(--accent-blue)' }}>
+                                                            {unrealizedRate.toFixed(2)}% (${unrealizedProfit.toLocaleString(undefined, { maximumFractionDigits: 0 })})
+                                                        </div>
+                                                        <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                                                            ≈ {(evalValue * exchangeRate).toLocaleString(undefined, { maximumFractionDigits: 0 })}원
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {/* Realized Profit Info */}
+                                                <div style={{ textAlign: 'right' }}>
+                                                    <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>합산 실현손익</div>
+                                                    <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: profit >= 0 ? 'var(--accent-red)' : 'var(--accent-blue)' }}>
+                                                        {profit > 0 ? '+' : ''}{profit.toLocaleString(undefined, { minimumFractionDigits: 2 })}$
+                                                    </div>
+                                                    <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                                                        ≈ {(profit * exchangeRate).toLocaleString(undefined, { maximumFractionDigits: 0 })}원
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>

@@ -16,6 +16,9 @@ const FinalSignal = ({ stocks }) => {
         // 1. Held & Sell Signal (Action: Sell)
         // 2. Not Held & Buy Signal (Action: Buy)
         const actionable = stocks.filter(stock => {
+            // Rule 1: Score must be >= 70
+            if ((stock.score || 0) < 70) return false;
+
             const isHeld = stock.is_held;
             const pos = stock.position || "";
 
