@@ -279,9 +279,9 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0):
             
         # (2) MACD (+5)
         if is_buy_signal or (is_observing and t30=='UP'):
-            if macd > macd_sig: aux_score += 5
+            if macd > signal: aux_score += 5
         elif is_sell_signal or (is_observing and t30=='DOWN'):
-            if macd < macd_sig: aux_score += 5
+            if macd < signal: aux_score += 5
             
         # (3) Bollinger Trend (+5)
         if is_buy_signal or (is_observing and t30=='UP'):
