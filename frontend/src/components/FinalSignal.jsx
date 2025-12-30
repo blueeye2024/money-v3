@@ -163,19 +163,21 @@ const PortfolioCard = ({ stock, rank }) => {
                             {details.base_details && (
                                 <div style={{ padding: '8px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', fontSize: '0.72rem', color: '#bbb', display: 'flex', flexDirection: 'column', gap: '4px', border: '1px solid rgba(255,255,255,0.05)' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                        <span>기초 분석점수 (Entry/Hold):</span> <span style={{ color: 'white' }}>+{details.base_details.main}</span>
+                                        <span>기초 분석 {isBuy ? '상승' : '하락'} 신호 확정:</span> <span style={{ color: 'white' }}>+{details.base_details.main}</span>
                                     </div>
                                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                        <span>30분/5분 추세 정합성:</span> <span style={{ color: details.base_details.confluence > 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>{details.base_details.confluence > 0 ? '+' : ''}{details.base_details.confluence}</span>
+                                        <span>30분/5분 {isBuy ? '상승' : '하락'}정합성:</span> <span style={{ color: details.base_details.confluence > 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>{details.base_details.confluence > 0 ? '+' : ''}{details.base_details.confluence}</span>
                                     </div>
                                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                        <span>보조지표 (RSI & MACD):</span> <span style={{ color: 'var(--accent-green)' }}>+{details.base_details.rsi + details.base_details.macd}</span>
+                                        <span>보조지표 필터 (RSI/MACD):</span> <span style={{ color: 'var(--accent-green)' }}>+{details.base_details.rsi + details.base_details.macd}</span>
                                     </div>
                                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                        <span>가격위치 및 신호강도:</span> <span style={{ color: 'var(--accent-green)' }}>+{details.base_details.bb + details.base_details.cross}</span>
+                                        <span>추세 강도 및 신호 유효성:</span> <span style={{ color: 'var(--accent-green)' }}>+{details.base_details.bb + details.base_details.cross}</span>
                                     </div>
                                     <div style={{ marginTop: '2px', fontSize: '0.65rem', color: '#888', fontStyle: 'italic', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '2px' }}>
-                                        ※ 모든 중장기/단기 지표가 정배열일 때 최대 80점이 부여됩니다.
+                                        {isBuy
+                                            ? "※ 모든 단기/중기 지표가 정배열(상승)일 때 점수가 최대화됩니다."
+                                            : "※ 모든 단기/중기 지표가 역배열(하락)일 때 매도 확신 점수가 최대화됩니다."}
                                     </div>
                                 </div>
                             )}
@@ -196,14 +198,24 @@ const PortfolioCard = ({ stock, rank }) => {
                                 </div>
                                 <div style={{ fontSize: '0.7rem', color: '#ccc', marginTop: '4px' }}>
                                     {details.pnl_adj > 0
-                                        ? "현재 수익권으로, 수익 보존 및 차익 실현 가능성이 높아 점수가 가산되었습니다."
-                                        : "현재 손실권으로, 리스크 관리 및 손절 권고 기준에 따라 점수가 가산되었습니다."}
+                                        ? "보유 종목 수익 발생에 따른 차익 실현 및 수익 보존 권고 가산입니다."
+                                        : "보유 종목 손실 발생에 따른 리스크 관리 및 손절 강력 권고 가산입니다."}
                                 </div>
                             </div>
                         )}
 
                         <div style={{ display: 'flex', justifyContent: 'space-between', color: details.market < 0 ? 'var(--accent-red)' : '#e2e8f0' }}>
                             <span>• 시장 환경 및 방어 (Market):</span> <strong>{details.market || 0}점</strong>
+                        </div>
+
+                        {/* Summary Section */}
+                        <div style={{ marginTop: '0.5rem', padding: '10px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', borderLeft: `3px solid ${signalColor}` }}>
+                            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: signalColor, marginBottom: '2px' }}>📊 분석 요약 (Summary)</div>
+                            <div style={{ fontSize: '0.75rem', color: '#ddd', lineHeight: 1.4 }}>
+                                {isBuy
+                                    ? `현재 지표상 상승 에너지가 ${stock.score}%의 확신도로 포착됩니다. 기술적 정합성이 매우 높습니다.`
+                                    : `현재 지표상 하락 압력이 ${stock.score}%의 확신도로 매우 강력합니다. 리스크 관리가 필요한 시점입니다.`}
+                            </div>
                         </div>
                     </div>
                 </div>
