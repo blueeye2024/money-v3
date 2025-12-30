@@ -122,7 +122,7 @@ def check_box_pattern(df_30m):
     is_box = diff_pct <= 5.0
     return is_box, high_max, low_min, diff_pct
 
-def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0, is_held=False):
+def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0, is_held=False, real_time_info=None):
     # Retrieve Stock Name
     stock_name = TICKER_NAMES.get(ticker, ticker)
     
@@ -172,6 +172,15 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0, is_held=Fals
         current_price = df_30['Close'].iloc[-1]
         prev_price = df_30['Close'].iloc[-2]
         change_pct = ((current_price - prev_price) / prev_price) * 100
+        
+        # Override with Real-time Info if available
+        if real_time_info:
+            current_price = float(real_time_info['price'])
+            # rate is percentage change (e.g. +0.03 means 0.03%)
+            change_pct = float(real_time_info['rate'])
+            # Note: Indicator checks below (SMA, Cross) use df_30 (Candle Close). 
+            # This is acceptable (Signals on close, Price on live).
+            # But Box Breakout uses `current_price` variable, so it will be accurate.
         
         # Signal Detection (Previous Logic)
         last_sma10 = df_30['SMA10'].iloc[-1]
@@ -524,11 +533,33 @@ def run_analysis(held_tickers=[]):
             if abs(spy_change) >= 0.5:
                 market_vol_score = 5
     
+    # Fetch Real-time Prices (KIS)
+    from kis_api import kis_client
+    from concurrent.futures import ThreadPoolExecutor
+
+    real_time_map = {}
+    try:
+        # Helper to map Exchange manually for specific tickers if needed
+        # Commonly: NVDA, TSLA, AAPL, MSFT, GOOGL -> NAS
+        # IONQ -> NYS? No, IONQ is NYSE.
+        # Let's trust get_price default search order (NAS->NYS->AMS) which covers 99%.
+        def fetch_wrapper(t):
+             return t, kis_client.get_price(t)
+        
+        with ThreadPoolExecutor(max_workers=5) as executor:
+             futs = [executor.submit(fetch_wrapper, t) for t in TARGET_TICKERS]
+             for f in futs:
+                 t, info = f.result()
+                 if info: real_time_map[t] = info
+    except Exception as e:
+        print(f"KIS Price Fetch Error: {e}")
+
     results = []
     
     for ticker in TARGET_TICKERS:
         is_held = ticker in held_tickers
-        res = analyze_ticker(ticker, data_30m, data_5m, market_vol_score, is_held)
+        rt_info = real_time_map.get(ticker)
+        res = analyze_ticker(ticker, data_30m, data_5m, market_vol_score, is_held, real_time_info=rt_info)
         results.append(res)
         
     # Get Market Indicators Data with Change %
