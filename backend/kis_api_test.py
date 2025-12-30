@@ -62,5 +62,5 @@ def get_current_price(token, exchange, symbol):
 if __name__ == "__main__":
     token = get_access_token()
     if token:
-        # Test TSLA
-        get_current_price(token, "NAS", "TSLA")
+        # Test XPON
+        get_current_price(token, "NAS", "XPON")

@@ -33,7 +33,8 @@ TICKER_NAMES = {
     "IONQ": "IonQ Inc.",
     "AMZU": "Direxion Daily AMZN Bull 1.5X",
     "UFO": "Procure Space ETF",
-    "GOOGL": "Alphabet Inc. Class A"
+    "GOOGL": "Alphabet Inc. Class A",
+    "XPON": "Expion360 Inc."
 }
 
 # Tickers List (Collected from keys)
@@ -574,7 +575,7 @@ def run_analysis(held_tickers=[]):
     try:
         # Exchange Mapping for Speed (Avoid 3 sequential requests)
         EXCHANGE_MAP_KIS = {
-            "TSLA": "NAS", "GOOGL": "NAS", "AMZU": "NAS", "UFO": "NAS", "NVDA": "NAS", "AAPL": "NAS", "MSFT": "NAS", "AMZN": "NAS", "NFLX": "NAS", "AMD": "NAS", "INTC": "NAS", "QQQ": "NAS", "TQQQ": "NAS", "SQQQ": "NAS",
+            "TSLA": "NAS", "GOOGL": "NAS", "AMZU": "NAS", "UFO": "NAS", "NVDA": "NAS", "AAPL": "NAS", "MSFT": "NAS", "AMZN": "NAS", "NFLX": "NAS", "AMD": "NAS", "INTC": "NAS", "QQQ": "NAS", "TQQQ": "NAS", "SQQQ": "NAS", "XPON": "NAS",
             "SOXL": "NYS", "SOXS": "NYS", "UPRO": "NYS", "AAAU": "NYS", "IONQ": "NYS", "SPY": "NYS", "IVV": "NYS", "VOO": "NYS"
         }
         
