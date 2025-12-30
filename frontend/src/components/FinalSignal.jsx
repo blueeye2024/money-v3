@@ -25,12 +25,10 @@ const FinalSignal = ({ stocks }) => {
         // Sort by Score Desc
         actionable.sort((a, b) => (b.score || 0) - (a.score || 0));
 
-        return actionable.slice(0, 2);
+        return actionable;
     }, [stocks]);
 
     if (!topPicks || topPicks.length === 0) return null;
-
-    const [bestStock, secondStock] = topPicks;
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', marginBottom: '3rem' }}>
@@ -39,8 +37,9 @@ const FinalSignal = ({ stocks }) => {
             </h2>
 
             <div style={{ display: 'flex', gap: '1.5rem', flexDirection: 'row', flexWrap: 'wrap' }}>
-                <PortfolioCard stock={bestStock} rank={1} />
-                {secondStock && <PortfolioCard stock={secondStock} rank={2} />}
+                {topPicks.map((stock, index) => (
+                    <PortfolioCard key={stock.ticker} stock={stock} rank={index + 1} />
+                ))}
             </div>
         </div>
     );
