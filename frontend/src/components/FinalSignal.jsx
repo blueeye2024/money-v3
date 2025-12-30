@@ -3,8 +3,29 @@ import React, { useMemo } from 'react';
 const FinalSignal = ({ stocks }) => {
     const topPicks = useMemo(() => {
         if (!stocks || stocks.length === 0) return [];
-        const sorted = [...stocks].sort((a, b) => (b.score || 0) - (a.score || 0));
-        return sorted.slice(0, 2);
+
+        // Filter for Actionable Items:
+        // 1. Held & Sell Signal (Action: Sell)
+        // 2. Not Held & Buy Signal (Action: Buy)
+        const actionable = stocks.filter(stock => {
+            const isHeld = stock.is_held;
+            const pos = stock.position || "";
+
+            // Check Sell Signal
+            const isSellSignal = pos.includes('매도') || pos.includes('하단');
+            // Check Buy Signal
+            const isBuySignal = pos.includes('매수') || pos.includes('상단');
+
+            if (isHeld && isSellSignal) return true;
+            if (!isHeld && isBuySignal) return true;
+
+            return false;
+        });
+
+        // Sort by Score Desc
+        actionable.sort((a, b) => (b.score || 0) - (a.score || 0));
+
+        return actionable.slice(0, 2);
     }, [stocks]);
 
     if (!topPicks || topPicks.length === 0) return null;
@@ -76,16 +97,7 @@ const PortfolioCard = ({ stock, rank }) => {
                 {isRank1 ? '👑 1st Pick' : '🥈 2nd Pick'}
             </div>
 
-            {/* Score Badge */}
-            <div style={{
-                position: 'absolute', top: '1rem', right: '1rem',
-                background: 'rgba(0,0,0,0.4)',
-                padding: '0.4rem 0.8rem', borderRadius: '20px',
-                fontSize: '0.9rem', border: '1px solid rgba(255,255,255,0.3)',
-                color: 'var(--accent-gold)', fontWeight: 'bold'
-            }}>
-                Score: {stock.score}
-            </div>
+
 
             {/* Ticker - Ensure Yellow for Rank 1 */}
             <div style={{
@@ -99,9 +111,15 @@ const PortfolioCard = ({ stock, rank }) => {
 
             <div style={{ fontSize: '1.0rem', color: '#ccc', marginBottom: '0.5rem' }}>{stock.name}</div>
 
-            <div style={{ fontSize: '1.2rem', marginBottom: '1.5rem', fontWeight: 600 }}>
+            <div style={{ fontSize: '1.2rem', marginBottom: '0.5rem', fontWeight: 600 }}>
                 현재가: <span style={{ color: 'white' }}>${stock.current_price ? stock.current_price.toFixed(2) : '-'}</span>
             </div>
+
+            {stock.signal_time && (
+                <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '1.5rem' }}>
+                    🕒 신호 시간: {stock.signal_time}
+                </div>
+            )}
 
             <div style={{
                 fontSize: '1.6rem', fontWeight: 700, marginBottom: '2rem',
@@ -115,35 +133,40 @@ const PortfolioCard = ({ stock, rank }) => {
                 <h3 style={{ fontSize: '0.9rem', marginBottom: '0.8rem', color: 'var(--accent-gold)', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '0.5rem' }}>
                     📊 점수 기준 (Score Criteria)
                 </h3>
-                <div style={{ fontSize: '0.9rem', color: '#e2e8f0', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span>• 기본 점수 (Base):</span>
-                        <strong>{details.base || 0}점</strong>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    {/* Left: Total Score */}
+                    <div style={{ paddingRight: '1rem', borderRight: '1px solid rgba(255,255,255,0.2)', textAlign: 'center', minWidth: '80px' }}>
+                        <div style={{ fontSize: '0.8rem', color: '#aaa', marginBottom: '0.2rem' }}>총점</div>
+                        <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--accent-gold)' }}>{stock.score}</div>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span>• 추세 (Trend):</span>
-                        <strong>{details.trend || 0}점</strong>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span>• 신뢰도 (Reliability):</span>
-                        <strong>{details.reliability || 0}점</strong>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span>• 돌파 (Breakout):</span>
-                        <strong>{details.breakout || 0}점</strong>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span>• 시장변동성 (Market):</span>
-                        <strong>{details.market || 0}점</strong>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.4rem', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '0.4rem', color: 'var(--accent-gold)' }}>
-                        <strong>총점 (Total):</strong>
-                        <strong>{stock.score}점</strong>
+
+                    {/* Right: Criteria List */}
+                    <div style={{ fontSize: '0.9rem', color: '#e2e8f0', display: 'flex', flexDirection: 'column', gap: '0.2rem', flex: 1 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span>• 기본 점수:</span> <strong>{details.base || 0}</strong>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span>• 추세 점수:</span> <strong>{details.trend || 0}</strong>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span>• 신뢰도:</span> <strong>{details.reliability || 0}</strong>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span>• 돌파/시장:</span> <strong>{(details.breakout || 0) + (details.market || 0)}</strong>
+                        </div>
                     </div>
                 </div>
+
+                {/* Brief Reason */}
+                {stock.news_items && stock.news_items.length > 0 && (
+                    <div style={{ marginTop: '1rem', paddingTop: '0.8rem', borderTop: '1px solid rgba(255,255,255,0.1)', fontSize: '0.9rem', color: '#ddd', textAlign: 'left' }}>
+                        💡 <span style={{ fontStyle: 'italic' }}>"{stock.news_items[0]}"</span>
+                    </div>
+                )}
             </div>
         </div>
     );
 };
+
 
 export default FinalSignal;
