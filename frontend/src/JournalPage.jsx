@@ -468,10 +468,10 @@ const JournalPage = () => {
                                                             {netQty}주 ({curPrice ? `$${curPrice}` : '-'})
                                                         </div>
                                                         <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: unrealizedProfit >= 0 ? 'var(--accent-red)' : 'var(--accent-blue)' }}>
-                                                            {unrealizedRate.toFixed(2)}% (${unrealizedProfit.toLocaleString(undefined, { maximumFractionDigits: 0 })})
+                                                            평가: {(evalValue * exchangeRate).toLocaleString(undefined, { maximumFractionDigits: 0 })}원
                                                         </div>
-                                                        <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                                                            ≈ {(evalValue * exchangeRate).toLocaleString(undefined, { maximumFractionDigits: 0 })}원
+                                                        <div style={{ fontSize: '0.85rem', color: unrealizedProfit >= 0 ? 'var(--accent-red)' : 'var(--accent-blue)' }}>
+                                                            ({unrealizedRate.toFixed(2)}%)
                                                         </div>
                                                     </div>
                                                 )}
@@ -496,7 +496,9 @@ const JournalPage = () => {
                                                     <th style={{ padding: '1rem 2rem', textAlign: 'left' }}>날짜</th>
                                                     <th style={{ padding: '1rem', textAlign: 'center' }}>구분</th>
                                                     <th style={{ padding: '1rem', textAlign: 'right' }}>가격</th>
+                                                    <th style={{ padding: '1rem', textAlign: 'right' }}>현재가</th>
                                                     <th style={{ padding: '1rem', textAlign: 'right' }}>수량</th>
+                                                    <th style={{ padding: '1rem', textAlign: 'right' }}>예상손익 (KRW)</th>
                                                     <th style={{ padding: '1rem', textAlign: 'right' }}>합계</th>
                                                     <th style={{ padding: '1rem', textAlign: 'left' }}>메모</th>
                                                     <th style={{ padding: '1rem 2rem', textAlign: 'right' }}>관리</th>
@@ -516,7 +518,22 @@ const JournalPage = () => {
                                                             </span>
                                                         </td>
                                                         <td style={{ padding: '1rem', textAlign: 'right' }}>${tx.price.toFixed(2)}</td>
+                                                        <td style={{ padding: '1rem', textAlign: 'right', color: '#aaa' }}>
+                                                            {prices[ticker] ? `$${prices[ticker]}` : '-'}
+                                                        </td>
                                                         <td style={{ padding: '1rem', textAlign: 'right' }}>{tx.qty}</td>
+                                                        <td style={{ padding: '1rem', textAlign: 'right' }}>
+                                                            {tx.trade_type === 'BUY' && prices[ticker] ? (
+                                                                <div>
+                                                                    <div style={{ fontSize: '0.9rem', color: (prices[ticker] - tx.price) >= 0 ? 'var(--accent-red)' : 'var(--accent-blue)' }}>
+                                                                        {(((prices[ticker] - tx.price) / tx.price) * 100).toFixed(2)}%
+                                                                    </div>
+                                                                    <div style={{ fontSize: '0.8rem', color: '#aaa' }}>
+                                                                        {((prices[ticker] - tx.price) * tx.qty * exchangeRate).toLocaleString(undefined, { maximumFractionDigits: 0 })}원
+                                                                    </div>
+                                                                </div>
+                                                            ) : '-'}
+                                                        </td>
                                                         <td style={{ padding: '1rem', textAlign: 'right', fontWeight: 'bold', color: 'rgba(255,255,255,0.7)' }}>
                                                             ${(tx.price * tx.qty).toLocaleString()}
                                                         </td>
