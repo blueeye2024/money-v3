@@ -120,7 +120,13 @@ def monitor_signals():
                             print(f"SMS Throttled for {ticker}: Already sent in last {SMS_THROTTLE_MINUTES} mins.")
                         else:
                             # Send
-                            reason = f"RSI:{res['rsi']:.1f}"
+                            # User Request: Ticker, KST Time, Type, Price, Total Score, Interpretation
+                            interpretation = res.get('score_interpretation', '')
+                            score = res.get('score', 0)
+                            
+                            # Update Reason for SMS
+                            reason = f"{score}점 [{interpretation}]"
+                            
                             success = send_sms(
                                 stock_name=res['name'], 
                                 signal_type=res['position'], 
@@ -140,8 +146,10 @@ def monitor_signals():
                         'signal_type': "BUY" if "매수" in res['position'] or "상단" in res['position'] else "SELL",
                         'position': res['position'],
                         'current_price': res['current_price'],
-                        'signal_time_raw': current_raw_time,
-                        'is_sent': is_sent
+                        'signal_time_raw': current_raw_time, # Assuming KST or adjusted
+                        'is_sent': is_sent,
+                        'score': res.get('score', 0),
+                        'interpretation': res.get('score_interpretation', '')
                     })
 
     except Exception as e:

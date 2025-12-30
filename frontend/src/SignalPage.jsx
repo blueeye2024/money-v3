@@ -7,7 +7,9 @@ const SignalPage = () => {
     const [loading, setLoading] = useState(true);
     const [logsLoading, setLogsLoading] = useState(true);
     const [stocks, setStocks] = useState([]);
+
     const [smsEnabled, setSmsEnabled] = useState(true);
+    const [prices, setPrices] = useState({}); // {ticker: price}
 
     // Filters (Default: Today)
     const getTodayString = () => {
@@ -66,17 +68,55 @@ const SignalPage = () => {
         setLoading(true);
         try {
             const query = new URLSearchParams(filters).toString();
-            // Note: DB API still accepts ticker param but we don't send it, so it returns all.
-            const res = await fetch(`/api/signals?${query}`);
-            if (res.ok) {
-                const data = await res.json();
-                setSignals(data);
+
+            // Parallel fetch: Signals and Market Report (for current prices)
+            const [sigRes, reportRes] = await Promise.all([
+                fetch(`/api/signals?${query}`),
+                fetch(`/api/report`)
+            ]);
+
+            if (sigRes.ok) {
+                const data = await sigRes.json();
+                setSignals(data); // Reverse order done in backend? Assuming yes.
             }
+
+            if (reportRes.ok) {
+                const reportData = await reportRes.json();
+                // Create map {ticker: current_price}
+                const priceMap = {};
+                if (reportData.stocks) {
+                    reportData.stocks.forEach(s => {
+                        priceMap[s.ticker] = s.current_price;
+                    });
+                }
+                setPrices(priceMap);
+            }
+
         } catch (e) {
             console.error(e);
         } finally {
             setLoading(false);
         }
+    };
+
+    const calcProfit = (signalPrice, currentPrice, type) => {
+        if (!signalPrice || !currentPrice) return '-';
+        let pct = 0;
+        if (type === 'BUY') {
+            pct = ((currentPrice - signalPrice) / signalPrice) * 100;
+        } else {
+            // For SELL signal (Short view)
+            pct = ((signalPrice - currentPrice) / signalPrice) * 100;
+        }
+        return `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
+    };
+
+    const getProfitColor = (signalPrice, currentPrice, type) => {
+        if (!signalPrice || !currentPrice) return 'white';
+        let isGain = false;
+        if (type === 'BUY') isGain = currentPrice > signalPrice;
+        else isGain = currentPrice < signalPrice;
+        return isGain ? 'var(--accent-red)' : 'var(--accent-blue)';
     };
 
     const fetchSmsLogs = async () => {
@@ -247,8 +287,10 @@ const SignalPage = () => {
                                 <th style={{ padding: '1.2rem 2rem', textAlign: 'left' }}>발생 시간</th>
                                 <th style={{ padding: '1.2rem', textAlign: 'left' }}>종목</th>
                                 <th style={{ padding: '1.2rem', textAlign: 'center' }}>구분</th>
-                                <th style={{ padding: '1.2rem', textAlign: 'right' }}>가격</th>
-                                <th style={{ padding: '1.2rem 2rem', textAlign: 'left' }}>상태 / 비고</th>
+                                <th style={{ padding: '1.2rem', textAlign: 'right' }}>신호가</th>
+                                <th style={{ padding: '1.2rem', textAlign: 'right' }}>현재가</th>
+                                <th style={{ padding: '1.2rem', textAlign: 'center' }}>수익률</th>
+                                <th style={{ padding: '1.2rem 2rem', textAlign: 'left' }}>점수 / 상태</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -278,17 +320,38 @@ const SignalPage = () => {
                                                 {sig.signal_type === 'BUY' ? '매수' : '매도'}
                                             </span>
                                         </td>
+                                        <td style={{ padding: '1.2rem', textAlign: 'right', fontWeight: 'bold' }}>${sig.price}</td>
                                         <td style={{ padding: '1.2rem', textAlign: 'right' }}>
-                                            <span style={{ fontWeight: 'bold', color: 'rgba(255,255,255,0.9)' }}>
-                                                ${sig.price ? sig.price.toFixed(2) : '0.00'}
-                                            </span>
+                                            {prices[sig.ticker] ? `$${prices[sig.ticker]}` : '-'}
                                         </td>
-                                        <td style={{ padding: '1.2rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <div>
-                                                <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{sig.position_desc}</div>
-                                                {Boolean(sig.is_sent) && <span style={{ fontSize: '0.75rem', color: 'var(--accent-green)' }}>● 자동문자발송됨</span>}
-                                            </div>
-                                            <button onClick={() => deleteSignal(sig.id)} className="btn-icon" style={{ color: 'var(--accent-red)', marginLeft: '1rem' }}>🗑️</button>
+                                        <td style={{ padding: '1.2rem', textAlign: 'center', fontWeight: 'bold', color: getProfitColor(sig.price, prices[sig.ticker], sig.signal_type) }}>
+                                            {calcProfit(sig.price, prices[sig.ticker], sig.signal_type)}
+                                        </td>
+                                        <td style={{ padding: '1.2rem 2rem' }}>
+                                            <div style={{ fontSize: '0.9rem' }}>{sig.position_desc}</div>
+                                            {sig.score > 0 && (
+                                                <div style={{ fontSize: '0.8rem', color: 'var(--accent-gold)', marginTop: '4px' }}>
+                                                    ⭐ {sig.score}점 ({sig.interpretation || '-'})
+                                                </div>
+                                            )}
+                                            {Boolean(sig.is_sent) && <span style={{ fontSize: '0.75rem', color: 'var(--accent-green)' }}>● 자동문자발송됨</span>}
+                                        </td>
+                                        <td style={{ padding: '1.2rem', textAlign: 'center' }}>
+                                            <button
+                                                onClick={() => deleteSignal(sig.id)}
+                                                style={{
+                                                    background: 'rgba(255, 50, 50, 0.2)',
+                                                    border: '1px solid rgba(255, 50, 50, 0.3)',
+                                                    color: '#ff6b6b',
+                                                    padding: '0.4rem 0.8rem',
+                                                    borderRadius: '6px',
+                                                    cursor: 'pointer',
+                                                    fontSize: '0.8rem',
+                                                    transition: 'all 0.2s'
+                                                }}
+                                            >
+                                                삭제
+                                            </button>
                                         </td>
                                     </tr>
                                 ))

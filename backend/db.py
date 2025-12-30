@@ -93,8 +93,8 @@ def save_signal(signal_data):
             
         with conn.cursor() as cursor:
             sql = """
-            INSERT INTO signal_history (ticker, name, signal_type, position_desc, price, signal_time, is_sent)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO signal_history (ticker, name, signal_type, position_desc, price, signal_time, is_sent, score, interpretation)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             """
             cursor.execute(sql, (
                 signal_data['ticker'],
@@ -103,7 +103,9 @@ def save_signal(signal_data):
                 signal_data['position'],
                 signal_data['current_price'],
                 st, 
-                signal_data.get('is_sent', False)
+                signal_data.get('is_sent', False),
+                signal_data.get('score', 0),
+                signal_data.get('interpretation', '')
             ))
         conn.commit()
     except Exception as e:

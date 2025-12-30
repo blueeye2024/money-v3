@@ -6,6 +6,14 @@ from datetime import datetime, timedelta
 import pytz
 import os
 
+
+def get_score_interpretation(score, position_text=""):
+    is_sell = "매도" in position_text or "하단" in position_text
+    if score >= 80: return "🚨긴급 매도" if is_sell else "✨강력 매수"
+    if score >= 70: return "📉매도" if is_sell else "🟢매수"
+    if score >= 50: return "⚠경계" if is_sell else "🟡관망"
+    return "📉조정" if is_sell else "⚪관망"
+
 # Stock Names Mapping
 TICKER_NAMES = {
     "SOXL": "Direxion Daily Semiconductor Bull 3X",
@@ -454,8 +462,7 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0, is_held=Fals
             "macd_sig": float(signal) if pd.notnull(signal) else None,
             "prob_up": float(news_prob),
             "score": final_score,
-            "score_details": score_details,
-            "score": final_score,
+            "score_interpretation": get_score_interpretation(final_score, position),
             "score_details": score_details,
             "news_items": stock_news,
             "is_held": is_held
