@@ -47,8 +47,8 @@ function Dashboard() {
                     animation: 'loading-slide 1.5s infinite linear'
                 }} />
             </div>
-            <div style={{ color: 'var(--text-secondary)', marginTop: '1.5rem', fontSize: '0.85rem', letterSpacing: '2px', textTransform: 'uppercase' }}>
-                Initializing & Analyzing Market Data...
+            <div style={{ color: 'var(--text-secondary)', marginTop: '1.5rem', fontSize: '1rem', letterSpacing: '2px', fontWeight: 600 }}>
+                청안 해외주식 분석 시스템 가동 중...
             </div>
             <style>{`
                 @keyframes loading-slide {

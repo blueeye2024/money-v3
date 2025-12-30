@@ -1,7 +1,8 @@
 import React from 'react';
 
 const getScoreInterpretation = (score, position) => {
-    const isSell = position.includes('매도') || position.includes('하단');
+    const pos = position || '';
+    const isSell = pos.includes('매도') || pos.includes('하단');
     if (score >= 80) return isSell ? "🚨 긴급 매도" : "✨ 강력 매수";
     if (score >= 70) return isSell ? "📉 매도" : "🟢 매수";
     if (score >= 50) return isSell ? "⚠ 경계/약세" : "🟡 관망/중립";
@@ -15,8 +16,8 @@ const StockCard = ({ data }) => {
         rsi, macd, macd_sig, score, score_details
     } = data;
 
-    const isBuy = position?.includes('매수') || position?.includes('상단');
-    const isSell = position?.includes('매도') || position?.includes('하단');
+    const isBuy = (position || '').includes('매수') || (position || '').includes('상단');
+    const isSell = (position || '').includes('매도') || (position || '').includes('하단');
 
     // Safety check for score details
     const details = score_details || { base: 0, trend: 0, reliability: 0, breakout: 0 };
@@ -74,7 +75,7 @@ const StockCard = ({ data }) => {
                     fontSize: '0.9rem',
                     display: 'inline-flex', alignItems: 'center', gap: '8px'
                 }}>
-                    <span>{position.includes('매수') ? position.replace('🔵', '🔴') : position}</span>
+                    <span>{(position || '').includes('매수') ? (position || '').replace('🔵', '🔴') : position}</span>
                     <span style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.8)', fontWeight: 'normal' }}>
                         Score: <strong>{score}</strong> ({getScoreInterpretation(score, position)})
                     </span>

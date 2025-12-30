@@ -1,7 +1,8 @@
 import React, { useMemo } from 'react';
 
 const getScoreInterpretation = (score, position) => {
-    const isSell = position.includes('매도') || position.includes('하단');
+    const pos = position || '';
+    const isSell = pos.includes('매도') || pos.includes('하단');
     if (score >= 80) return isSell ? "🚨 긴급 매도" : "✨ 강력 매수";
     if (score >= 70) return isSell ? "📉 매도" : "🟢 매수";
     if (score >= 50) return isSell ? "⚠ 경계/약세" : "🟡 관망/중립";
@@ -57,8 +58,8 @@ const FinalSignal = ({ stocks }) => {
 };
 
 const PortfolioCard = ({ stock, rank }) => {
-    const isBuy = stock.position.includes('매수') || stock.position.includes('상단');
-    const isSell = stock.position.includes('매도') || stock.position.includes('하단');
+    const isBuy = (stock.position || '').includes('매수') || (stock.position || '').includes('상단');
+    const isSell = (stock.position || '').includes('매도') || (stock.position || '').includes('하단');
     const isRank1 = rank === 1;
 
     let borderColor = 'var(--accent-blue)';
