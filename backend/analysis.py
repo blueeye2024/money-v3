@@ -122,7 +122,7 @@ def check_box_pattern(df_30m):
     is_box = diff_pct <= 5.0
     return is_box, high_max, low_min, diff_pct
 
-def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0, is_held=False, real_time_info=None):
+def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0, is_held=False, real_time_info=None, holdings_data=None):
     # Retrieve Stock Name
     stock_name = TICKER_NAMES.get(ticker, ticker)
     
@@ -419,8 +419,8 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0, is_held=Fals
         # PnL Score Adjustment (User Request: -5 points per 1% PnL if Sell Signal & Held)
         pnl_adjustment = 0
         pnl_pct_held = 0.0
-        if is_held and is_sell_signal and ticker in holdings and isinstance(holdings[ticker], dict):
-             avg_price = holdings[ticker].get('avg_price', 0)
+        if is_held and is_sell_signal and holdings_data and ticker in holdings_data and isinstance(holdings_data[ticker], dict):
+             avg_price = holdings_data[ticker].get('avg_price', 0)
              if avg_price > 0:
                  pnl_pct_held = ((current_price - avg_price) / avg_price) * 100
                  pnl_adjustment = pnl_pct_held * 5
@@ -567,8 +567,8 @@ def run_analysis(held_tickers=[]):
     
     for ticker in TARGET_TICKERS:
         is_held = ticker in held_tickers
-        rt_info = real_time_map.get(ticker)
-        res = analyze_ticker(ticker, data_30m, data_5m, market_vol_score, is_held, real_time_info=rt_info)
+        # held_tickers is the dict from db.get_current_holdings
+        res = analyze_ticker(ticker, data_30m, data_5m, market_vol_score, is_held, real_time_info=rt_info, holdings_data=held_tickers)
         results.append(res)
         
     # Get Market Indicators Data with Change %
