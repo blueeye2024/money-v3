@@ -155,21 +155,43 @@ const PortfolioCard = ({ stock, rank }) => {
                     </div>
 
                     {/* Right: Criteria List */}
-                    <div style={{ fontSize: '0.9rem', color: '#e2e8f0', display: 'flex', flexDirection: 'column', gap: '0.3rem', flex: 1 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <span>• 기본 (Base):</span> <strong>{details.base || 0}</strong>
+                    <div style={{ fontSize: '0.8rem', color: '#e2e8f0', display: 'flex', flexDirection: 'column', gap: '0.3rem', flex: 1 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--accent-gold)', fontWeight: 600 }}>
+                            <span>• 기본 (Base Total):</span> <strong>{details.base || 0}</strong>
                         </div>
+                        {details.base_details && (
+                            <div style={{ paddingLeft: '0.8rem', fontSize: '0.75rem', color: '#bbb', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <span>- 기본값:</span> <span>{details.base_details.main}</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <span>- 추세정합:</span> <span>{details.base_details.confluence > 0 ? '+' : ''}{details.base_details.confluence}</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <span>- RSI/MACD:</span> <span>+{details.base_details.rsi + details.base_details.macd}</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <span>- BB/신호:</span> <span>+{details.base_details.bb + details.base_details.cross}</span>
+                                </div>
+                            </div>
+                        )}
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                             <span>• 추세 (Trend):</span> <strong>{details.trend || 0}</strong>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <span>• 신뢰 (Reliability):</span> <strong>{details.reliability || 0}</strong>
+                            <span>• 신뢰 (Relia/Break):</span> <strong>{(details.reliability || 0) + (details.breakout || 0)}</strong>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <span>• 시장 (Market):</span> <strong>{(details.breakout || 0) + (details.market || 0)}</strong>
+                            <span>• 시장/방어 (Market):</span> <strong>{details.market || 0}</strong>
                         </div>
+                        {details.pnl_adj !== 0 && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', color: details.pnl_adj > 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>
+                                <span>• 수익/손절 가산:</span> <strong>{details.pnl_adj > 0 ? '+' : ''}{details.pnl_adj}</strong>
+                            </div>
+                        )}
                     </div>
                 </div>
+
 
                 {/* Comprehensive Analysis */}
                 <div style={{ paddingTop: '0.8rem', borderTop: '1px solid rgba(255,255,255,0.1)', fontSize: '0.9rem', color: '#ddd', textAlign: 'left' }}>

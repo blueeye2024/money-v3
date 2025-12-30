@@ -130,14 +130,28 @@ const StockCard = ({ data }) => {
             {/* Detailed Score Breakdown */}
             <div style={{ marginTop: '0.8rem', paddingTop: '0.8rem', borderTop: '1px dashed rgba(255,255,255,0.1)' }}>
                 <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>📊 Score Breakdown</div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#ccc' }}>
-                    <span>기본: {details.base}</span>
-                    <span>추세: {details.trend}</span>
-                    <span>신뢰: {details.reliability}</span>
-                    <span>돌파: {details.breakout}</span>
-                    <span>시장: {details.market || 0}</span>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '4px', fontSize: '0.75rem', color: '#ccc' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                        <span style={{ color: 'var(--accent-gold)' }}>기본: {details.base}</span>
+                        {details.base_details && (
+                            <div style={{ paddingLeft: '4px', borderLeft: '1px solid #444', fontSize: '0.7rem', color: '#aaa' }}>
+                                <div>M:{details.base_details.main} C:{details.base_details.confluence > 0 ? '+' : ''}{details.base_details.confluence}</div>
+                                <div>A:+{details.base_details.rsi + details.base_details.macd + details.base_details.bb + details.base_details.cross}</div>
+                            </div>
+                        )}
+                    </div>
+                    <div>추세: {details.trend}</div>
+                    <div>신뢰: {details.reliability}</div>
+                    <div>돌파: {details.breakout}</div>
+                    <div>시장: {details.market || 0}</div>
+                    {details.pnl_adj !== 0 && (
+                        <div style={{ color: details.pnl_adj > 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>
+                            PnL: {details.pnl_adj > 0 ? '+' : ''}{details.pnl_adj}
+                        </div>
+                    )}
                 </div>
             </div>
+
         </div>
     );
 };

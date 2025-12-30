@@ -355,78 +355,44 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0, is_held=Fals
         news_prob = max(0, min(100, news_prob))
         
         # === Cheongan Scoring Engine (User Rules) ===
-        base_score = 0
-        trend_score = 0
-        reliability_score = 0
-        breakout_score = 0
-        # 5. Market / Defensive Sell Score
-        market_score = market_vol_score
-
-        is_buy_signal = "매수" in position or "상단" in position
-        is_sell_signal = "매도" in position or "하단" in position
-        is_observing = "관망" in position or "미보유" in position
+        base_main = 50 if not is_observing else 20
+        base_confluence = 10 if t30 == t5 else -10
         
-        # Multi-Timeframe Logic
-        t30 = 'UP' if last_sma10 > last_sma30 else 'DOWN'
-        t5 = 'UP' if last_5m_sma10 > last_5m_sma30 else 'DOWN'
-
-        # [User Request] 박스권 불필요 매도 방지 로직
-        if is_sell_signal:
-            if market_vol_score < 5: 
-                # 시장이 보합(Volatility < 0.5%)이면 매도 점수 -10점 감점
-                market_score = -10
-            
-            if t5 == 'UP':
-                # 5분 봉이 상승 추세(골드크로스)이면 매도 점수 -10점 추가 감점
-                market_score -= 10
-
-            if is_box:
-                # 박스권 횡보 중이면 매도 점수 -10점 추가 감점 (불필요 매도 방지)
-                market_score -= 10
+        # Auxiliary Indicators (Max 20)
+        aux_rsi = 0
+        aux_macd = 0
+        aux_bb = 0
+        aux_cross = 0
         
-        # 1. Base Score
-        if not is_observing:
-            base_score = 50
-        else:
-            base_score = 20
-        
-        if t30 == t5:
-            base_score += 10
-        else:
-            base_score -= 10
-            
-        # Auxiliary Indicators (Max 20) - User Request
-        aux_score = 0
         bb_mid = float(df_30['BB_Mid'].iloc[-1])
         
         # (1) RSI (+5)
-        # Buy/Up: 45~75 (Healthy Momentum), Sell/Down: 25~55
         if is_buy_signal or (is_observing and t30=='UP'):
-            if 45 <= rsi_val <= 75: aux_score += 5
+            if 45 <= rsi_val <= 75: aux_rsi = 5
         elif is_sell_signal or (is_observing and t30=='DOWN'):
-            if 25 <= rsi_val <= 55: aux_score += 5
+            if 25 <= rsi_val <= 55: aux_rsi = 5
             
         # (2) MACD (+5)
         if is_buy_signal or (is_observing and t30=='UP'):
-            if macd > signal: aux_score += 5
+            if macd > signal: aux_macd = 5
         elif is_sell_signal or (is_observing and t30=='DOWN'):
-            if macd < signal: aux_score += 5
+            if macd < signal: aux_macd = 5
             
         # (3) Bollinger Trend (+5)
         if is_buy_signal or (is_observing and t30=='UP'):
-            if current_price > bb_mid: aux_score += 5
+            if current_price > bb_mid: aux_bb = 5
         elif is_sell_signal or (is_observing and t30=='DOWN'):
-            if current_price < bb_mid: aux_score += 5
+            if current_price < bb_mid: aux_bb = 5
             
         # (4) Cross Type Match (+5)
         if (is_buy_signal and recent_cross_type == 'gold') or \
            (is_sell_signal and recent_cross_type == 'dead'):
-            aux_score += 5
+            aux_cross = 5
             
-        base_score += aux_score
-        
+        base_score = base_main + base_confluence + aux_rsi + aux_macd + aux_bb + aux_cross
         base_score = max(0, base_score)
 
+        # 2. Trend Score
         # Signal Price & Bars
         sig_price = current_price
         bars_since = 0
@@ -436,14 +402,15 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0, is_held=Fals
                 bars_since = abs(cross_idx)
             except:
                 pass
-        
-        # 2. Trend Score
+
+        trend_score = 0
         if is_buy_signal and current_price > sig_price:
             trend_score = 10
         elif is_sell_signal and current_price < sig_price:
             trend_score = 10
         
         # 3. Reliability Score
+        reliability_score = 0
         if not is_observing and bars_since >= 2:
             raw_diff_pct = ((current_price - sig_price) / sig_price) * 100
             profit_rate = raw_diff_pct if is_buy_signal else -raw_diff_pct
@@ -460,14 +427,9 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0, is_held=Fals
                 reliability_score = -7
 
         # 4. Breakout Score
+        breakout_score = 0
         if not is_observing and bars_since >= 2:
             recent_12h = df_30.iloc[-24:]
-            # Exclude current bar to find previous high/low? 
-            # Logic: "CurrentPrice >= High12h". 
-            # Usually High12h implies the specific level established previously. 
-            # Let's use max of recent 24 bars including current or excluding?
-            # User said: "CurrentPrice >= High12h". If current breaks the High of the Window.
-            # I will compare Current Close against Max High of previous 23 bars.
             prev_12h_high = recent_12h['High'].iloc[:-1].max()
             prev_12h_low = recent_12h['Low'].iloc[:-1].min()
             
@@ -476,22 +438,26 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0, is_held=Fals
             elif is_sell_signal and current_price <= prev_12h_low:
                 breakout_score = 10
 
-        # PnL Score Adjustment (Revised: Higher Score for Profit-Taking & Stop-Loss)
+        # 5. Market / Defensive Sell Score
+        market_score = market_vol_score
+        # [User Request] 박스권 불필요 매도 방지 로직
+        if is_sell_signal:
+            if market_vol_score < 5: market_score = -10
+            if t5 == 'UP': market_score -= 10
+            if is_box: market_score -= 10
+
+        # PnL Score Adjustment
         pnl_impact = 0
-        pnl_pct_held = 0.0
         if is_held and is_sell_signal and holdings_data and ticker in holdings_data and isinstance(holdings_data[ticker], dict):
              avg_price = holdings_data[ticker].get('avg_price', 0)
              if avg_price > 0:
                  pnl_pct_held = ((current_price - avg_price) / avg_price) * 100
                  if pnl_pct_held > 0:
-                     # 수익 실현 (Lock-in): 1%당 +5점 가산
                      pnl_impact = pnl_pct_held * 5
                  else:
-                     # 리스크 관리 (Stop-loss): 1%당 +10점 가산 (손절은 더 강력하게 권고)
                      pnl_impact = abs(pnl_pct_held) * 10
 
         # Technical Sell Proposal Boost (+10)
-        # 만약 가격이 볼린저 밴드 하단을 건드리면 하락 가속화로 판단, 매도 점수 추가 가산
         if is_sell_signal:
             bb_low = float(df_30['BB_Lower'].iloc[-1])
             if current_price < bb_low:
@@ -503,6 +469,14 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0, is_held=Fals
         
         score_details = {
             "base": base_score,
+            "base_details": {
+                "main": base_main,
+                "confluence": base_confluence,
+                "rsi": aux_rsi,
+                "macd": aux_macd,
+                "bb": aux_bb,
+                "cross": aux_cross
+            },
             "trend": trend_score,
             "reliability": reliability_score,
             "breakout": breakout_score,
