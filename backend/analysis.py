@@ -229,9 +229,13 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw):
             st_est = st_utc.astimezone(pytz.timezone('US/Eastern'))
             formatted_signal_time = f"{st_kst.strftime('%m/%d %H:%M')} KST"
 
+        macd = float(df_30['MACD'].iloc[-1])
+        signal = float(df_30['Signal'].iloc[-1])
+        rsi_val = float(df_30['RSI'].iloc[-1])
+        
         news_prob = 50
-        if df_30['RSI'].iloc[-1] > 60: news_prob += 10
-        if df_30['RSI'].iloc[-1] < 40: news_prob -= 10
+        if rsi_val > 60: news_prob += 10
+        if rsi_val < 40: news_prob -= 10
         if recent_cross_type == 'gold': news_prob += 20
         if recent_cross_type == 'dead': news_prob -= 20
         news_prob = max(0, min(100, news_prob))
