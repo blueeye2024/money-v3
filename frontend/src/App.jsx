@@ -105,15 +105,32 @@ function Dashboard() {
     return (
         <div className="container">
             <header>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ fontSize: '0.9rem', color: 'var(--accent-blue)', fontWeight: 600, letterSpacing: '1px' }}>
-                        PREMIUM FINANCIAL REPORT
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '1rem', marginBottom: '2rem' }}>
+                    <div>
+                        <div style={{ fontSize: '0.85rem', color: 'var(--accent-blue)', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
+                            PREMIUM FINANCIAL REPORTING
+                        </div>
+                        <h1 style={{ margin: 0, fontSize: 'clamp(1.5rem, 5vw, 2.5rem)', fontWeight: 800, letterSpacing: '-1px' }}>
+                            청안 해외주식 종합 분석 대시보드
+                        </h1>
+                    </div>
+                    <div style={{
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        padding: '0.6rem 1.2rem',
+                        borderRadius: '99px',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        fontSize: '0.85rem',
+                        color: 'var(--text-secondary)',
+                        backdropFilter: 'blur(10px)'
+                    }}>
+                        <span style={{ display: 'inline-block', width: '8px', height: '8px', background: 'var(--accent-green)', borderRadius: '50%', boxShadow: '0 0 10px var(--accent-green)' }}></span>
+                        <strong>분석 시점:</strong> {data?.timestamp?.full_str || '연결 중...'}
                     </div>
                 </div>
-                <h1>청안 해외주식 멀티 종목 종합 분석</h1>
-                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
-                    <p style={{ margin: 0 }}>분석 시점: {data?.timestamp?.full_str}</p>
-                </div>
+
             </header>
 
             {data?.market && <MarketStats market={data.market} />}

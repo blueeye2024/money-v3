@@ -155,42 +155,59 @@ const PortfolioCard = ({ stock, rank }) => {
                     </div>
 
                     {/* Right: Criteria List */}
-                    <div style={{ fontSize: '0.8rem', color: '#e2e8f0', display: 'flex', flexDirection: 'column', gap: '0.3rem', flex: 1 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--accent-gold)', fontWeight: 600 }}>
-                            <span>• 기본 (Base Total):</span> <strong>{details.base || 0}</strong>
-                        </div>
-                        {details.base_details && (
-                            <div style={{ paddingLeft: '0.8rem', fontSize: '0.75rem', color: '#bbb', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                    <span>- 기본값:</span> <span>{details.base_details.main}</span>
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                    <span>- 추세정합:</span> <span>{details.base_details.confluence > 0 ? '+' : ''}{details.base_details.confluence}</span>
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                    <span>- RSI/MACD:</span> <span>+{details.base_details.rsi + details.base_details.macd}</span>
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                    <span>- BB/신호:</span> <span>+{details.base_details.bb + details.base_details.cross}</span>
-                                </div>
+                    <div style={{ fontSize: '0.8rem', color: '#e2e8f0', display: 'flex', flexDirection: 'column', gap: '0.6rem', flex: 1 }}>
+                        <div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--accent-gold)', fontWeight: 600, marginBottom: '0.2rem' }}>
+                                <span>• 기술적 기본 점수 (Base):</span> <strong>{details.base || 0}점</strong>
                             </div>
-                        )}
-                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <span>• 추세 (Trend):</span> <strong>{details.trend || 0}</strong>
+                            {details.base_details && (
+                                <div style={{ padding: '8px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', fontSize: '0.72rem', color: '#bbb', display: 'flex', flexDirection: 'column', gap: '4px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                        <span>기초 분석점수 (Entry/Hold):</span> <span style={{ color: 'white' }}>+{details.base_details.main}</span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                        <span>30분/5분 추세 정합성:</span> <span style={{ color: details.base_details.confluence > 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>{details.base_details.confluence > 0 ? '+' : ''}{details.base_details.confluence}</span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                        <span>보조지표 (RSI & MACD):</span> <span style={{ color: 'var(--accent-green)' }}>+{details.base_details.rsi + details.base_details.macd}</span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                        <span>가격위치 및 신호강도:</span> <span style={{ color: 'var(--accent-green)' }}>+{details.base_details.bb + details.base_details.cross}</span>
+                                    </div>
+                                    <div style={{ marginTop: '2px', fontSize: '0.65rem', color: '#888', fontStyle: 'italic', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '2px' }}>
+                                        ※ 모든 중장기/단기 지표가 정배열일 때 최대 80점이 부여됩니다.
+                                    </div>
+                                </div>
+                            )}
                         </div>
+
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <span>• 신뢰 (Relia/Break):</span> <strong>{(details.reliability || 0) + (details.breakout || 0)}</strong>
+                            <span title="신호 발생 후 가격 흐름 반영">• 추가 추세 가산:</span> <strong>+{details.trend || 0}점</strong>
                         </div>
+
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <span>• 시장/방어 (Market):</span> <strong>{details.market || 0}</strong>
+                            <span title="신호 신뢰도 및 전고점 돌파 여부">• 신뢰 및 돌파 점수:</span> <strong>+{(details.reliability || 0) + (details.breakout || 0)}점</strong>
                         </div>
+
                         {details.pnl_adj !== 0 && (
-                            <div style={{ display: 'flex', justifyContent: 'space-between', color: details.pnl_adj > 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>
-                                <span>• 수익/손절 가산:</span> <strong>{details.pnl_adj > 0 ? '+' : ''}{details.pnl_adj}</strong>
+                            <div style={{ padding: '8px', background: details.pnl_adj > 0 ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)', borderRadius: '8px', border: `1px solid ${details.pnl_adj > 0 ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)'}` }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', color: details.pnl_adj > 0 ? 'var(--accent-green)' : 'var(--accent-red)', fontWeight: 600 }}>
+                                    <span>• 수익/손절 관리 가산:</span> <strong>{details.pnl_adj > 0 ? '+' : ''}{details.pnl_adj}점</strong>
+                                </div>
+                                <div style={{ fontSize: '0.7rem', color: '#ccc', marginTop: '4px' }}>
+                                    {details.pnl_adj > 0
+                                        ? "현재 수익권으로, 수익 보존 및 차익 실현 가능성이 높아 점수가 가산되었습니다."
+                                        : "현재 손실권으로, 리스크 관리 및 손절 권고 기준에 따라 점수가 가산되었습니다."}
+                                </div>
                             </div>
                         )}
+
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: details.market < 0 ? 'var(--accent-red)' : '#e2e8f0' }}>
+                            <span>• 시장 환경 및 방어 (Market):</span> <strong>{details.market || 0}점</strong>
+                        </div>
                     </div>
                 </div>
+
 
 
                 {/* Comprehensive Analysis */}

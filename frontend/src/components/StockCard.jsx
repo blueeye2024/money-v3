@@ -129,28 +129,50 @@ const StockCard = ({ data }) => {
 
             {/* Detailed Score Breakdown */}
             <div style={{ marginTop: '0.8rem', paddingTop: '0.8rem', borderTop: '1px dashed rgba(255,255,255,0.1)' }}>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>📊 Score Breakdown</div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '4px', fontSize: '0.75rem', color: '#ccc' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                        <span style={{ color: 'var(--accent-gold)' }}>기본: {details.base}</span>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.6rem', display: 'flex', justifyContent: 'space-between' }}>
+                    <span>📊 세부 점수 분석</span>
+                    <span style={{ fontSize: '0.7rem', opacity: 0.6 }}>Max Score 100</span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '6px', fontSize: '0.75rem', color: '#ccc' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', background: 'rgba(0,0,0,0.15)', padding: '6px', borderRadius: '6px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--accent-gold)', fontWeight: 600 }}>
+                            <span>기술적 기본 점수:</span> <strong>{details.base}점</strong>
+                        </div>
                         {details.base_details && (
-                            <div style={{ paddingLeft: '4px', borderLeft: '1px solid #444', fontSize: '0.7rem', color: '#aaa' }}>
-                                <div>M:{details.base_details.main} C:{details.base_details.confluence > 0 ? '+' : ''}{details.base_details.confluence}</div>
-                                <div>A:+{details.base_details.rsi + details.base_details.macd + details.base_details.bb + details.base_details.cross}</div>
+                            <div style={{ fontSize: '0.7rem', color: '#999', paddingLeft: '4px' }}>
+                                - 추세/{details.base_details.confluence > 0 ? '정합' : '역행'}({details.base_details.confluence}), 지표가산(+{details.base_details.rsi + details.base_details.macd + details.base_details.bb + details.base_details.cross})
+                                <br />
+                                <span style={{ fontStyle: 'italic', fontSize: '0.65rem' }}>* 모든 단기/중기 지표 일치 시 기본 80점 부여</span>
                             </div>
                         )}
                     </div>
-                    <div>추세: {details.trend}</div>
-                    <div>신뢰: {details.reliability}</div>
-                    <div>돌파: {details.breakout}</div>
-                    <div>시장: {details.market || 0}</div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                        <div style={{ background: 'rgba(255,255,255,0.03)', padding: '4px 8px', borderRadius: '4px' }}>추세가산: <strong>+{details.trend}</strong></div>
+                        <div style={{ background: 'rgba(255,255,255,0.03)', padding: '4px 8px', borderRadius: '4px' }}>신뢰/돌파: <strong>+{(details.reliability || 0) + (details.breakout || 0)}</strong></div>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 4px' }}>
+                        <span>시장환경 및 방어:</span> <strong style={{ color: details.market < 0 ? 'var(--accent-red)' : 'inherit' }}>{details.market || 0}점</strong>
+                    </div>
+
                     {details.pnl_adj !== 0 && (
-                        <div style={{ color: details.pnl_adj > 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>
-                            PnL: {details.pnl_adj > 0 ? '+' : ''}{details.pnl_adj}
+                        <div style={{
+                            padding: '6px',
+                            borderRadius: '6px',
+                            background: details.pnl_adj > 0 ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                            border: `1px solid ${details.pnl_adj > 0 ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)'}`,
+                            color: details.pnl_adj > 0 ? 'var(--accent-green)' : 'var(--accent-red)'
+                        }}>
+                            <strong>수익/손절 보정: {details.pnl_adj > 0 ? '+' : ''}{details.pnl_adj}점</strong>
+                            <div style={{ fontSize: '0.65rem', marginTop: '2px', color: '#bbb' }}>
+                                {details.pnl_adj > 0 ? "수익 보존 권고 가산" : "리스크 관리(손절) 권고 가산"}
+                            </div>
                         </div>
                     )}
                 </div>
             </div>
+
 
         </div>
     );
