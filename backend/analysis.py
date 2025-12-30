@@ -170,14 +170,6 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0, is_held=Fals
         last_sma30 = df_30['SMA30'].iloc[-1]
         last_5m_sma10 = df_5['SMA10'].iloc[-1]
         last_5m_sma30 = df_5['SMA30'].iloc[-1]
-        
-        if ticker == 'UFO':
-            print(f"DEBUG UFO Data Check:")
-            print(f"Price: {current_price}, SMA10: {last_sma10}, SMA30: {last_sma30}")
-            try:
-                print(df_30.tail(3)[['Close', 'SMA10', 'SMA30']])
-            except:
-                pass
         is_box, box_high, box_low, box_pct = check_box_pattern(df_30)
         
         position = "관망"
@@ -211,6 +203,10 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0, is_held=Fals
             else:
                  recent_cross_type = 'dead'
             signal_time = df_30.index[-1]
+
+        # Force Signal Time to Latest Data Time (User Request)
+        # Display the timestamp of the latest data point to show current status time
+        signal_time = df_30.index[-1]
 
         # Validation
         valid = True
