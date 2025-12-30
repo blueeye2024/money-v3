@@ -477,7 +477,7 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0, is_held=Fals
             "position": position,
             "last_cross_type": recent_cross_type,
             "signal_time": formatted_signal_time,
-            "signal_time_raw": signal_time if signal_time != "" else None, 
+            "signal_time_raw": str(signal_time) if signal_time != "" else None, 
             "is_box": bool(is_box),
             "box_high": float(box_high) if pd.notnull(box_high) else 0.0,
             "box_low": float(box_low) if pd.notnull(box_low) else 0.0,

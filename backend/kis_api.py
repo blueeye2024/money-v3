@@ -32,17 +32,21 @@ class KisApi:
             "appkey": self.APP_KEY,
             "appsecret": self.APP_SECRET
         }
-        res = requests.post(f"{self.URL_BASE}/oauth2/tokenP", headers=headers, data=json.dumps(body))
-        if res.status_code == 200:
-            data = res.json()
-            token = data['access_token']
-            expiry = data['access_token_token_expired'] # Format: 2022-08-30 18:00:00
-            
-            with open(self.token_file, 'w') as f:
-                json.dump({'access_token': token, 'expiry': expiry}, f)
-            return token
-        else:
-            print(f"Token Issue Failed: {res.text}")
+        try:
+            res = requests.post(f"{self.URL_BASE}/oauth2/tokenP", headers=headers, data=json.dumps(body), timeout=5)
+            if res.status_code == 200:
+                data = res.json()
+                token = data['access_token']
+                expiry = data['access_token_token_expired'] # Format: 2022-08-30 18:00:00
+                
+                with open(self.token_file, 'w') as f:
+                    json.dump({'access_token': token, 'expiry': expiry}, f)
+                return token
+            else:
+                print(f"Token Issue Failed: {res.text}")
+                return None
+        except Exception as e:
+            print(f"Token Issue Exception: {e}")
             return None
 
     def get_price(self, symbol, exchange=None):
