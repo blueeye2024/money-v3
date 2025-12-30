@@ -352,24 +352,47 @@ def delete_transaction(id):
         conn.close()
 
 def get_current_holdings():
-    """Returns a list of tickers currently held (Net Qty > 0)"""
+    """Returns a dict of tickers currently held {ticker: {'qty': qty, 'avg_price': price}} using FIFO logic"""
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
-            sql = """
-            SELECT ticker, 
-                   SUM(CASE WHEN trade_type = 'BUY' THEN qty 
-                            WHEN trade_type = 'SELL' THEN -qty 
-                            ELSE 0 END) as net_qty
-            FROM journal_transactions
-            GROUP BY ticker
-            HAVING net_qty > 0
-            """
+            # Fetch all txs sorted
+            sql = "SELECT ticker, trade_type, qty, price, trade_date FROM journal_transactions ORDER BY trade_date ASC"
             cursor.execute(sql)
-            results = cursor.fetchall()
-            return [row['ticker'] for row in results]
+            txs = cursor.fetchall()
+            
+            # FIFO Calculation
+            queues = {} # ticker -> list of {price, qty}
+            
+            for tx in txs:
+                t = tx['ticker']
+                if t not in queues: queues[t] = []
+                
+                if tx['trade_type'] == 'BUY':
+                    queues[t].append({'p': float(tx['price']), 'q': int(tx['qty'])})
+                else:
+                    sell_q = int(tx['qty'])
+                    while sell_q > 0 and queues[t]:
+                        batch = queues[t][0]
+                        if batch['q'] > sell_q:
+                            batch['q'] -= sell_q
+                            sell_q = 0
+                        else:
+                            sell_q -= batch['q']
+                            queues[t].pop(0)
+
+            # Summarize results
+            result = {}
+            for t, q_list in queues.items():
+                total_q = sum(item['q'] for item in q_list)
+                if total_q > 0:
+                    total_cost = sum(item['q'] * item['p'] for item in q_list)
+                    avg = total_cost / total_q
+                    result[t] = {'qty': total_q, 'avg_price': avg}
+            
+            return result
     except Exception as e:
         print(f"Error fetching holdings: {e}")
-        return []
+        return {}
     finally:
         conn.close()

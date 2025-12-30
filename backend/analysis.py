@@ -407,9 +407,18 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0, is_held=Fals
             elif is_sell_signal and current_price <= prev_12h_low:
                 breakout_score = 10
 
+        # PnL Score Adjustment (User Request: -5 points per 1% PnL if Sell Signal & Held)
+        pnl_adjustment = 0
+        pnl_pct_held = 0.0
+        if is_held and is_sell_signal and ticker in holdings and isinstance(holdings[ticker], dict):
+             avg_price = holdings[ticker].get('avg_price', 0)
+             if avg_price > 0:
+                 pnl_pct_held = ((current_price - avg_price) / avg_price) * 100
+                 pnl_adjustment = pnl_pct_held * 5
+
         # 6. Total Score
-        final_score = base_score + trend_score + reliability_score + breakout_score + market_score
-        final_score = max(0, min(100, final_score))
+        final_score = base_score + trend_score + reliability_score + breakout_score + market_score - pnl_adjustment
+        final_score = int(max(0, min(100, final_score)))
         
         score_details = {
             "base": base_score,
@@ -417,6 +426,7 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0, is_held=Fals
             "reliability": reliability_score,
             "breakout": breakout_score,
             "market": market_score,
+            "pnl_adj": -round(pnl_adjustment, 1),
             "total": final_score
         }
 
@@ -442,6 +452,11 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0, is_held=Fals
         elif change_pct < -3.0: stock_news.append(f"급락세 연출: 전일 대비 {abs(change_pct):.1f}% 하락")
         
         # Limit to 2
+        if pnl_adjustment != 0:
+            direction = "차감" if pnl_adjustment > 0 else "가점"
+            stock_news.append(f"보유 수익률({pnl_pct_held:.1f}%) 반영: 점수 {abs(int(pnl_adjustment))}점 {direction}")
+            
+        # Limit to 2 (Prioritize PnL msg if exists)
         stock_news = stock_news[:2]
         if not stock_news: stock_news.append("특이사항 없음: 일반적인 시장 흐름 추종")
 

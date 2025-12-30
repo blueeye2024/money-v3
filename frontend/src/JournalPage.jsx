@@ -204,17 +204,20 @@ const JournalPage = () => {
     const sortedTickers = Object.keys(groupedTransactions).sort();
 
     // Calc Total Invested (Holdings)
-    const totalInvested = useMemo(() => {
-        if (!transactions || transactions.length === 0) return 0;
-        let total = 0;
+    // Calc Total Invested & Unrealized (Live)
+    const { totalInvested, totalUnrealized } = useMemo(() => {
+        if (!transactions || transactions.length === 0) return { totalInvested: 0, totalUnrealized: 0 };
+        let invested = 0;
+        let unrealized = 0;
+
         const grouped = transactions.reduce((acc, tx) => {
             if (!acc[tx.ticker]) acc[tx.ticker] = [];
             acc[tx.ticker].push(tx);
             return acc;
         }, {});
 
-        Object.values(grouped).forEach(txs => {
-            // FIFO Calc
+        Object.keys(grouped).forEach(ticker => {
+            const txs = grouped[ticker];
             const queue = [];
             [...txs].sort((a, b) => new Date(a.trade_date) - new Date(b.trade_date)).forEach(tx => {
                 if (tx.trade_type === 'BUY') queue.push({ price: tx.price, qty: tx.qty });
@@ -227,10 +230,20 @@ const JournalPage = () => {
                     }
                 }
             });
-            total += queue.reduce((acc, q) => acc + (q.price * q.qty), 0);
+
+            const netQty = queue.reduce((acc, q) => acc + q.qty, 0);
+            const cost = queue.reduce((acc, q) => acc + (q.price * q.qty), 0);
+            const curPrice = prices[ticker] || 0;
+
+            if (netQty > 0) {
+                invested += cost;
+                if (curPrice > 0) {
+                    unrealized += ((netQty * curPrice) - cost);
+                }
+            }
         });
-        return total;
-    }, [transactions]);
+        return { totalInvested: invested, totalUnrealized: unrealized };
+    }, [transactions, prices]);
 
     const getPeriod = (txList) => {
         if (!txList || txList.length === 0) return '-';
@@ -313,13 +326,13 @@ const JournalPage = () => {
                     {/* Top Summary Card */}
                     <div className="glass-panel" style={{ padding: '2rem', marginBottom: '2rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'linear-gradient(135deg, rgba(30,41,59,0.7) 0%, rgba(15,23,42,0.8) 100%)' }}>
                         <div>
-                            <h3 style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Total Realized Profit</h3>
+                            <h3 style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Total Open Profit (Live)</h3>
                             <div style={{ display: 'flex', alignItems: 'baseline', gap: '1rem' }}>
-                                <div style={{ fontSize: '2.5rem', fontWeight: '800', color: getTotalProfit() >= 0 ? 'var(--accent-red)' : 'var(--accent-blue)' }}>
-                                    ${getTotalProfit().toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                <div style={{ fontSize: '2.5rem', fontWeight: '800', color: totalUnrealized >= 0 ? 'var(--accent-red)' : 'var(--accent-blue)' }}>
+                                    {totalUnrealized > 0 ? '+' : ''}${totalUnrealized.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                 </div>
                                 <div style={{ fontSize: '1.2rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
-                                    (약 {(getTotalProfit() * exchangeRate).toLocaleString(undefined, { maximumFractionDigits: 0 })}원)
+                                    (약 {(totalUnrealized * exchangeRate).toLocaleString(undefined, { maximumFractionDigits: 0 })}원)
                                 </div>
                             </div>
                         </div>

@@ -74,7 +74,7 @@ const StockCard = ({ data }) => {
                     fontSize: '0.9rem',
                     display: 'inline-flex', alignItems: 'center', gap: '8px'
                 }}>
-                    <span>{position}</span>
+                    <span>{position.includes('매수') ? position.replace('🔵', '🔴') : position}</span>
                     <span style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.8)', fontWeight: 'normal' }}>
                         Score: <strong>{score}</strong> ({getScoreInterpretation(score, position)})
                     </span>

@@ -36,9 +36,26 @@ function Dashboard() {
     };
 
     if (loading) return (
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh', flexDirection: 'column' }}>
-            <div className="animate-pulse-slow" style={{ fontSize: '2rem', fontWeight: 700 }}>청안 시스템 가동 중...</div>
-            <div style={{ color: 'var(--text-secondary)', marginTop: '1rem' }}>데이터를 수집하고 분석하고 있습니다.</div>
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh', flexDirection: 'column' }}>
+            <div style={{ fontSize: '2.5rem', fontWeight: 800, marginBottom: '2rem', background: 'linear-gradient(to right, #60a5fa, #34d399)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                CHEONGAN SYSTEM
+            </div>
+            <div style={{ width: '320px', height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '10px', overflow: 'hidden', position: 'relative' }}>
+                <div style={{
+                    position: 'absolute', top: 0, left: 0, height: '100%', width: '100px',
+                    background: 'linear-gradient(90deg, transparent, #60a5fa, #34d399, transparent)',
+                    animation: 'loading-slide 1.5s infinite linear'
+                }} />
+            </div>
+            <div style={{ color: 'var(--text-secondary)', marginTop: '1.5rem', fontSize: '0.85rem', letterSpacing: '2px', textTransform: 'uppercase' }}>
+                Initializing & Analyzing Market Data...
+            </div>
+            <style>{`
+                @keyframes loading-slide {
+                    0% { transform: translateX(-100%); }
+                    100% { transform: translateX(320px); }
+                }
+            `}</style>
         </div>
     );
 
