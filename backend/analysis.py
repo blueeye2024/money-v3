@@ -319,10 +319,16 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0, is_held=Fals
         # Format Time
         formatted_signal_time = "-"
         if signal_time != "":
-            st_utc = signal_time.replace(tzinfo=pytz.utc)
-            st_kst = st_utc.astimezone(pytz.timezone('Asia/Seoul'))
-            st_est = st_utc.astimezone(pytz.timezone('US/Eastern'))
-            formatted_signal_time = f"{st_kst.strftime('%m/%d %H:%M')} KST"
+            try:
+                # Handle Timezone
+                st_target = signal_time
+                if st_target.tzinfo is None:
+                    st_target = st_target.replace(tzinfo=pytz.utc)
+                
+                st_kst = st_target.astimezone(pytz.timezone('Asia/Seoul'))
+                formatted_signal_time = f"{st_kst.strftime('%m/%d %H:%M')} KST"
+            except:
+                formatted_signal_time = str(signal_time)
 
         macd = float(df_30['MACD'].iloc[-1])
         signal = float(df_30['Signal'].iloc[-1])
