@@ -1,5 +1,13 @@
 import React from 'react';
 
+const getScoreInterpretation = (score, position) => {
+    const isSell = position.includes('매도') || position.includes('하단');
+    if (score >= 80) return isSell ? "🚨 긴급 매도" : "✨ 강력 매수";
+    if (score >= 70) return isSell ? "📉 매도" : "🟢 매수";
+    if (score >= 50) return isSell ? "⚠ 경계" : "🟡 관망";
+    return isSell ? "📉 조정" : "⚪ 관망";
+};
+
 const SummaryTable = ({ stocks }) => {
     return (
         <div className="glass-panel" style={{ padding: '2rem', marginTop: '2rem', overflowX: 'auto' }}>
@@ -54,8 +62,11 @@ const SummaryTable = ({ stocks }) => {
                                             stock.position.includes('돌파') ? '🚀 돌파' : '-'}
                                     </td>
                                     <td style={{ textAlign: 'center', padding: '1rem' }}>
-                                        <div style={{ padding: '4px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', fontSize: '0.9rem', fontWeight: 'bold', color: 'var(--accent-gold)' }}>
-                                            {stock.score}
+                                        <div style={{ padding: '4px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', textAlign: 'center' }}>
+                                            <div style={{ fontSize: '0.9rem', fontWeight: 'bold', color: 'var(--accent-gold)' }}>{stock.score}</div>
+                                            <div style={{ fontSize: '0.65rem', color: '#aaa', marginTop: '2px', whiteSpace: 'nowrap' }}>
+                                                {getScoreInterpretation(stock.score, stock.position)}
+                                            </div>
                                         </div>
                                     </td>
                                     <td style={{ textAlign: 'left', padding: '1rem', fontSize: '0.8rem', color: '#aaa' }}>

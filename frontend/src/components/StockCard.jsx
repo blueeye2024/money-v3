@@ -1,5 +1,13 @@
 import React from 'react';
 
+const getScoreInterpretation = (score, position) => {
+    const isSell = position.includes('매도') || position.includes('하단');
+    if (score >= 80) return isSell ? "🚨 긴급 매도" : "✨ 강력 매수";
+    if (score >= 70) return isSell ? "📉 매도" : "🟢 매수";
+    if (score >= 50) return isSell ? "⚠ 경계/약세" : "🟡 관망/중립";
+    return isSell ? "📉 단기 조정" : "⚪ 관망";
+};
+
 const StockCard = ({ data }) => {
     const {
         ticker, current_price, change_pct, position,
@@ -60,9 +68,12 @@ const StockCard = ({ data }) => {
                 background: 'rgba(255,255,255,0.1)',
                 padding: '0.2rem 0.6rem', borderRadius: '12px',
                 fontSize: '0.8rem', border: '1px solid rgba(255,255,255,0.2)',
-                color: score > 70 ? 'var(--accent-gold)' : 'var(--text-secondary)'
+                color: score > 70 ? 'var(--accent-gold)' : 'var(--text-secondary)',
+                textAlign: 'center',
+                minWidth: '80px'
             }}>
-                Score: {score}
+                <div style={{ fontWeight: 'bold' }}>Score: {score}</div>
+                <div style={{ fontSize: '0.65rem', marginTop: '2px', whiteSpace: 'nowrap' }}>{getScoreInterpretation(score, position)}</div>
             </div>
 
             <div style={{ marginBottom: '1rem' }}>

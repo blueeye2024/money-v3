@@ -1,5 +1,13 @@
 import React, { useMemo } from 'react';
 
+const getScoreInterpretation = (score, position) => {
+    const isSell = position.includes('매도') || position.includes('하단');
+    if (score >= 80) return isSell ? "🚨 긴급 매도" : "✨ 강력 매수";
+    if (score >= 70) return isSell ? "📉 매도" : "🟢 매수";
+    if (score >= 50) return isSell ? "⚠ 경계/약세" : "🟡 관망/중립";
+    return isSell ? "📉 단기 조정" : "⚪ 관망";
+};
+
 const FinalSignal = ({ stocks }) => {
     const topPicks = useMemo(() => {
         if (!stocks || stocks.length === 0) return [];
@@ -137,6 +145,9 @@ const PortfolioCard = ({ stock, rank }) => {
                     <div style={{ paddingRight: '1rem', borderRight: '1px solid rgba(255,255,255,0.2)', textAlign: 'center', minWidth: '80px' }}>
                         <div style={{ fontSize: '0.8rem', color: '#aaa', marginBottom: '0.2rem' }}>총점</div>
                         <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--accent-gold)' }}>{stock.score}</div>
+                        <div style={{ fontSize: '0.7rem', color: stock.score >= 80 ? 'var(--accent-gold)' : '#ccc', marginTop: '0.2rem', whiteSpace: 'nowrap' }}>
+                            {getScoreInterpretation(stock.score, stock.position)}
+                        </div>
                     </div>
 
                     {/* Right: Criteria List */}
