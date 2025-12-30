@@ -214,17 +214,17 @@ def health_check():
 def api_get_signals(ticker: str = None, start_date: str = None, end_date: str = None, limit: int = 30):
     return get_signals(ticker, start_date, end_date, limit)
 
+@app.delete("/api/signals/all")
+def api_delete_all_signals():
+    if delete_all_signals():
+        return {"status": "success"}
+    return {"status": "error"}
+
 @app.delete("/api/signals/{id}")
 def api_delete_signal(id: int):
     # Import delete_signal from db
     from db import delete_signal
     if delete_signal(id):
-        return {"status": "success"}
-    return {"status": "error"}
-
-@app.delete("/api/signals/all")
-def api_delete_all_signals():
-    if delete_all_signals():
         return {"status": "success"}
     return {"status": "error"}
 
@@ -272,15 +272,15 @@ def api_test_sms(data: SMSPostModel):
 def api_get_sms_history():
     return get_sms_logs(limit=30)
 
-@app.delete("/api/sms/history/{id}")
-def api_delete_sms_log(id: int):
-    if delete_sms_log(id):
-        return {"status": "success"}
-    return {"status": "error"}
-
 @app.delete("/api/sms/history/all")
 def api_delete_all_sms_logs():
     if delete_all_sms_logs():
+        return {"status": "success"}
+    return {"status": "error"}
+
+@app.delete("/api/sms/history/{id}")
+def api_delete_sms_log(id: int):
+    if delete_sms_log(id):
         return {"status": "success"}
     return {"status": "error"}
 
