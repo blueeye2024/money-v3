@@ -141,9 +141,9 @@ const PortfolioCard = ({ stock, rank }) => {
 
             <div style={{ background: 'rgba(0,0,0,0.3)', padding: '1.2rem', borderRadius: '12px', textAlign: 'left', border: '1px solid rgba(255,255,255,0.1)' }}>
                 <h3 style={{ fontSize: '0.9rem', marginBottom: '0.8rem', color: 'var(--accent-gold)', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '0.5rem' }}>
-                    📊 점수 기준 (Score Criteria)
+                    📊 상세 점수 분석 (Score Details)
                 </h3>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
                     {/* Left: Total Score */}
                     <div style={{ paddingRight: '1rem', borderRight: '1px solid rgba(255,255,255,0.2)', textAlign: 'center', minWidth: '80px' }}>
                         <div style={{ fontSize: '0.8rem', color: '#aaa', marginBottom: '0.2rem' }}>총점</div>
@@ -154,28 +154,32 @@ const PortfolioCard = ({ stock, rank }) => {
                     </div>
 
                     {/* Right: Criteria List */}
-                    <div style={{ fontSize: '0.9rem', color: '#e2e8f0', display: 'flex', flexDirection: 'column', gap: '0.2rem', flex: 1 }}>
+                    <div style={{ fontSize: '0.9rem', color: '#e2e8f0', display: 'flex', flexDirection: 'column', gap: '0.3rem', flex: 1 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <span>• 기본 점수:</span> <strong>{details.base || 0}</strong>
+                            <span>• 기본 (Base):</span> <strong>{details.base || 0}</strong>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <span>• 추세 점수:</span> <strong>{details.trend || 0}</strong>
+                            <span>• 추세 (Trend):</span> <strong>{details.trend || 0}</strong>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <span>• 신뢰도:</span> <strong>{details.reliability || 0}</strong>
+                            <span>• 신뢰 (Reliability):</span> <strong>{details.reliability || 0}</strong>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <span>• 돌파/시장:</span> <strong>{(details.breakout || 0) + (details.market || 0)}</strong>
+                            <span>• 시장 (Market):</span> <strong>{(details.breakout || 0) + (details.market || 0)}</strong>
                         </div>
                     </div>
                 </div>
 
-                {/* Brief Reason */}
-                {stock.news_items && stock.news_items.length > 0 && (
-                    <div style={{ marginTop: '1rem', paddingTop: '0.8rem', borderTop: '1px solid rgba(255,255,255,0.1)', fontSize: '0.9rem', color: '#ddd', textAlign: 'left' }}>
-                        💡 <span style={{ fontStyle: 'italic' }}>"{stock.news_items[0]}"</span>
-                    </div>
-                )}
+                {/* Comprehensive Analysis */}
+                <div style={{ paddingTop: '0.8rem', borderTop: '1px solid rgba(255,255,255,0.1)', fontSize: '0.9rem', color: '#ddd', textAlign: 'left' }}>
+                    <div style={{ fontWeight: 'bold', marginBottom: '0.3rem', color: 'var(--text-primary)' }}>📝 종합 분석 내용</div>
+                    <div style={{ marginBottom: '0.5rem', lineHeight: '1.4' }}>{stock.position_desc}</div>
+                    {stock.news_items && stock.news_items.length > 0 && (
+                        <div style={{ fontStyle: 'italic', color: '#aaa', fontSize: '0.85rem' }}>
+                            관련 이슈: "{stock.news_items[0]}"
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );

@@ -62,19 +62,7 @@ const StockCard = ({ data }) => {
                 </div>
             </div>
 
-            {/* Score Badge */}
-            <div style={{
-                position: 'absolute', top: '1rem', right: '40%',
-                background: 'rgba(255,255,255,0.1)',
-                padding: '0.2rem 0.6rem', borderRadius: '12px',
-                fontSize: '0.8rem', border: '1px solid rgba(255,255,255,0.2)',
-                color: score > 70 ? 'var(--accent-gold)' : 'var(--text-secondary)',
-                textAlign: 'center',
-                minWidth: '80px'
-            }}>
-                <div style={{ fontWeight: 'bold' }}>Score: {score}</div>
-                <div style={{ fontSize: '0.65rem', marginTop: '2px', whiteSpace: 'nowrap' }}>{getScoreInterpretation(score, position)}</div>
-            </div>
+
 
             <div style={{ marginBottom: '1rem' }}>
                 <span style={{
@@ -83,9 +71,13 @@ const StockCard = ({ data }) => {
                     backgroundColor: isBuy ? 'rgba(248, 113, 113, 0.2)' : isSell ? 'rgba(59, 130, 246, 0.2)' : 'rgba(148, 163, 184, 0.2)',
                     color: isBuy ? 'var(--accent-red)' : isSell ? 'var(--accent-blue)' : 'var(--text-secondary)',
                     fontWeight: 600,
-                    fontSize: '0.9rem'
+                    fontSize: '0.9rem',
+                    display: 'inline-flex', alignItems: 'center', gap: '8px'
                 }}>
-                    {position}
+                    <span>{position}</span>
+                    <span style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.8)', fontWeight: 'normal' }}>
+                        Score: <strong>{score}</strong> ({getScoreInterpretation(score, position)})
+                    </span>
                 </span>
             </div>
 
@@ -120,9 +112,8 @@ const StockCard = ({ data }) => {
                 </div>
             </div>
 
-            {/* Technical News */}
             <div style={{ marginTop: '0.8rem', paddingTop: '0.8rem', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>📰 관련 기술적 뉴스</div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>📰 관련 종목 뉴스</div>
                 <ul style={{ margin: 0, paddingLeft: '1rem', fontSize: '0.8rem', color: '#e2e8f0', lineHeight: 1.4 }}>
                     {data.news_items && data.news_items.length > 0 ? (
                         data.news_items.map((item, i) => (

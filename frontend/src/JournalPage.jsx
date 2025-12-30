@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
 
 const JournalPage = () => {
@@ -203,6 +203,35 @@ const JournalPage = () => {
     // Sort Groups (maybe by name or recent activity) - currently just keys
     const sortedTickers = Object.keys(groupedTransactions).sort();
 
+    // Calc Total Invested (Holdings)
+    const totalInvested = useMemo(() => {
+        if (!transactions || transactions.length === 0) return 0;
+        let total = 0;
+        const grouped = transactions.reduce((acc, tx) => {
+            if (!acc[tx.ticker]) acc[tx.ticker] = [];
+            acc[tx.ticker].push(tx);
+            return acc;
+        }, {});
+
+        Object.values(grouped).forEach(txs => {
+            // FIFO Calc
+            const queue = [];
+            [...txs].sort((a, b) => new Date(a.trade_date) - new Date(b.trade_date)).forEach(tx => {
+                if (tx.trade_type === 'BUY') queue.push({ price: tx.price, qty: tx.qty });
+                else {
+                    let sell = tx.qty;
+                    while (sell > 0 && queue.length) {
+                        let batch = queue[0];
+                        if (batch.qty > sell) { batch.qty -= sell; sell = 0; }
+                        else { sell -= batch.qty; queue.shift(); }
+                    }
+                }
+            });
+            total += queue.reduce((acc, q) => acc + (q.price * q.qty), 0);
+        });
+        return total;
+    }, [transactions]);
+
     const getPeriod = (txList) => {
         if (!txList || txList.length === 0) return '-';
         const dates = txList.map(t => new Date(t.trade_date).getTime());
@@ -292,6 +321,13 @@ const JournalPage = () => {
                                 <div style={{ fontSize: '1.2rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
                                     (약 {(getTotalProfit() * exchangeRate).toLocaleString(undefined, { maximumFractionDigits: 0 })}원)
                                 </div>
+                            </div>
+                        </div>
+                        <div style={{ textAlign: 'right', paddingRight: '2rem', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
+                            <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '0.5rem' }}>총 매입금액 (Invested)</div>
+                            <div style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>${totalInvested.toLocaleString()}</div>
+                            <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                                ≈ {(totalInvested * exchangeRate).toLocaleString(undefined, { maximumFractionDigits: 0 })}원
                             </div>
                         </div>
                         <div style={{ textAlign: 'right' }}>
