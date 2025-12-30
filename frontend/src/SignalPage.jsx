@@ -149,6 +149,36 @@ const SignalPage = () => {
         }
     };
 
+    const deleteAllSignals = async () => {
+        if (!confirm('정말로 모든 신호 내역을 삭제하시겠습니까?')) return;
+        try {
+            await axios.delete(`${API_BASE_URL}/api/signals/all`);
+            fetchSignals();
+        } catch (err) {
+            console.error("Delete All Signals Error", err);
+        }
+    };
+
+    const deleteSmsLog = async (id) => {
+        if (!confirm('이 기록을 삭제하시겠습니까?')) return;
+        try {
+            await axios.delete(`${API_BASE_URL}/api/sms/history/${id}`);
+            fetchSmsLogs();
+        } catch (err) {
+            console.error("Delete SMS Log Error", err);
+        }
+    };
+
+    const deleteAllSmsLogs = async () => {
+        if (!confirm('정말로 모든 문자 발송 기록을 삭제하시겠습니까?')) return;
+        try {
+            await axios.delete(`${API_BASE_URL}/api/sms/history/all`);
+            fetchSmsLogs();
+        } catch (err) {
+            console.error("Delete All SMS Logs Error", err);
+        }
+    };
+
     return (
         <div style={{ maxWidth: '1200px', margin: '0 auto', paddingBottom: '6rem', fontFamily: "'Inter', sans-serif" }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '2rem', marginTop: '2rem' }}>
@@ -205,8 +235,9 @@ const SignalPage = () => {
 
             {/* Signals Table */}
             <div className="glass-panel" style={{ padding: '0', overflow: 'hidden', marginBottom: '4rem' }}>
-                <div style={{ padding: '1.5rem 2rem', background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                <div style={{ padding: '1.5rem 2rem', background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <h3 style={{ margin: 0 }}>📊 신호 발생 히스토리</h3>
+                    <button onClick={deleteAllSignals} style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--accent-red)', border: '1px solid var(--accent-red)', borderRadius: '6px', padding: '0.4rem 0.8rem', cursor: 'pointer' }}>전체 삭제</button>
                 </div>
                 <div style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '600px' }}>
@@ -254,7 +285,7 @@ const SignalPage = () => {
                                         <td style={{ padding: '1.2rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                             <div>
                                                 <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{sig.position_desc}</div>
-                                                {sig.is_sent && <span style={{ fontSize: '0.75rem', color: 'var(--accent-green)' }}>● 자동문자발송됨</span>}
+                                                {Boolean(sig.is_sent) && <span style={{ fontSize: '0.75rem', color: 'var(--accent-green)' }}>● 자동문자발송됨</span>}
                                             </div>
                                             <button onClick={() => deleteSignal(sig.id)} className="btn-icon" style={{ color: 'var(--accent-red)', marginLeft: '1rem' }}>🗑️</button>
                                         </td>
@@ -268,8 +299,9 @@ const SignalPage = () => {
 
             {/* SMS Logs Section */}
             <div className="glass-panel" style={{ padding: '0', overflow: 'hidden' }}>
-                <div style={{ padding: '1.5rem 2rem', background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                <div style={{ padding: '1.5rem 2rem', background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <h3 style={{ margin: 0 }}>📱 문자 발송 히스토리 (최근 30개)</h3>
+                    <button onClick={deleteAllSmsLogs} style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--accent-red)', border: '1px solid var(--accent-red)', borderRadius: '6px', padding: '0.4rem 0.8rem', cursor: 'pointer' }}>전체 삭제</button>
                 </div>
                 <div style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '600px' }}>
@@ -289,10 +321,15 @@ const SignalPage = () => {
                             ) : (
                                 smsLogs.map(log => (
                                     <tr key={log.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                                        <td style={{ padding: '1rem 2rem', fontSize: '0.85rem' }}>{new Date(log.created_at).toLocaleString()}</td>
+                                        <td style={{ padding: '1rem 2rem', fontSize: '0.85rem' }}>
+                                            {new Date(log.created_at).toLocaleString('ko-KR', {
+                                                year: 'numeric', month: '2-digit', day: '2-digit',
+                                                hour: '2-digit', minute: '2-digit', hour12: false
+                                            }).replace(/\. /g, '-').replace('.', '')}
+                                        </td>
                                         <td style={{ padding: '1rem', fontSize: '0.9rem' }}>{log.receiver}</td>
                                         <td style={{ padding: '1rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{log.message}</td>
-                                        <td style={{ padding: '1rem 2rem', textAlign: 'center' }}>
+                                        <td style={{ padding: '1rem 2rem', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
                                             <span style={{
                                                 padding: '2px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold',
                                                 background: log.status === 'Success' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
@@ -300,6 +337,7 @@ const SignalPage = () => {
                                             }}>
                                                 {log.status}
                                             </span>
+                                            <button onClick={() => deleteSmsLog(log.id)} style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer' }}>🗑️</button>
                                         </td>
                                     </tr>
                                 ))

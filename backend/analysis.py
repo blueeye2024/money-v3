@@ -114,7 +114,7 @@ def check_box_pattern(df_30m):
     is_box = diff_pct <= 5.0
     return is_box, high_max, low_min, diff_pct
 
-def analyze_ticker(ticker, df_30mRaw, df_5mRaw):
+def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0):
     # Retrieve Stock Name
     stock_name = TICKER_NAMES.get(ticker, ticker)
     
@@ -240,46 +240,81 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw):
         if recent_cross_type == 'dead': news_prob -= 20
         news_prob = max(0, min(100, news_prob))
         
-        # === Scoring Logic (User Request) ===
-        # Criteria:
-        # If News exists: Tech 60%, Aux 20%, News 20%
-        # If News missing: Tech 70%, Aux 30%
-        # We assume News is missing for now.
+        # === Advanced Scoring Logic (User Request) ===
+        # Initialize scores
+        base_score = 0
+        trend_score = 0
+        reliability_score = 0
+        breakout_score = 0
+        market_score = market_vol_score
         
-        # 1. Cheongan Tech Score (0-100)
-        tech_score = 50
-        if "진입" in position or "돌파" in position:
-            tech_score = 100 # Strongest
-        elif "유지" in position:
-            tech_score = 70 # Good
+        is_buy_signal = "매수" in position or "상단" in position
+        is_sell_signal = "매도" in position or "하단" in position
+        is_observing = "관망" in position
+
+        if not is_observing:
+            base_score = 50 # Base for valid signal
+            
+            # Find Signal Price
+            sig_price = current_price
+            bars_since = 0
+            if cross_idx < 0:
+                try:
+                    sig_price = df_30['Close'].iloc[cross_idx]
+                    bars_since = abs(cross_idx)
+                except:
+                    pass
+            
+            price_diff_pct = ((current_price - sig_price) / sig_price) * 100
+            
+            # 1. Trend Score (+10)
+            # If Buy and Price > Signal Price
+            if is_buy_signal and current_price > sig_price:
+                trend_score = 10
+            # If Sell and Price < Signal Price
+            elif is_sell_signal and current_price < sig_price:
+                trend_score = 10
+
+            # 2. Reliability Score (+5 / -5)
+            # Buy: > 2% benefit (+5), > 6% overheated (-5)
+            if is_buy_signal:
+                if price_diff_pct >= 2.0: reliability_score += 5
+                if price_diff_pct >= 6.0: reliability_score -= 5
+            # Sell: < -2% benefit (+5), < -6% overheated (-5)
+            elif is_sell_signal:
+                if price_diff_pct <= -2.0: reliability_score += 5
+                if price_diff_pct <= -6.0: reliability_score -= 5
+
+            # 3. Breakout Score (+10)
+            # > 3 bars passed AND broke 12h High/Low
+            # 12 hours = 24 bars (30m)
+            if bars_since >= 3:
+                recent_12h = df_30.iloc[-24:]
+                if is_buy_signal:
+                    prev_12h_high = recent_12h['High'].iloc[:-1].max()
+                    if current_price > prev_12h_high:
+                        breakout_score = 10
+                elif is_sell_signal:
+                    prev_12h_low = recent_12h['Low'].iloc[:-1].min()
+                    if current_price < prev_12h_low:
+                        breakout_score = 10
         else:
-            tech_score = 30 # Neutral/Watch
+            base_score = 20 # Observing base score
 
-        # 2. Aux Charts Score (0-100)
-        # RSI (0-100), MACD
-        aux_score = 50
-        # RSI: 40-60 is stable entry zone (100), 30-70 acceptable (70), else low (30)
-        if 40 <= rsi_val <= 60: aux_score = 100
-        elif 30 <= rsi_val <= 70: aux_score = 70
-        else: aux_score = 30
+        final_score = base_score + trend_score + reliability_score + breakout_score + market_score
+        final_score = max(0, min(100, final_score)) # Cap at 100
         
-        # MACD Bonus
-        if recent_cross_type == 'gold' and macd > signal: aux_score = min(100, aux_score + 20)
-        if recent_cross_type == 'dead' and macd < signal: aux_score = min(100, aux_score + 20)
+        score_details = {
+            "base": base_score,
+            "trend": trend_score,
+            "reliability": reliability_score,
+            "breakout": breakout_score,
+            "market": market_score,
+            "total": final_score
+        }
 
-        # 3. Final weighted score (News missing -> 70% Tech, 30% Aux)
-        final_score = (tech_score * 0.7) + (aux_score * 0.3)
-        final_score = round(final_score)
-        
         # Change Pct (Attempt to use previous day close)
-        # Resample to daily to find prev close? 
-        # approximate using last close - 1 day idx?
-        # For now, keep current logic but ensure it's robust.
-        # User asked for "Previous Regular Market Close".
-        # 30m data might have pre-post.
-        
         prev_close = df_30['Close'].iloc[-2] # Default fallback
-        # Try to find last bar of previous day
         try:
             current_date = df_30.index[-1].date()
             prev_day_data = df_30[df_30.index.date < current_date]
@@ -289,6 +324,20 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw):
         except:
              pass
 
+        # Generate Stock Specific Mock News (Technical)
+        stock_news = []
+        if recent_cross_type == 'gold': stock_news.append("골든크로스 발생: 강력한 매수 신호 포착")
+        if recent_cross_type == 'dead': stock_news.append("데드크로스 발생: 매도 압력 증가")
+        if is_box: stock_news.append("박스권 횡보 지속: 돌파 여부 모니터링 필요")
+        if rsi_val > 70: stock_news.append("RSI 과매수권 진입: 차익 실현 매물 주의")
+        elif rsi_val < 30: stock_news.append("RSI 과매도권 진입: 기술적 반등 기대감 유효")
+        if change_pct > 3.0: stock_news.append(f"급등세 연출: 전일 대비 {change_pct:.1f}% 상승")
+        elif change_pct < -3.0: stock_news.append(f"급락세 연출: 전일 대비 {abs(change_pct):.1f}% 하락")
+        
+        # Limit to 2
+        stock_news = stock_news[:2]
+        if not stock_news: stock_news.append("특이사항 없음: 일반적인 시장 흐름 추종")
+
         result = {
             "ticker": ticker,
             "name": stock_name,
@@ -297,7 +346,7 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw):
             "position": position,
             "last_cross_type": recent_cross_type,
             "signal_time": formatted_signal_time,
-            "signal_time_raw": signal_time if signal_time != "" else None, # Add Raw Time
+            "signal_time_raw": signal_time if signal_time != "" else None, 
             "is_box": bool(is_box),
             "box_high": float(box_high) if pd.notnull(box_high) else 0.0,
             "box_low": float(box_low) if pd.notnull(box_low) else 0.0,
@@ -305,7 +354,9 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw):
             "macd": float(macd) if pd.notnull(macd) else None,
             "macd_sig": float(signal) if pd.notnull(signal) else None,
             "prob_up": float(news_prob),
-            "score": final_score
+            "score": final_score,
+            "score_details": score_details,
+            "news_items": stock_news
         }
         return result
     
@@ -334,10 +385,25 @@ def generate_market_insight(results, market_data):
 
 def run_analysis():
     data_30m, data_5m, market_data, _ = fetch_data()
+    # Calculate Market Volatility Score
+    market_vol_score = -5 # Default: Neutral/Flat (Bad? User says High Volatility is Good (+5))
+    # User: "보합/혼조세면 -5점 , 강한 상승장이나 하락장이면 +5점"
+    
+    if "S&P500" in market_data:
+        df_spy = market_data["S&P500"]
+        if not df_spy.empty and len(df_spy) >= 2:
+            # Check 1 day change
+            curr = df_spy['Close'].iloc[-1]
+            prev = df_spy['Close'].iloc[-2]
+            spy_change = ((curr - prev) / prev) * 100
+            
+            if abs(spy_change) >= 0.5:
+                market_vol_score = 5
+    
     results = []
     
     for ticker in TARGET_TICKERS:
-        res = analyze_ticker(ticker, data_30m, data_5m)
+        res = analyze_ticker(ticker, data_30m, data_5m, market_vol_score)
         results.append(res)
         
     # Get Market Indicators Data with Change %

@@ -50,8 +50,21 @@ function Dashboard() {
         </div>
     );
 
+    // Sorting Logic: Buy Group -> Sell Group -> Others -> Score DESC
+    const sortedStocks = data?.stocks ? [...data.stocks].sort((a, b) => {
+        const getGroup = (stock) => {
+            if (stock.position.includes('매수')) return 1;
+            if (stock.position.includes('매도')) return 2;
+            return 3;
+        };
+        const groupA = getGroup(a);
+        const groupB = getGroup(b);
+        if (groupA !== groupB) return groupA - groupB;
+        return (b.score || 0) - (a.score || 0);
+    }) : [];
+
     return (
-        <div>
+        <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
             <header>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div style={{ fontSize: '0.9rem', color: 'var(--accent-blue)', fontWeight: 600, letterSpacing: '1px' }}>
@@ -68,71 +81,66 @@ function Dashboard() {
 
             {data?.stocks && <FinalSignal stocks={data.stocks} />}
 
+            {data?.market && <MarketInsight market={{ ...data.market, insight: data.insight }} />}
+
             <h2 style={{ fontSize: '1.5rem', marginBottom: '1.5rem', marginTop: '3rem' }}>종목별 상세 분석</h2>
             <div className="grid-cards">
-                {data?.stocks?.map(stock => (
+                {sortedStocks.map(stock => (
                     <StockCard key={stock.ticker} data={stock} />
                 ))}
             </div>
 
             {data?.stocks && <SummaryTable stocks={data.stocks} />}
-
-            {data?.market && <MarketInsight market={{ ...data.market, insight: data.insight }} />}
-
-            <footer style={{ textAlign: 'center', marginTop: '4rem', color: 'var(--text-secondary)', fontSize: '0.8rem', paddingBottom: '2rem' }}>
-                © 2024 Cheong-An Financial Intelligence. All rights reserved. v{packageJson.version}
-            </footer>
         </div>
     );
 }
 
-function NavBar() {
+function Layout() {
     const location = useLocation();
 
-    const linkStyle = (path) => ({
-        padding: '0.8rem 1.5rem',
-        textDecoration: 'none',
-        color: location.pathname === path ? 'white' : 'var(--text-secondary)',
-        fontWeight: location.pathname === path ? 'bold' : 'normal',
-        borderBottom: location.pathname === path ? '2px solid var(--accent-blue)' : '2px solid transparent',
-        transition: 'all 0.3s',
-        whiteSpace: 'nowrap'
-    });
-
     return (
-        <nav style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            padding: '1rem 0',
-            marginBottom: '2rem',
-            borderBottom: '1px solid var(--glass-border)',
-            flexWrap: 'wrap',
-            gap: '1rem'
-        }}>
-            <div style={{ display: 'flex', gap: '1rem', overflowX: 'auto' }}>
-                <Link to="/" style={linkStyle('/')}>대시보드</Link>
-                <Link to="/signals" style={linkStyle('/signals')}>신호 포착</Link>
-                <Link to="/journal" style={linkStyle('/journal')}>매매 일지</Link>
-            </div>
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', padding: '0.5rem' }}>
-                Ver {packageJson.version}
-            </div>
-        </nav>
+        <div className="app-container">
+            <nav style={{
+                display: 'flex', justifyContent: 'center', gap: '2rem', padding: '1.5rem 0',
+                borderBottom: '1px solid var(--glass-border)', marginBottom: '2rem'
+            }}>
+                <Link to="/" style={{
+                    color: location.pathname === '/' ? 'var(--accent-blue)' : 'var(--text-primary)',
+                    fontWeight: location.pathname === '/' ? 'bold' : 'normal',
+                    fontSize: '1.1rem'
+                }}>대시보드</Link>
+                <Link to="/signals" style={{
+                    color: location.pathname === '/signals' ? 'var(--accent-blue)' : 'var(--text-primary)',
+                    fontWeight: location.pathname === '/signals' ? 'bold' : 'normal',
+                    fontSize: '1.1rem'
+                }}>신호 포착</Link>
+                <Link to="/journal" style={{
+                    color: location.pathname === '/journal' ? 'var(--accent-blue)' : 'var(--text-primary)',
+                    fontWeight: location.pathname === '/journal' ? 'bold' : 'normal',
+                    fontSize: '1.1rem'
+                }}>매매 일지</Link>
+            </nav>
+
+            <Routes>
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/signals" element={<SignalPage />} />
+                <Route path="/journal" element={<JournalPage />} />
+            </Routes>
+
+            <footer style={{
+                textAlign: 'center', padding: '2rem', marginTop: '4rem',
+                borderTop: '1px solid var(--glass-border)', color: 'var(--text-secondary)'
+            }}>
+                <p>&copy; 2024 Cheongan FinTech. All rights reserved. Ver {packageJson.version}</p>
+            </footer>
+        </div>
     );
 }
 
 function App() {
     return (
         <Router>
-            <div className="container">
-                <NavBar />
-                <Routes>
-                    <Route path="/" element={<Dashboard />} />
-                    <Route path="/signals" element={<SignalPage />} />
-                    <Route path="/journal" element={<JournalPage />} />
-                </Routes>
-            </div>
+            <Layout />
         </Router>
     );
 }

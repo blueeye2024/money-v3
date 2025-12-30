@@ -137,10 +137,10 @@ def get_signals(ticker=None, start_date=None, end_date=None, limit=30):
                 params.append(ticker)
             if start_date:
                 sql += " AND signal_time >= %s"
-                params.append(start_date)
+                params.append(f"{start_date} 00:00:00")
             if end_date:
                 sql += " AND signal_time <= %s"
-                params.append(end_date)
+                params.append(f"{end_date} 23:59:59")
             
             sql += " ORDER BY signal_time DESC LIMIT %s"
             params.append(int(limit))
@@ -155,6 +155,16 @@ def delete_signal(id):
     try:
         with conn.cursor() as cursor:
             cursor.execute("DELETE FROM signal_history WHERE id=%s", (id,))
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+def delete_all_signals():
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("DELETE FROM signal_history")
         conn.commit()
         return True
     finally:
@@ -179,6 +189,26 @@ def get_sms_logs(limit=30):
             sql = "SELECT * FROM sms_logs ORDER BY created_at DESC LIMIT %s"
             cursor.execute(sql, (int(limit),))
             return cursor.fetchall()
+    finally:
+        conn.close()
+
+def delete_sms_log(id):
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("DELETE FROM sms_logs WHERE id=%s", (id,))
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+def delete_all_sms_logs():
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("DELETE FROM sms_logs")
+        conn.commit()
+        return True
     finally:
         conn.close()
 

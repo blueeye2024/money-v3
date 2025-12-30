@@ -4,12 +4,14 @@ const StockCard = ({ data }) => {
     const {
         ticker, current_price, change_pct, position,
         signal_time, is_box, box_high, box_low,
-        rsi, macd, macd_sig, prob_up
+        rsi, macd, macd_sig, score, score_details
     } = data;
 
     const isBuy = position?.includes('매수') || position?.includes('상단');
     const isSell = position?.includes('매도') || position?.includes('하단');
-    const isObserving = !isBuy && !isSell;
+
+    // Safety check for score details
+    const details = score_details || { base: 0, trend: 0, reliability: 0, breakout: 0 };
 
     if (data.error) {
         return (
@@ -21,15 +23,19 @@ const StockCard = ({ data }) => {
     }
 
     let borderColor = 'var(--glass-border)';
-    if (isBuy) borderColor = 'var(--accent-red)';
-    if (isSell) borderColor = 'var(--accent-blue)';
+    let cardBg = 'rgba(255, 255, 255, 0.03)';
 
-    if (position?.includes('진입')) {
-        // Stronger border for entry
+    if (isBuy) {
+        borderColor = 'var(--accent-red)';
+        cardBg = 'linear-gradient(135deg, rgba(40, 20, 20, 0.4), rgba(15, 10, 10, 0.6))';
+    }
+    if (isSell) {
+        borderColor = 'var(--accent-blue)';
+        cardBg = 'linear-gradient(135deg, rgba(20, 30, 50, 0.4), rgba(10, 15, 30, 0.6))';
     }
 
     return (
-        <div className="glass-panel" style={{ padding: '1.5rem', borderLeft: `4px solid ${borderColor}` }}>
+        <div className="glass-panel" style={{ padding: '1.5rem', borderLeft: `4px solid ${borderColor}`, position: 'relative', background: cardBg }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                 <div>
                     <h3 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700 }}>{ticker}</h3>
@@ -38,14 +44,25 @@ const StockCard = ({ data }) => {
                     </div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>${current_price?.toFixed(2)}</div>
+                    <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>${current_price ? current_price.toFixed(2) : '0.00'}</div>
                     <div style={{
                         color: change_pct >= 0 ? 'var(--accent-green)' : 'var(--accent-red)',
                         fontSize: '0.9rem'
                     }}>
-                        {change_pct >= 0 ? '+' : ''}{change_pct?.toFixed(2)}%
+                        {change_pct >= 0 ? '+' : ''}{change_pct ? change_pct.toFixed(2) : '0.00'}%
                     </div>
                 </div>
+            </div>
+
+            {/* Score Badge */}
+            <div style={{
+                position: 'absolute', top: '1rem', right: '40%',
+                background: 'rgba(255,255,255,0.1)',
+                padding: '0.2rem 0.6rem', borderRadius: '12px',
+                fontSize: '0.8rem', border: '1px solid rgba(255,255,255,0.2)',
+                color: score > 70 ? 'var(--accent-gold)' : 'var(--text-secondary)'
+            }}>
+                Score: {score}
             </div>
 
             <div style={{ marginBottom: '1rem' }}>
@@ -89,6 +106,32 @@ const StockCard = ({ data }) => {
                     <span style={{ color: macd > macd_sig ? 'var(--accent-green)' : 'var(--accent-red)' }}>
                         {macd?.toFixed(3)}
                     </span>
+                </div>
+            </div>
+
+            {/* Technical News */}
+            <div style={{ marginTop: '0.8rem', paddingTop: '0.8rem', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>📰 관련 기술적 뉴스</div>
+                <ul style={{ margin: 0, paddingLeft: '1rem', fontSize: '0.8rem', color: '#e2e8f0', lineHeight: 1.4 }}>
+                    {data.news_items && data.news_items.length > 0 ? (
+                        data.news_items.map((item, i) => (
+                            <li key={i}>{item}</li>
+                        ))
+                    ) : (
+                        <li>특이사항 없음</li>
+                    )}
+                </ul>
+            </div>
+
+            {/* Detailed Score Breakdown */}
+            <div style={{ marginTop: '0.8rem', paddingTop: '0.8rem', borderTop: '1px dashed rgba(255,255,255,0.1)' }}>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>📊 Score Breakdown</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#ccc' }}>
+                    <span>기본: {details.base}</span>
+                    <span>추세: {details.trend}</span>
+                    <span>신뢰: {details.reliability}</span>
+                    <span>돌파: {details.breakout}</span>
+                    <span>시장: {details.market || 0}</span>
                 </div>
             </div>
         </div>
