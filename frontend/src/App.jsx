@@ -70,8 +70,9 @@ function Dashboard() {
     // Sorting Logic: Buy Group -> Sell Group -> Others -> Score DESC
     const sortedStocks = data?.stocks ? [...data.stocks].sort((a, b) => {
         const getGroup = (stock) => {
-            if (stock.position.includes('매수')) return 1;
-            if (stock.position.includes('매도')) return 2;
+            const pos = stock.position || '';
+            if (pos.includes('매수')) return 1;
+            if (pos.includes('매도')) return 2;
             return 3;
         };
         const groupA = getGroup(a);

@@ -1,7 +1,8 @@
 import React from 'react';
 
 const getScoreInterpretation = (score, position) => {
-    const isSell = position.includes('매도') || position.includes('하단');
+    const pos = position || '';
+    const isSell = pos.includes('매도') || pos.includes('하단');
     if (score >= 80) return isSell ? "🚨 긴급 매도" : "✨ 강력 매수";
     if (score >= 70) return isSell ? "📉 매도" : "🟢 매수";
     if (score >= 50) return isSell ? "⚠ 경계" : "🟡 관망";
@@ -30,8 +31,9 @@ const SummaryTable = ({ stocks }) => {
                     {stocks
                         .sort((a, b) => (b.score || 0) - (a.score || 0))
                         .map(stock => {
-                            const isBuy = stock.position.includes('매수') || stock.position.includes('상단');
-                            const isSell = stock.position.includes('매도') || stock.position.includes('하단');
+                            const pos = stock.position || '';
+                            const isBuy = pos.includes('매수') || pos.includes('상단');
+                            const isSell = pos.includes('매도') || pos.includes('하단');
                             const details = stock.score_details || { base: 0, trend: 0, reliability: 0, breakout: 0, market: 0 };
 
                             return (
@@ -54,7 +56,7 @@ const SummaryTable = ({ stocks }) => {
                                             background: isBuy ? 'rgba(248, 113, 113, 0.1)' : isSell ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
                                             color: isBuy ? 'var(--accent-red)' : isSell ? 'var(--accent-blue)' : 'var(--text-secondary)'
                                         }}>
-                                            {isBuy ? '매수' : isSell ? '매도' : stock.position.includes('미보유') ? '미보유' : '관망'}
+                                            {isBuy ? '매수' : isSell ? '매도' : pos.includes('미보유') ? '미보유' : '관망'}
                                         </span>
                                     </td>
                                     <td style={{ textAlign: 'center', padding: '1rem' }}>
