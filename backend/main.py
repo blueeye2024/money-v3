@@ -72,8 +72,12 @@ def monitor_signals():
                 print(f"Skipping {ticker} due to analysis error: {res.get('error', 'No position data')}")
                 continue
 
-            # Check for specific signals to alert
-            if "진입" in res['position'] or "돌파" in res['position']:
+            # Check for specific signals to alert (User Request: Score >= 70 OR Entry/Breakout)
+            score = res.get('score', 0)
+            is_entry_or_breakout = "진입" in res['position'] or "돌파" in res['position']
+            is_high_score_signal = ("매수" in res['position'] or "매도" in res['position']) and score >= 70
+            
+            if is_entry_or_breakout or is_high_score_signal:
                 # Get last saved signal to avoid duplicates
                 last_sig = check_last_signal(ticker)
                 

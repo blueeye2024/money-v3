@@ -309,7 +309,19 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0, is_held=Fals
                  # Buy, Buy Hold, Observe -> Maintain Buy
                  position = "🔵 매수 유지"
         else:
-            # Not Holding
+            # Check for specific signals to alert (User Request: Score >= 70 OR Entry/Breakout)
+            # Note: 'score' is calculated later, so we need to use a placeholder or re-evaluate.
+            # For now, we'll use the tech_position and assume score will be checked externally for alerts.
+            # The instruction seems to imply this logic is for the *final* `position` string,
+            # which is then used to derive `is_buy_signal` etc. for scoring.
+            # However, the `score` itself is not available here yet.
+            # Let's interpret the instruction as: if not held, only show "매수" if it's a strong technical buy signal (entry/breakout).
+            # Otherwise, if it's a sell or observe, show "미보유".
+            # The score >= 70 part is likely for the `monitor_signals` function in `main.py`
+            # where the full `res` dictionary (including score) is available.
+            
+            # For `analyze_ticker`, we stick to the original logic for `position` based on `tech_position`
+            # and let the `monitor_signals` function handle the score-based filtering.
             if "매수" in tech_position or "상단" in tech_position:
                  position = "🚨 매수"
             else:
@@ -366,6 +378,10 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0, is_held=Fals
             
             if t5 == 'UP':
                 # 5분 봉이 상승 추세(골드크로스)이면 매도 점수 -10점 추가 감점
+                market_score -= 10
+
+            if is_box:
+                # 박스권 횡보 중이면 매도 점수 -10점 추가 감점 (불필요 매도 방지)
                 market_score -= 10
         
         # 1. Base Score
