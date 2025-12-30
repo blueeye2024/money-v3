@@ -347,21 +347,32 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0, is_held=Fals
         trend_score = 0
         reliability_score = 0
         breakout_score = 0
+        # 5. Market / Defensive Sell Score
         market_score = market_vol_score
 
         is_buy_signal = "매수" in position or "상단" in position
         is_sell_signal = "매도" in position or "하단" in position
-        is_observing = "관망" in position
+        is_observing = "관망" in position or "미보유" in position
+        
+        # Multi-Timeframe Logic
+        t30 = 'UP' if last_sma10 > last_sma30 else 'DOWN'
+        t5 = 'UP' if last_5m_sma10 > last_5m_sma30 else 'DOWN'
 
+        # [User Request] 박스권 불필요 매도 방지 로직
+        if is_sell_signal:
+            if market_vol_score < 5: 
+                # 시장이 보합(Volatility < 0.5%)이면 매도 점수 -10점 감점
+                market_score = -10
+            
+            if t5 == 'UP':
+                # 5분 봉이 상승 추세(골드크로스)이면 매도 점수 -10점 추가 감점
+                market_score -= 10
+        
         # 1. Base Score
         if not is_observing:
             base_score = 50
         else:
             base_score = 20
-        
-        # Multi-Timeframe Logic
-        t30 = 'UP' if last_sma10 > last_sma30 else 'DOWN'
-        t5 = 'UP' if last_5m_sma10 > last_5m_sma30 else 'DOWN'
         
         if t30 == t5:
             base_score += 10
