@@ -471,16 +471,17 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0, is_held=Fals
             "total": final_score
         }
 
-        # Change Pct (Attempt to use previous day close)
-        prev_close = df_30['Close'].iloc[-2] # Default fallback
-        try:
-            current_date = df_30.index[-1].date()
-            prev_day_data = df_30[df_30.index.date < current_date]
-            if not prev_day_data.empty:
-                prev_close = prev_day_data['Close'].iloc[-1]
-                change_pct = ((current_price - prev_close) / prev_close) * 100
-        except:
-             pass
+        # Change Pct (Only use historical fallback if Real-time info is missing)
+        if not real_time_info:
+            prev_close = df_30['Close'].iloc[-2] # Default fallback
+            try:
+                current_date = df_30.index[-1].date()
+                prev_day_data = df_30[df_30.index.date < current_date]
+                if not prev_day_data.empty:
+                    prev_close = prev_day_data['Close'].iloc[-1]
+                    change_pct = ((current_price - prev_close) / prev_close) * 100
+            except:
+                 pass
 
         # Generate Stock Specific Mock News (Technical)
         stock_news = []
