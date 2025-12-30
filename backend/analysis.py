@@ -507,9 +507,9 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0, is_held=Fals
         elif change_pct < -3.0: stock_news.append(f"급락세 연출: 전일 대비 {abs(change_pct):.1f}% 하락")
         
         # Limit to 2
-        if pnl_adjustment != 0:
-            direction = "차감" if pnl_adjustment > 0 else "가점"
-            stock_news.append(f"보유 수익률({pnl_pct_held:.1f}%) 반영: 점수 {abs(int(pnl_adjustment))}점 {direction}")
+        if pnl_impact != 0:
+            direction = "가점" if pnl_impact > 0 else "감점"
+            stock_news.append(f"보유 수익률 반영: 점수 {abs(int(pnl_impact))}점 {direction}")
             
         # Limit to 2 (Prioritize PnL msg if exists)
         stock_news = stock_news[:2]
