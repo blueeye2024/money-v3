@@ -240,69 +240,86 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0):
         if recent_cross_type == 'dead': news_prob -= 20
         news_prob = max(0, min(100, news_prob))
         
-        # === Advanced Scoring Logic (User Request) ===
-        # Initialize scores
+        # === Cheongan Scoring Engine (User Rules) ===
         base_score = 0
         trend_score = 0
         reliability_score = 0
         breakout_score = 0
         market_score = market_vol_score
-        
+
         is_buy_signal = "매수" in position or "상단" in position
         is_sell_signal = "매도" in position or "하단" in position
         is_observing = "관망" in position
 
+        # 1. Base Score
         if not is_observing:
-            base_score = 50 # Base for valid signal
-            
-            # Find Signal Price
-            sig_price = current_price
-            bars_since = 0
-            if cross_idx < 0:
-                try:
-                    sig_price = df_30['Close'].iloc[cross_idx]
-                    bars_since = abs(cross_idx)
-                except:
-                    pass
-            
-            price_diff_pct = ((current_price - sig_price) / sig_price) * 100
-            
-            # 1. Trend Score (+10)
-            # If Buy and Price > Signal Price
-            if is_buy_signal and current_price > sig_price:
-                trend_score = 10
-            # If Sell and Price < Signal Price
-            elif is_sell_signal and current_price < sig_price:
-                trend_score = 10
-
-            # 2. Reliability Score (+5 / -5)
-            # Buy: > 2% benefit (+5), > 6% overheated (-5)
-            if is_buy_signal:
-                if price_diff_pct >= 2.0: reliability_score += 5
-                if price_diff_pct >= 6.0: reliability_score -= 5
-            # Sell: < -2% benefit (+5), < -6% overheated (-5)
-            elif is_sell_signal:
-                if price_diff_pct <= -2.0: reliability_score += 5
-                if price_diff_pct <= -6.0: reliability_score -= 5
-
-            # 3. Breakout Score (+10)
-            # > 3 bars passed AND broke 12h High/Low
-            # 12 hours = 24 bars (30m)
-            if bars_since >= 3:
-                recent_12h = df_30.iloc[-24:]
-                if is_buy_signal:
-                    prev_12h_high = recent_12h['High'].iloc[:-1].max()
-                    if current_price > prev_12h_high:
-                        breakout_score = 10
-                elif is_sell_signal:
-                    prev_12h_low = recent_12h['Low'].iloc[:-1].min()
-                    if current_price < prev_12h_low:
-                        breakout_score = 10
+            base_score = 50
         else:
-            base_score = 20 # Observing base score
+            base_score = 20
+        
+        # Multi-Timeframe Logic
+        t30 = 'UP' if last_sma10 > last_sma30 else 'DOWN'
+        t5 = 'UP' if last_5m_sma10 > last_5m_sma30 else 'DOWN'
+        
+        if t30 == t5:
+            base_score += 10
+        else:
+            base_score -= 10
+        
+        base_score = max(0, base_score)
 
+        # Signal Price & Bars
+        sig_price = current_price
+        bars_since = 0
+        if cross_idx < 0: # Valid cross index
+            try:
+                sig_price = df_30['Close'].iloc[cross_idx]
+                bars_since = abs(cross_idx)
+            except:
+                pass
+        
+        # 2. Trend Score
+        if is_buy_signal and current_price > sig_price:
+            trend_score = 10
+        elif is_sell_signal and current_price < sig_price:
+            trend_score = 10
+        
+        # 3. Reliability Score
+        if not is_observing and bars_since >= 2:
+            raw_diff_pct = ((current_price - sig_price) / sig_price) * 100
+            profit_rate = raw_diff_pct if is_buy_signal else -raw_diff_pct
+            
+            if 1.5 <= profit_rate < 3.0:
+                reliability_score = 5
+            elif 3.0 <= profit_rate < 5.0:
+                reliability_score = 8
+            elif profit_rate >= 5.0:
+                reliability_score = 5
+            elif -5.0 < profit_rate <= -3.0:
+                reliability_score = -3
+            elif profit_rate <= -5.0:
+                reliability_score = -7
+
+        # 4. Breakout Score
+        if not is_observing and bars_since >= 2:
+            recent_12h = df_30.iloc[-24:]
+            # Exclude current bar to find previous high/low? 
+            # Logic: "CurrentPrice >= High12h". 
+            # Usually High12h implies the specific level established previously. 
+            # Let's use max of recent 24 bars including current or excluding?
+            # User said: "CurrentPrice >= High12h". If current breaks the High of the Window.
+            # I will compare Current Close against Max High of previous 23 bars.
+            prev_12h_high = recent_12h['High'].iloc[:-1].max()
+            prev_12h_low = recent_12h['Low'].iloc[:-1].min()
+            
+            if is_buy_signal and current_price >= prev_12h_high:
+                breakout_score = 10
+            elif is_sell_signal and current_price <= prev_12h_low:
+                breakout_score = 10
+
+        # 6. Total Score
         final_score = base_score + trend_score + reliability_score + breakout_score + market_score
-        final_score = max(0, min(100, final_score)) # Cap at 100
+        final_score = max(0, min(100, final_score))
         
         score_details = {
             "base": base_score,
