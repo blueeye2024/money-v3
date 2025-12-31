@@ -1186,20 +1186,29 @@ def run_analysis(held_tickers=[]):
                 group_name = strategy_info.get('group_name', '')
                 final_target = base_target
                 
-                # Regime Adjustment
-                if regime == 'Bear':
-                    if ticker == 'SOXS': 
-                         final_target = 20 # Active Hedge
-                    elif '헷지' in group_name or '안정성' in group_name:
-                         final_target = base_target
-                    else:
-                         final_target = int(base_target * 0.3) # Heavy cut on Growth
-                elif regime == 'Bull':
-                    final_target = base_target
-                    if ticker == 'SOXS': final_target = 0
-                else: # Sideways
-                    if ticker == 'SOXS': final_target = 5
-                    else: final_target = int(base_target * 0.8)
+                # Cheongan 2.1: Advanced Regime Portfolio Matrix (User Definied)
+                t_map = {
+                    'Bull': {
+                        'SOXL': 25, 'UPRO': 25, 'IONQ': 10, 'TSLA': 10, 
+                        'GOOGL': 10, 'UFO': 5, 'AAAU': 5, 'TMF': 5, 'SOXS': 0
+                    },
+                    'Sideways': {
+                        'AAAU': 20, 'GOOGL': 20, 'UPRO': 15, 'TMF': 15, 
+                        'UFO': 5, 'TSLA': 5, 'SOXL': 0, 'IONQ': 0, 'SOXS': 0
+                    },
+                    'Bear': {
+                        'SOXS': 35, 'TMF': 30, 'AAAU': 20,
+                        'SOXL': 0, 'UPRO': 0, 'IONQ': 0, 'TSLA': 0, 'GOOGL': 0, 'UFO': 0
+                    }
+                }
+                
+                if ticker in t_map.get(regime, {}):
+                    final_target = t_map[regime][ticker]
+                else:
+                    # Fallback for unlisted tickers (e.g. XPON)
+                    if regime == 'Bear': final_target = 0
+                    elif regime == 'Sideways': final_target = 0
+                    else: final_target = base_target
     
                 res['target_ratio'] = final_target
                 res['base_target'] = base_target
