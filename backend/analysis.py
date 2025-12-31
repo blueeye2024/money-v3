@@ -1028,16 +1028,78 @@ def run_analysis(held_tickers=[]):
 
     
     # Fetch Real-time Prices (KIS)
-    from kis_api import kis_client
-    from concurrent.futures import ThreadPoolExecutor
+    except Exception as e:
+        print(f"DB Update Market Status Error: {e}")
 
+    return {"regime": regime, "details": regime_details}
+
+
+def run_analysis(held_tickers=[]):
+    print("Starting Analysis Run...")
+    
+    # -------------------------------------------------------------
+    # DYNAMIC TICKER FETCHING (Cheongan 2.0)
+    # -------------------------------------------------------------
+    from db import get_managed_stocks, get_total_capital, get_current_holdings, update_market_status
+    from kis_api import KISClient, EXCHANGE_MAP_KIS # Moved KIS imports here for clarity
+    
+    managed_stocks_list = get_managed_stocks()
+    if not managed_stocks_list:
+        print("Warning: No managed stocks found in DB. Using default fallback.")
+        db_tickers = []
+    else:
+        db_tickers = [s['ticker'] for s in managed_stocks_list]
+        print(f"Loaded {len(db_tickers)} tickers from DB: {db_tickers}")
+
+    # Use DB tickers if available, else fallback to hardcoded
+    # Assuming TARGET_TICKERS is defined globally or imported from another module
+    # If not, it needs to be defined here as a default.
+    # For this context, let's assume TARGET_TICKERS is available from the original file's scope.
+    global TARGET_TICKERS, TICKER_NAMES # Declare global if they are defined outside this function
+    
+    active_tickers = db_tickers if db_tickers else TARGET_TICKERS
+    
+    # Update TICKER_NAMES map if possible (optional but good for display)
+    if managed_stocks_list:
+        for s in managed_stocks_list:
+            TICKER_NAMES[s['ticker']] = s['name']
+            
+    # -------------------------------------------------------------
+
+    # 1. Fetch Market Data
+    # Only fetch active tickers + indicators
+    # The original fetch_data() returned data_30m, data_5m, market_data, regime_daily
+    # We need to ensure fetch_market_data returns what's needed for determine_market_regime
+    # Let's adjust fetch_data to return all necessary components.
+    # Assuming fetch_data() is modified to take active_tickers and return all necessary dataframes.
+    data_30m, data_5m, market_data, regime_daily_data = fetch_data(active_tickers) # Assuming fetch_data now takes tickers
+    
+    # 2. Determine Market Regime
+    # Pass the relevant daily data for regime analysis.
+    # Assuming regime_daily_data contains UPRO, GSPC, IXIC daily data.
+    regime_info = determine_market_regime(regime_daily_data, data_30m)
+    
+    # Calculate Market Volatility Score (using market_data from fetch_data)
+    market_vol_score = -5 # Default: Neutral/Flat (Bad? User says High Volatility is Good (+5))
+    # User: "보합/혼조세면 -5점 , 강한 상승장이나 하락장이면 +5점"
+    
+    if "S&P500" in market_data:
+        df_spy = market_data["S&P500"]
+        if not df_spy.empty and len(df_spy) >= 2:
+            # Check 1 day change
+            curr = df_spy['Close'].iloc[-1]
+            prev = df_spy['Close'].iloc[-2]
+            spy_change = ((curr - prev) / prev) * 100
+            
+            if abs(spy_change) >= 0.5:
+                market_vol_score = 5
+    
+    # 3. Analyze Tickers (Real-time KIS Price Fetching)
     real_time_map = {}
     try:
-        # Exchange Mapping for Speed (Avoid 3 sequential requests)
-        EXCHANGE_MAP_KIS = {
-            "TSLA": "NAS", "GOOGL": "NAS", "AMZU": "NAS", "UFO": "NAS", "NVDA": "NAS", "AAPL": "NAS", "MSFT": "NAS", "AMZN": "NAS", "NFLX": "NAS", "AMD": "NAS", "INTC": "NAS", "QQQ": "NAS", "TQQQ": "NAS", "SQQQ": "NAS", "XPON": "NAS",
-            "SOXL": "NYS", "SOXS": "NYS", "UPRO": "NYS", "AAAU": "NYS", "IONQ": "NYS", "SPY": "NYS", "IVV": "NYS", "VOO": "NYS"
-        }
+        kis_client = KISClient()
+        if not kis_client.access_token:
+            kis_client._auth()
         
         def fetch_wrapper(t):
              excd = EXCHANGE_MAP_KIS.get(t)
@@ -1045,7 +1107,7 @@ def run_analysis(held_tickers=[]):
         
         # Increase workers slightly as we have fast timeout
         with ThreadPoolExecutor(max_workers=8) as executor:
-             futs = [executor.submit(fetch_wrapper, t) for t in TARGET_TICKERS]
+             futs = [executor.submit(fetch_wrapper, t) for t in active_tickers]
              # Add total timeout for entire batch to prevent hanging
              # We rely on individual timeouts (1.5s)
              for f in futs:
@@ -1059,12 +1121,14 @@ def run_analysis(held_tickers=[]):
 
     results = []
     
-    # Fetch Managed Stocks Strategies
-    from db import get_managed_stocks
-    managed_stocks = get_managed_stocks() # List of dicts
-    managed_map = {s['ticker']: s for s in managed_stocks}
+    # Fetch Managed Stocks Strategies (Already fetched above but need map)
+    managed_map = {s['ticker']: s for s in managed_stocks_list}
     
-    for ticker in TARGET_TICKERS:
+    # Fetch Holdings & Capital
+    held_tickers = get_current_holdings()
+    total_capital = get_total_capital()
+
+    for ticker in active_tickers:
         is_held = ticker in held_tickers
         rt_info = real_time_map.get(ticker)
         
