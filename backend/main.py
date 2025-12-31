@@ -250,6 +250,17 @@ def api_delete_signal(id: int):
         return {"status": "success"}
     return {"status": "error"}
 
+@app.get("/api/managed-stocks")
+def get_managed_stocks_api():
+    try:
+        from db import get_managed_stocks
+        stocks = get_managed_stocks()
+        return stocks
+    except Exception as e:
+        print(f"Error fetching managed stocks: {e}")
+        return []
+    return {"status": "error"}
+
 @app.get("/api/dashboard-settings")
 def api_get_dashboard_settings():
     return get_ticker_settings()

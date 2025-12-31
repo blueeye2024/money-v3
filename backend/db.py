@@ -85,6 +85,87 @@ def init_db():
             """
             cursor.execute(sql_ticker_settings)
             
+            # 6. Cheongan 2.0: Market Status (Regime)
+            sql_market = """
+            CREATE TABLE IF NOT EXISTS market_status (
+                date DATE PRIMARY KEY,
+                regime VARCHAR(20), -- Bull, Bear, Sideways
+                details JSON,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )
+            """
+            cursor.execute(sql_market)
+
+            # 7. Cheongan 2.0: Managed Stocks (Core Trading List)
+            sql_managed = """
+            CREATE TABLE IF NOT EXISTS managed_stocks (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                ticker VARCHAR(10) UNIQUE,
+                group_name VARCHAR(50), -- Group 1, 2, 3
+                buy_strategy TEXT,
+                sell_strategy TEXT,
+                target_ratio INT DEFAULT 0, -- Portfolio weight %
+                scenario_yield DECIMAL(5,2) DEFAULT 0.0,
+                real_yield DECIMAL(5,2) DEFAULT 0.0,
+                win_rate DECIMAL(5,2) DEFAULT 0.0,
+                memo TEXT,
+                version VARCHAR(20) DEFAULT '2.0',
+                is_active BOOLEAN DEFAULT TRUE,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )
+            """
+            cursor.execute(sql_managed)
+
+            # 8. Cheongan 2.0: Global Config (Safety Switch & Rules)
+            sql_config = """
+            CREATE TABLE IF NOT EXISTS global_config (
+                key_name VARCHAR(50) PRIMARY KEY,
+                value_json JSON,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )
+            """
+            cursor.execute(sql_config)
+
+            # --- Seed Initial Data ---
+            # Seed Managed Stocks
+            initial_stocks = [
+                ('SOXL', '초고성장/레버리지', 'SMA 10/30 골든크로스 + 박스권 10% 돌파 + 거래량 250%↑', '(5분봉) EMA 9/21 데드크로스 시 70% 익절, 30분봉 데드크로스 시 전량 매도', 25),
+                ('IONQ', '초고성장/레버리지', 'SMA 10/30 골든크로스 + 박스권 15% 돌파 + 거래량 300%↑', '고점 대비 10% 하락 시 즉시 매도 (Chandelier Exit), 손절 -8%', 15),
+                ('TSLA', '초고성장/레버리지', 'SMA 10/30 골든크로스 + 박스권 5% 돌파 + RSI 60 이상', '30분봉 SMA 10선 종가 이탈 시 매도, 손절 -4%', 15),
+                ('UPRO', '지수 및 헷지', 'EMA 15/50 골든크로스 + 박스권 8% 돌파 + EMA 200 필터', '30분봉 EMA 15/50 데드크로스 또는 손절 -6%', 25),
+                ('TMF', '지수 및 헷지', 'EMA 15/50 골든크로스 + 박스권 4% 돌파 (UPRO 하락 시 비중 2배)', '30분봉 EMA 15/50 데드크로스 또는 손절 -4.5%', 5),
+                ('SOXS', '지수 및 헷지', 'UPRO < 일봉 EMA 200일 때만 가동 + 30분봉 골든크로스', '수익 5% 도달 시 전량 익절, 24시간 내 미수익 시 타임컷 종료', 0),
+                ('GOOGL', '안정성/우량주', 'EMA 15/50 골든크로스 + RSI 50 이상 유지', '5분봉 SMA 20선 추격 매도 (Trailing Stop), 손절 -4%', 5),
+                ('AAAU', '안정성/우량주', 'EMA 10/40 골든크로스 (반응성 강화)', '30분봉 EMA 10/40 데드크로스 또는 손절 -3%', 10),
+                ('UFO', '안정성/우량주', '일봉 SMA 200 위에서만 가동 + 30분봉 SMA 10/30 골든크로스', '30분봉 SMA 30선 이탈 시 매도, 손절 -5%', 5)
+            ]
+            
+            for stock in initial_stocks:
+                # Upsert
+                sql_seed = """
+                INSERT INTO managed_stocks (ticker, group_name, buy_strategy, sell_strategy, target_ratio)
+                VALUES (%s, %s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE 
+                    group_name=VALUES(group_name), 
+                    buy_strategy=VALUES(buy_strategy), 
+                    sell_strategy=VALUES(sell_strategy),
+                    target_ratio=VALUES(target_ratio)
+                """
+                cursor.execute(sql_seed, stock)
+
+            # Seed Global Config (Rules)
+            import json
+            rules = {
+                "box_days": 7,
+                "box_range_pct_base": 5.0,
+                "volume_threshold_pct": 120,
+                "safety_drawdown_limit": -10.0,
+                "version": "2.0.0"
+            }
+            cursor.execute("INSERT INTO global_config (key_name, value_json) VALUES (%s, %s) ON DUPLICATE KEY UPDATE value_json=VALUES(value_json)", ('common_rules', json.dumps(rules)))
+
+
+            
         conn.commit()
     except Exception as e:
         print(f"DB Initialization Error: {e}")
@@ -351,6 +432,8 @@ def update_transaction(id, data):
     finally:
         conn.close()
 
+        conn.close()
+
 def delete_transaction(id):
     conn = get_connection()
     try:
@@ -360,6 +443,47 @@ def delete_transaction(id):
         return True
     finally:
         conn.close()
+
+# --- Cheongan 2.0 Helpers ---
+
+def get_managed_stocks():
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT * FROM managed_stocks ORDER BY group_name, ticker")
+            return cursor.fetchall()
+    finally:
+        conn.close()
+
+def update_market_status(regime, details):
+    conn = get_connection()
+    try:
+        import json
+        date_str = datetime.now().strftime("%Y-%m-%d")
+        with conn.cursor() as cursor:
+            sql = """
+            INSERT INTO market_status (date, regime, details)
+            VALUES (%s, %s, %s)
+            ON DUPLICATE KEY UPDATE regime=VALUES(regime), details=VALUES(details)
+            """
+            cursor.execute(sql, (date_str, regime, json.dumps(details)))
+        conn.commit()
+    finally:
+        conn.close()
+
+def get_latest_market_status():
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT * FROM market_status ORDER BY date DESC LIMIT 1")
+            row = cursor.fetchone()
+            if row and isinstance(row['details'], str):
+                import json
+                row['details'] = json.loads(row['details'])
+            return row
+    finally:
+        conn.close()
+
 
 def get_current_holdings():
     """Returns a dict of tickers currently held {ticker: {'qty': qty, 'avg_price': price}} using FIFO logic"""

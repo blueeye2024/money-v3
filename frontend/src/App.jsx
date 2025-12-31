@@ -7,6 +7,8 @@ import MarketStats from './components/MarketStats';
 import MarketInsight from './components/MarketInsight';
 import JournalPage from './JournalPage';
 import SignalPage from './SignalPage';
+import ManagedStocksPage from './ManagedStocksPage';
+import BacktestPage from './BacktestPage';
 import './index.css';
 import packageJson from '../package.json'; // Version Import
 
@@ -117,19 +119,39 @@ function Dashboard() {
                         </h1>
                     </div>
                     {data?.timestamp?.full_str && (
-                        <div style={{
-                            background: 'rgba(255, 255, 255, 0.03)',
-                            padding: '0.5rem 1rem',
-                            borderRadius: '12px',
-                            border: '1px solid rgba(255, 255, 255, 0.08)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                            fontSize: '0.8rem',
-                            color: 'var(--text-secondary)',
-                        }}>
-                            <span style={{ display: 'inline-block', width: '6px', height: '6px', background: '#10b981', borderRadius: '50%', boxShadow: '0 0 8px #10b981' }}></span>
-                            <strong>분석 시점:</strong> {data.timestamp.full_str}
+                        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                            {/* Market Regime Badge */}
+                            {data.market_regime && (
+                                <div style={{
+                                    padding: '0.4rem 0.8rem',
+                                    borderRadius: '8px',
+                                    fontSize: '0.85rem',
+                                    fontWeight: 700,
+                                    background: data.market_regime.regime === 'Bull' ? 'rgba(34, 197, 94, 0.15)' :
+                                        data.market_regime.regime === 'Bear' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(255, 255, 255, 0.1)',
+                                    color: data.market_regime.regime === 'Bull' ? '#4ade80' :
+                                        data.market_regime.regime === 'Bear' ? '#f87171' : '#cbd5e1',
+                                    border: '1px solid rgba(255,255,255,0.1)'
+                                }}>
+                                    {data.market_regime.regime === 'Bull' ? '🚀 상승장 (Bull)' :
+                                        data.market_regime.regime === 'Bear' ? '📉 하락장 (Bear)' : '🦀 보합장 (Sideways)'}
+                                </div>
+                            )}
+
+                            <div style={{
+                                background: 'rgba(255, 255, 255, 0.03)',
+                                padding: '0.5rem 1rem',
+                                borderRadius: '12px',
+                                border: '1px solid rgba(255, 255, 255, 0.08)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                fontSize: '0.8rem',
+                                color: 'var(--text-secondary)',
+                            }}>
+                                <span style={{ display: 'inline-block', width: '6px', height: '6px', background: '#10b981', borderRadius: '50%', boxShadow: '0 0 8px #10b981' }}></span>
+                                <strong>분석:</strong> {data.timestamp.full_str.split('KST')[0]}
+                            </div>
                         </div>
                     )}
                 </div>
@@ -186,12 +208,22 @@ function Layout() {
                     color: location.pathname === '/journal' ? 'var(--accent-blue)' : 'var(--text-primary)',
                     fontWeight: location.pathname === '/journal' ? 'bold' : 'normal',
                 }}>매매 일지</Link>
+                <Link to="/managed-stocks" className="nav-link" style={{
+                    color: location.pathname === '/managed-stocks' ? 'var(--accent-blue)' : 'var(--text-primary)',
+                    fontWeight: location.pathname === '/managed-stocks' ? 'bold' : 'normal',
+                }}>거래 종목</Link>
+                <Link to="/backtest" className="nav-link" style={{
+                    color: location.pathname === '/backtest' ? 'var(--accent-blue)' : 'var(--text-primary)',
+                    fontWeight: location.pathname === '/backtest' ? 'bold' : 'normal',
+                }}>백테스트</Link>
             </nav>
 
             <Routes>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/signals" element={<SignalPage />} />
                 <Route path="/journal" element={<JournalPage />} />
+                <Route path="/managed-stocks" element={<ManagedStocksPage />} />
+                <Route path="/backtest" element={<BacktestPage />} />
             </Routes>
 
 
