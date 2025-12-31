@@ -10,6 +10,8 @@ const JournalPage = () => {
 
     const [exchangeRate, setExchangeRate] = useState(1350);
     const [prices, setPrices] = useState({}); // {ticker: current_price}
+    const [totalCapital, setTotalCapital] = useState(10000);  // New State for Capital
+    const [capitalLoading, setCapitalLoading] = useState(false);
 
     // Form State (Journal)
     const getLocalISOString = () => {
@@ -40,7 +42,30 @@ const JournalPage = () => {
         fetchStats();
         fetchExchangeRate();
         fetchCurrentPrices();
+        fetchCapital(); // Fetch Capital
     }, []);
+
+    const fetchCapital = async () => {
+        try {
+            const res = await fetch('/api/capital');
+            if (res.ok) {
+                const d = await res.json();
+                setTotalCapital(d.amount);
+            }
+        } catch (e) { console.error(e); }
+    };
+
+    const saveCapital = async (val) => {
+        setCapitalLoading(true);
+        try {
+            await fetch('/api/capital', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ amount: parseFloat(val) })
+            });
+        } catch (e) { console.error(e); }
+        setCapitalLoading(false);
+    };
 
     const fetchCurrentPrices = async () => {
         try {

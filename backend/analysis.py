@@ -764,62 +764,111 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0, is_held=Fals
 def generate_market_insight(results, market_data):
     return insight
 
-def generate_trade_guidelines(results, market_data, regime_info):
+    return insight
+
+def generate_trade_guidelines(results, market_data, regime_info, total_capital=10000.0, held_tickers={}):
     """
     Generate logic-based trade guidelines for Cheongan 2.0.
     Replaces generic news with actionable advice based on Holdings & Signals.
+    Now includes Portfolio Rebalancing logic.
     """
     guidelines = []
     
-    # 1. Market Regime Context
+    # 1. Market Regime & Capital Status
     regime = regime_info.get('regime', 'Sideways')
     regime_kr = "보합장(Sideways)"
     if regime == 'Bull': regime_kr = "상승장(Bull)"
     elif regime == 'Bear': regime_kr = "하락장(Bear)"
     
+    # Calculate Capital Status
+    current_holdings_value = 0.0
+    for ticker, info in held_tickers.items():
+        # info has {qty, avg_price}
+        # Ideally use current price if available in results
+        curr_price = info.get('avg_price', 0)
+        # Find current price in results
+        for r in results:
+            if r['ticker'] == ticker:
+                curr_price = r['current_price']
+                break
+        current_holdings_value += (info['qty'] * curr_price)
+        
+    cash_balance = total_capital - current_holdings_value
+    cash_ratio = (cash_balance / total_capital) * 100 if total_capital > 0 else 0
+    
     guidelines.append(f"현재 시장은 **{regime_kr}** 국면입니다.")
+    guidelines.append(f"💰 **자산 현황**: 총 ${total_capital:,.0f} | 주식 ${current_holdings_value:,.0f} | 현금 ${cash_balance:,.0f} ({cash_ratio:.1f}%)")
     
-    # 2. Holdings Action Plan
-    # We need to know what is held. Analyze 'position' field in results.
-    # Results have 'is_held' field inside them? No, 'position' text implies it.
-    # Actually run_analysis passes 'held_tickers'. But results[i] has 'ticker' and analyzed 'position'.
-    
-    # Let's categorize actions
+    # 2. Holdings & Rebalancing Action Plan
     buy_candidates = []
     sell_candidates = []
     hold_maintenance = []
     
+    # Map results to dict
+    res_map = {r['ticker']: r for r in results}
+    
+    # Process Managed Stocks (Strategies)
+    # We should iterate through results to find signals
+    
     for res in results:
+        ticker = res['ticker']
         pos = res.get('position', '')
-        ticker = res.get('ticker')
         score = res.get('score', 0)
+        curr_price = res.get('current_price', 0)
+        strategy_info = res.get('strategy_info') # Passed from analyze_ticker? 
+        # Actually analyze_ticker returns dict, but does it include strategy_info? 
+        # No, analyze_ticker consumes it. We need access to target_ratio here?
+        # Let's rely on what we can infer or fetch managed_stocks map here inside function if needed,
+        # but better if result has 'target_ratio'.
+        # Let's assume result has 'target_ratio' if we add it in analyze_ticker or merge it in run_analysis.
+        # For now, let's use a quick lookup if passed or just generic logic if missing.
         
+        target_ratio = res.get('target_ratio', 0) # Needs to be added to analyze_ticker return or run_analysis merge
+        
+        is_held = ticker in held_tickers
+        held_qty = held_tickers[ticker]['qty'] if is_held else 0
+        
+        # Action Logic
         if "진입" in pos and "매수" in pos:
-            buy_candidates.append(f"{ticker} ({score}점)")
+            # Calculate Recommended Buy Qty
+            if target_ratio > 0 and curr_price > 0:
+                target_amt = total_capital * (target_ratio / 100.0)
+                current_amt = held_qty * curr_price
+                needed_amt = target_amt - current_amt
+                if needed_amt > 0:
+                    buy_qty = int(needed_amt / curr_price)
+                    if buy_qty > 0:
+                        buy_candidates.append(f"{ticker} (+{buy_qty}주, 목표 {target_ratio}%)")
+                    else:
+                        buy_candidates.append(f"{ticker} (비중 충족)")
+                else:
+                     buy_candidates.append(f"{ticker} (비중 초과, 추가 매수 금지)")
+            else:
+                buy_candidates.append(f"{ticker} (단타 접근)")
+
         elif "진입" in pos and "매도" in pos:
-            sell_candidates.append(f"{ticker} ({score}점)")
+             # Sell Logic
+             sell_candidates.append(f"{ticker} (전량/분할 매도)")
+             
         elif "유지" in pos:
-            hold_maintenance.append(f"{ticker}")
-            
+             hold_maintenance.append(f"{ticker}")
+
     if buy_candidates:
-        guidelines.append(f"✅ **매수 포착**: {', '.join(buy_candidates)} - 분할 매수 진입 유효.")
+        guidelines.append(f"✅ **매수 추천**: {', '.join(buy_candidates)}")
     
     if sell_candidates:
-        guidelines.append(f"🚨 **매도/손절**: {', '.join(sell_candidates)} - 리스크 관리 및 차익 실현 필요.")
+        guidelines.append(f"🚨 **매도 신호**: {', '.join(sell_candidates)}")
         
     if hold_maintenance:
-        guidelines.append(f"🛡️ **보유 관망**: {', '.join(hold_maintenance)} - 추세 지속 여부 모니터링.")
-        
-    if not buy_candidates and not sell_candidates and not hold_maintenance:
-        guidelines.append("현재 특이 신호가 없으며, **관망(Observing)**을 추천합니다. 무리한 진입을 자제하십시오.")
+        guidelines.append(f"🛡️ **보유/관망**: {', '.join(hold_maintenance)}")
 
-    # 3. Strategy Tip based on Regime
+    # 3. Strategy Tip
     if regime == 'Bull':
-        guidelines.append("Tip: 주도주(SOXL, UPRO) 눌림목 매수 및 길게 가져가는 추세 추종 전략이 유리합니다.")
+        guidelines.append("Tip: 상승장에서는 주도주(SOXL, IONQ) 비중을 꽉 채우고(Target %), 조정 시 추가 매수하십시오.")
     elif regime == 'Bear':
-        guidelines.append("Tip: 현금 비중을 확대하고, 반등 시 매도(SOXS, TMF 헤지) 전략으로 대응하십시오.")
+        guidelines.append("Tip: 하락장에서는 현금 비중 50% 이상 확보하고, 헷지(SOXS) 단타로 방어하십시오.")
     else:
-        guidelines.append("Tip: 박스권 상단 매도/하단 매수 전략. 짧은 호흡으로 대응하며 휩소(Whipsaw)에 주의하십시오.")
+        guidelines.append("Tip: 보합장에서는 박스권 매매(RSI 하단 매수/상단 매도)로 짧게 대응하십시오.")
 
     return "\n\n".join(guidelines)
 
@@ -991,6 +1040,11 @@ def run_analysis(held_tickers=[]):
         
         # held_tickers is the dict from db.get_current_holdings
         res = analyze_ticker(ticker, data_30m, data_5m, market_vol_score, is_held, real_time_info=rt_info, holdings_data=held_tickers, strategy_info=strategy_info)
+        
+        # Attach strategy target ratio for guideline generation
+        if strategy_info:
+            res['target_ratio'] = strategy_info.get('target_ratio', 0)
+            
         results.append(res)
         
     # Get Market Indicators Data with Change %
@@ -1016,7 +1070,7 @@ def run_analysis(held_tickers=[]):
     # Fetch Regime Info from DB
     regime_info = {"regime": "Sideways", "details": {}}
     try:
-        from db import get_latest_market_status
+        from db import get_latest_market_status, get_total_capital
         last_stat = get_latest_market_status()
         if last_stat:
             regime_info = {
@@ -1024,10 +1078,16 @@ def run_analysis(held_tickers=[]):
                 "details": last_stat['details'],
                 "updated_at": str(last_stat['updated_at'])
             }
-    except: pass
+        
+        # Fetch Total Capital
+        total_cap = get_total_capital()
+        
+    except: 
+        total_cap = 10000.0
+        pass
 
     # Generate Trade Guidelines (Was Insight)
-    insight_text = generate_trade_guidelines(results, market_data, regime_info)
+    insight_text = generate_trade_guidelines(results, market_data, regime_info, total_cap, held_tickers)
 
     return {
         "timestamp": get_current_time_str(),

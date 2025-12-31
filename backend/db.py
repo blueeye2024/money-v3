@@ -451,7 +451,36 @@ def get_managed_stocks():
     try:
         with conn.cursor() as cursor:
             cursor.execute("SELECT * FROM managed_stocks ORDER BY group_name, ticker")
-            return cursor.fetchall()
+    finally:
+        conn.close()
+
+def get_total_capital():
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT value_json FROM global_config WHERE key_name='total_capital'")
+            row = cursor.fetchone()
+            if row and row['value_json']:
+                import json
+                return float(json.loads(row['value_json']))
+            return 10000.0 # Default
+    except Exception as e:
+        print(f"Error getting capital: {e}")
+        return 10000.0
+    finally:
+        conn.close()
+
+def set_total_capital(amount):
+    conn = get_connection()
+    try:
+        import json
+        with conn.cursor() as cursor:
+            val = json.dumps(amount)
+            # Upsert
+            sql = "INSERT INTO global_config (key_name, value_json) VALUES ('total_capital', %s) ON DUPLICATE KEY UPDATE value_json=%s"
+            cursor.execute(sql, (val, val))
+        conn.commit()
+        return True
     finally:
         conn.close()
 

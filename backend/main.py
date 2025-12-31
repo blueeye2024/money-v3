@@ -43,6 +43,9 @@ class TickerSettingUpdate(BaseModel):
     ticker: str
     is_visible: bool
 
+class CapitalModel(BaseModel):
+    amount: float
+
 @app.get("/api/settings/sms")
 def get_sms_setting():
     global SMS_ENABLED
@@ -54,6 +57,25 @@ def set_sms_setting(setting: SMSSettingModel):
     SMS_ENABLED = setting.enabled
     print(f"SMS System Enabled: {SMS_ENABLED}")
     return {"status": "success", "enabled": SMS_ENABLED}
+    return {"status": "success", "enabled": SMS_ENABLED}
+
+@app.get("/api/capital")
+def get_capital_api():
+    try:
+        from db import get_total_capital
+        return {"amount": get_total_capital()}
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.post("/api/capital")
+def set_capital_api(data: CapitalModel):
+    try:
+        from db import set_total_capital
+        if set_total_capital(data.amount):
+            return {"status": "success", "amount": data.amount}
+        return {"status": "error"}
+    except Exception as e:
+        return {"error": str(e)}
 
 # 2. Monitor Logic (Runs every 1 min)
 def monitor_signals():
