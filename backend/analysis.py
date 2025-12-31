@@ -915,7 +915,40 @@ def generate_trade_guidelines(results, market_data, regime_info, total_capital=1
     else:
         guidelines.append("- 특이사항 없음 (현재 포트폴리오 목표 비중 유지 중)")
 
-    return "\n".join(guidelines)
+    # NEW: Build Strategic Portfolio Data for Frontend (Left Side)
+    strategy_list = []
+    # Stocks
+    for res in results:
+        t_w = res.get('target_ratio', 0)
+        if t_w > 0:
+            p = res.get('current_price', 0)
+            req_q = int((total_capital * (t_w/100.0)) / p) if p > 0 else 0
+            strategy_list.append({
+                "ticker": res['ticker'], 
+                "weight": t_w, 
+                "price": p, 
+                "req_qty": req_q,
+                "held_qty": res.get('held_qty', 0)
+            })
+    
+    # Cash Target based on Regime
+    cash_w = 20 # Sideways default
+    if regime == 'Bull': cash_w = 5
+    elif regime == 'Bear': cash_w = 15
+    
+    # Current Cash (Calculated at top of function)
+    curr_cash = total_capital - current_holdings_value
+    strategy_list.append({
+        "ticker": "CASH",
+        "weight": cash_w,
+        "price": 1.0,
+        "req_qty": int(total_capital * (cash_w/100.0)),
+        "held_qty": int(curr_cash)
+    })
+    
+    strategy_list.sort(key=lambda x: x['weight'], reverse=True)
+
+    return "\n".join(guidelines), strategy_list
 
 
 def determine_market_regime(regime_daily, data_30m):
@@ -1252,13 +1285,14 @@ def run_analysis(held_tickers=[]):
         pass
 
     # Generate Trade Guidelines (Was Insight)
-    insight_text = generate_trade_guidelines(results, market_data, regime_info, total_cap, held_tickers)
+    insight_text, strategy_list = generate_trade_guidelines(results, market_data, regime_info, total_cap, held_tickers)
 
     return {
         "timestamp": get_current_time_str(),
         "stocks": results,
         "market": indicators,
         "insight": insight_text,
+        "strategy_list": strategy_list,
         "market_regime": regime_info
     }
 
