@@ -390,7 +390,7 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0, is_held=Fals
             aux_cross = 5
             
         base_score = base_main + base_confluence + aux_rsi + aux_macd + aux_bb + aux_cross
-        base_score = max(0, base_score)
+        base_score = max(0, min(50, base_score))
 
         # 2. Trend Score
         # Signal Price & Bars
