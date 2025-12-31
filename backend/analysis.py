@@ -816,23 +816,25 @@ def generate_market_insight(results, market_data):
 
 def generate_trade_guidelines(results, market_data, regime_info, total_capital=10000.0, held_tickers={}):
     """
-    Generate logic-based trade guidelines for Cheongan 2.0.
-    Replaces generic news with actionable advice based on Holdings & Signals.
-    Now includes Portfolio Rebalancing logic.
+    Generate logic-based trade guidelines for Cheongan 2.1.
     """
     guidelines = []
     
     # 1. Market Regime & Capital Status
     regime = regime_info.get('regime', 'Sideways')
+    details = regime_info.get('details', {})
+    reason = details.get('reason', '시장 데이터 분석 중')
     
     regime_kr = "보합장 (Sideways)"
-    strategy_summary = "원금 보존 및 박스권 매매 (가치 방어 40%, 전술 30%, 현금 20%)"
+    # Update summaries to match new targets
+    strategy_summary = "방어 우량주 및 현금 비중 확대 (Cash 30%)"
+    
     if regime == 'Bull': 
         regime_kr = "상승장 (Bull)"
-        strategy_summary = "핵심 레버리지 확대 (SOXL/UPRO 50%, 성장 20%, 현금 5%)"
+        strategy_summary = "주도주/레버리지 적극 공략 (SOXL/IONQ 40%, Cash 5%)"
     elif regime == 'Bear': 
         regime_kr = "하락장 (Bear)"
-        strategy_summary = "인버스/안전 자산 (SOXS 35%, TMF 30%, 금 20%, 현금 15%)"
+        strategy_summary = "숏/채권/금 안전자산 집중 (SOXS/TMF 50%, Cash 30%)"
     
     # Calculate Capital Status
     current_holdings_value = 0.0
@@ -846,13 +848,13 @@ def generate_trade_guidelines(results, market_data, regime_info, total_capital=1
         current_holdings_value += (info['qty'] * curr_price)
         
     cash_balance = total_capital - current_holdings_value
-    cash_ratio = (cash_balance / total_capital) * 100 if total_capital > 0 else 0
     
     guidelines.append(f"### 📡 시장 국면: **{regime_kr}**")
-    guidelines.append(f"📋 **전략 목표**: {strategy_summary}")
-    guidelines.append(f"💰 **자산 현황**: 주식 ${current_holdings_value:,.0f} | 현금 ${cash_balance:,.0f} ({cash_ratio:.1f}%) | 총 ${total_capital:,.0f}")
+    guidelines.append(f"🔍 **판단 사유**: {reason}")
+    guidelines.append(f"📋 **핵심 전략**: {strategy_summary}")
+    guidelines.append(f"💰 **총 자산**: ${total_capital:,.0f} (주식 ${current_holdings_value:,.0f} / 현금 ${cash_balance:,.0f})")
     
-    guidelines.append("\n**[종목별 리밸런싱 가이드]**")
+    guidelines.append("\n**[종목별 리밸런싱 실행 가이드]**")
     
     # 2. Rebalancing Action Plan
     actions = []
@@ -860,54 +862,32 @@ def generate_trade_guidelines(results, market_data, regime_info, total_capital=1
     for res in results:
         ticker = res['ticker']
         target_ratio = res.get('target_ratio', 0)
-        action_qty = res.get('action_qty', 0) # Calculated in run_analysis
-        current_ratio = res.get('current_ratio', 0)
+        action_qty = res.get('action_qty', 0)
         held_qty = res.get('held_qty', 0)
-        curr_price = res.get('current_price', 0)
         
-        # Determine Action String for Frontend Table & Summary
         action_str = "-"
-        
-        # Logic:
-        # If Target=0 and Held>0 -> "전량 매도" (qty = -held_qty)
-        # If Target>0 and Action!=0 -> "+N" or "-N"
         
         if target_ratio == 0 and held_qty > 0:
              action_str = f"🛑 전량 매도 (-{held_qty})"
-             actions.append(f"- **{ticker}**: {action_str} (비중 축소)")
-             res['action_qty'] = -held_qty # Ensure negative
+             actions.append(f"- **{ticker}**: {action_str} (전략 제외 종목)")
+             res['action_qty'] = -held_qty
              
         elif action_qty > 0:
-             est_cost = action_qty * curr_price
-             if est_cost > cash_balance:
-                  action_str = f"➕ {action_qty}주 (현금부족)"
-                  actions.append(f"- **{ticker}**: {action_qty}주 추가 매수 필요 (가용 현금 확인 요망)")
-             else:
-                  action_str = f"➕ {action_qty}주 매수"
-                  actions.append(f"- **{ticker}**: {action_qty}주 추가 매수 (목표 {target_ratio}%)")
+             action_str = f"➕ {action_qty}주 매수"
+             actions.append(f"- **{ticker}**: {action_qty}주 추가 매수 (목표 {target_ratio}%)")
              
         elif action_qty < 0:
              sell_q = abs(action_qty)
              action_str = f"➖ {sell_q}주 매도"
-             actions.append(f"- **{ticker}**: {sell_q}주 부분 매도 (목표 {target_ratio}% 초과)")
+             actions.append(f"- **{ticker}**: {sell_q}주 부분 매도 (비중 축소)")
              
         elif held_qty > 0:
              action_str = "✅ 유지"
-             # actions.append(f"- {ticker}: 비중 적정 (유지)")
              
         elif target_ratio > 0 and held_qty == 0:
-             # Look to buy but maybe cash issue or action_qty=0 due to rounding?
-             # If action_qty=0 but target>0, it means capital is too small for 1 share?
-             if curr_price > 0 and (total_capital * target_ratio/100) < curr_price:
-                 action_str = "대기 (자본부족)"
-             else:
-                 # Normally action_qty would catch this.
-                 action_str = "관망"
+             # Look to buy, potentially wait for signal
+             action_str = "관망/진입대기"
         
-        else:
-             action_str = "-"
-
-        # Inject into Result for Table Display
         res['action_recommendation'] = action_str
         
     if actions:
@@ -917,7 +897,6 @@ def generate_trade_guidelines(results, market_data, regime_info, total_capital=1
 
     # NEW: Build Strategic Portfolio Data for Frontend (Left Side)
     strategy_list = []
-    # Stocks
     for res in results:
         t_w = res.get('target_ratio', 0)
         if t_w > 0:
@@ -931,12 +910,11 @@ def generate_trade_guidelines(results, market_data, regime_info, total_capital=1
                 "held_qty": res.get('held_qty', 0)
             })
     
-    # Cash Target based on Regime
-    cash_w = 20 # Sideways default
+    # Cash Target based on Regime (Updated percentages)
+    cash_w = 30 # Sideways default
     if regime == 'Bull': cash_w = 5
-    elif regime == 'Bear': cash_w = 15
+    elif regime == 'Bear': cash_w = 30
     
-    # Current Cash (Calculated at top of function)
     curr_cash = total_capital - current_holdings_value
     strategy_list.append({
         "ticker": "CASH",
@@ -1186,15 +1164,19 @@ def run_analysis(held_tickers=[]):
                 # Cheongan 2.1: Advanced Regime Portfolio Matrix (User Definied)
                 t_map = {
                     'Bull': {
-                        'SOXL': 25, 'UPRO': 25, 'IONQ': 10, 'TSLA': 10, 
-                        'GOOGL': 10, 'UFO': 5, 'AAAU': 5, 'TMF': 5, 'SOXS': 0
+                        'SOXL': 20, 'IONQ': 20,
+                        'UPRO': 15, 'TSLA': 15,
+                        'GOOGL': 8, 'UFO': 7, 
+                        'AAAU': 5, 'TMF': 5, 'SOXS': 0
                     },
                     'Sideways': {
-                        'AAAU': 20, 'GOOGL': 20, 'UPRO': 15, 'TMF': 15, 
-                        'UFO': 5, 'TSLA': 5, 'SOXL': 0, 'IONQ': 0, 'SOXS': 0
+                        'GOOGL': 20, 'AAAU': 20,
+                        'TMF': 10, 'UFO': 10,
+                        'UPRO': 10, 
+                        'TSLA': 0, 'SOXL': 0, 'IONQ': 0, 'SOXS': 0
                     },
                     'Bear': {
-                        'SOXS': 35, 'TMF': 30, 'AAAU': 20,
+                        'SOXS': 25, 'TMF': 25, 'AAAU': 20,
                         'SOXL': 0, 'UPRO': 0, 'IONQ': 0, 'TSLA': 0, 'GOOGL': 0, 'UFO': 0
                     }
                 }

@@ -51,10 +51,13 @@ const FinalSignal = ({ stocks }) => {
             return { ...stock, type, action, priority, target, currentRatio };
         });
 
-        // Sort
-        categorized.sort((a, b) => a.priority - b.priority || b.score - a.score);
+        // Filter: Keep only Strategy Targets OR Currently Held
+        const filtered = categorized.filter(s => s.target > 0 || s.is_held);
 
-        return categorized;
+        // Sort: Highest Holding Ratio first
+        filtered.sort((a, b) => (b.currentRatio || 0) - (a.currentRatio || 0));
+
+        return filtered;
     }, [stocks]);
 
     if (!portfolio || portfolio.length === 0) return null;
