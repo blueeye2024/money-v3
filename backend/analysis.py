@@ -259,13 +259,13 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0, is_held=Fals
             if is_box:
                 if current_price > box_high: pass
                 else: valid = False
-            position = "🚨 매수 진입" if cross_idx > -3 and cross_idx != -1 else "🔴 매수 유지" if valid else "관망 (매수 신호 무효화)"
+            position = "🚨 매수 진입" if cross_idx == -1 else "🔴 매수 유지" if valid else "관망 (매수 신호 무효화)"
         elif recent_cross_type == 'dead':
             if last_5m_sma10 > last_5m_sma30: valid = False
             if is_box:
                  if current_price < box_low: pass
                  else: valid = False
-            position = "🚨 매도 진입" if cross_idx > -3 and cross_idx != -1 else "🔵 매도 유지" if valid else "관망 (매도 신호 무효화)"
+            position = "🚨 매도 진입" if cross_idx == -1 else "🔵 매도 유지" if valid else "관망 (매도 신호 무효화)"
             
             if current_price > box_high: position = "✨ 박스권 돌파 성공 (상단)"
             elif current_price < box_low: position = "✨ 박스권 돌파 성공 (하단)"
