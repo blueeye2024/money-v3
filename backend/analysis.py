@@ -355,6 +355,13 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0, is_held=Fals
         news_prob = max(0, min(100, news_prob))
         
         # === Cheongan Scoring Engine (User Rules) ===
+        t30 = 'UP' if last_sma10 > last_sma30 else 'DOWN'
+        t5 = 'UP' if last_5m_sma10 > last_5m_sma30 else 'DOWN'
+        is_buy_signal = "매수" in position or "상단" in position
+        is_sell_signal = "매도" in position or "하단" in position
+        is_observing = not (is_buy_signal or is_sell_signal)
+
+
         base_main = 20 if not is_observing else 10
         base_confluence = 10 if t30 == t5 else -10
         
