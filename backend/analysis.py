@@ -800,7 +800,8 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, df_1dRaw, market_vol_score=0, is
             "score_interpretation": get_score_interpretation(final_score, position),
             "score_details": score_details,
             "news_items": stock_news,
-            "is_held": is_held
+            "is_held": is_held,
+            "strategy_result": strategy_desc
         }
         return result
     
@@ -1161,41 +1162,63 @@ def run_analysis(held_tickers=[]):
     total_capital = get_total_capital()
 
     for ticker in active_tickers:
-        is_held = ticker in held_tickers
-        rt_info = real_time_map.get(ticker)
-        
-        # Cheongan 2.0: Pass Strategy Info
-        strategy_info = managed_map.get(ticker, None)
-        
-        # held_tickers is the dict from db.get_current_holdings
-        res = analyze_ticker(ticker, data_30m, data_5m, data_1d, market_vol_score, is_held, real_time_info=rt_info, holdings_data=held_tickers, strategy_info=strategy_info)
-        
-        # Attach strategy target ratio logic (Cheongan 2.1 Regime-based)
-        if strategy_info:
-            regime = regime_info.get('regime', 'Sideways')
-            base_target = strategy_info.get('target_ratio', 0)
-            group_name = strategy_info.get('group_name', '')
-            final_target = base_target
+        try:
+            is_held = ticker in held_tickers
+            rt_info = real_time_map.get(ticker)
             
-            # Regime Adjustment
-            if regime == 'Bear':
-                if ticker == 'SOXS': 
-                     final_target = 20 # Active Hedge
-                elif '헷지' in group_name or '안정성' in group_name:
-                     final_target = base_target
-                else:
-                     final_target = int(base_target * 0.3) # Heavy cut on Growth
-            elif regime == 'Bull':
-                final_target = base_target
-                if ticker == 'SOXS': final_target = 0
-            else: # Sideways
-                if ticker == 'SOXS': final_target = 5
-                else: final_target = int(base_target * 0.8)
+            # Cheongan 2.0: Pass Strategy Info
+            strategy_info = managed_map.get(ticker, None)
+            
+            # held_tickers is the dict from db.get_current_holdings
+            res = analyze_ticker(ticker, data_30m, data_5m, data_1d, market_vol_score, is_held, real_time_info=rt_info, holdings_data=held_tickers, strategy_info=strategy_info)
+            
+            # Error Handling: Ensure keys exist
+            if "error" in res:
+                res.setdefault('current_price', 0)
+                res.setdefault('change_pct', 0)
+                res.setdefault('score', 0)
+                res.setdefault('position', 'Error')
 
-            res['target_ratio'] = final_target
-            res['base_target'] = base_target
-            
-        results.append(res)
+            # Attach strategy target ratio logic (Cheongan 2.1 Regime-based)
+            if strategy_info:
+                regime = regime_info.get('regime', 'Sideways')
+                base_target = strategy_info.get('target_ratio', 0)
+                group_name = strategy_info.get('group_name', '')
+                final_target = base_target
+                
+                # Regime Adjustment
+                if regime == 'Bear':
+                    if ticker == 'SOXS': 
+                         final_target = 20 # Active Hedge
+                    elif '헷지' in group_name or '안정성' in group_name:
+                         final_target = base_target
+                    else:
+                         final_target = int(base_target * 0.3) # Heavy cut on Growth
+                elif regime == 'Bull':
+                    final_target = base_target
+                    if ticker == 'SOXS': final_target = 0
+                else: # Sideways
+                    if ticker == 'SOXS': final_target = 5
+                    else: final_target = int(base_target * 0.8)
+    
+                res['target_ratio'] = final_target
+                res['base_target'] = base_target
+                res['strategy_text'] = strategy_info.get('buy_strategy', '-')
+                
+            results.append(res)
+        
+        except Exception as e:
+            print(f"Critical Analysis Loop Error for {ticker}: {e}")
+             # Add detailed error result to prevent frontend crash
+            results.append({
+                "ticker": ticker, 
+                "name": ticker, 
+                "error": str(e),
+                "current_price": 0,
+                "change_pct": 0,
+                "score": 0,
+                "position": "SysError"
+            })
         
     # Get Market Indicators Data with Change %
     indicators = {}

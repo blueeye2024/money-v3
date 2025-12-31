@@ -97,6 +97,37 @@ const StockCard = ({ data }) => {
                 </div>
             )}
 
+            {/* Strategy Diagnosis Section (Replaces generic News) */}
+            <div style={{ marginTop: '1rem', background: 'rgba(0,0,0,0.2)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <div style={{ fontSize: '0.9rem', marginBottom: '8px', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '1.1rem' }}>🔬</span> <strong>전략 진단 (Strategy Diagnosis)</strong>
+                </div>
+
+                {/* 1. Target Strategy Text */}
+                <div style={{ marginBottom: '8px', fontSize: '0.8rem', color: '#aaa', fontStyle: 'italic', paddingBottom: '8px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                    🎯 [전략] {data.strategy_text || "기본 전략 (Standard)"}
+                </div>
+
+                {/* 2. Diagnosis Logic Check */}
+                <div style={{ fontSize: '0.85rem', color: '#ccc', fontFamily: 'monospace' }}>
+                    {data.strategy_result ? (
+                        data.strategy_result.split(', ').map((log, idx) => {
+                            const isPass = log.includes('OK') || log.includes('Pass');
+                            const isFail = log.includes('Fail');
+                            const color = isPass ? 'var(--accent-green)' : isFail ? 'var(--accent-red)' : '#ccc';
+                            return (
+                                <div key={idx} style={{ marginBottom: '4px' }}>
+                                    <span style={{ color: color, marginRight: '6px' }}>{isPass ? '✔' : isFail ? '✖' : '•'}</span>
+                                    {log}
+                                </div>
+                            )
+                        })
+                    ) : (
+                        <div style={{ color: '#888' }}>전략 데이터 분석 대기중...</div>
+                    )}
+                </div>
+            </div>
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.85rem', marginTop: '1rem', borderTop: '1px solid var(--glass-border)', paddingTop: '1rem' }}>
                 <div>
                     <span style={{ color: 'var(--text-secondary)' }}>RSI(14)</span>
