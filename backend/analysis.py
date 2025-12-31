@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 import pytz
 import os
 import time
+import re
 
 # Global Cache for Historical Data
 _DATA_CACHE = {
@@ -67,23 +68,28 @@ def get_current_time_str_sms():
     now_kst = datetime.now(timezone.utc).astimezone(kst)
     return now_kst.strftime("%Y.%m.%d %H:%M")
 
-def fetch_data():
+def fetch_data(tickers=None):
     global _DATA_CACHE
     
-    # Check Cache (5 Minutes = 300 Seconds)
-    if time.time() - _DATA_CACHE["last_fetch"] < 300 and _DATA_CACHE["30m"] is not None:
+    target_list = tickers if tickers else TARGET_TICKERS
+    
+    # Check Cache (Only if default tickers used, for simplicity)
+    if tickers is None and time.time() - _DATA_CACHE["last_fetch"] < 300 and _DATA_CACHE["30m"] is not None:
         # Return cached data
-        return _DATA_CACHE["30m"], _DATA_CACHE["5m"], _DATA_CACHE["market"], None
+        return _DATA_CACHE["30m"], _DATA_CACHE["5m"], _DATA_CACHE.get("1d"), _DATA_CACHE["market"], _DATA_CACHE.get("regime")
 
     # Fetch 30m data (Main) for Stocks
-    tickers_str = " ".join(TARGET_TICKERS)
+    tickers_str = " ".join(target_list)
     
-    print("Fetching 30m data for Stocks (Fresh)...")
+    print(f"Fetching 30m data for {len(target_list)} Stocks...")
     # Hide progress to keep logs clean
     data_30m = yf.download(tickers_str, period="5d", interval="30m", prepost=True, group_by='ticker', threads=False, progress=False)
     
-    print("Fetching 5m data for Stocks (Fresh)...")
+    print(f"Fetching 5m data for {len(target_list)} Stocks...")
     data_5m = yf.download(tickers_str, period="5d", interval="5m", prepost=True, group_by='ticker', threads=False, progress=False)
+
+    print(f"Fetching 1d data for {len(target_list)} Stocks...")
+    data_1d = yf.download(tickers_str, period="1y", interval="1d", prepost=True, group_by='ticker', threads=False, progress=False)
     
     # Market indicators - Use Ticker.history for stability
     print("Fetching market data (Indices)...")
@@ -109,15 +115,16 @@ def fetch_data():
 
     print("Data fetch complete.")
     
-    # Update Cache
-    _DATA_CACHE["30m"] = data_30m
-    _DATA_CACHE["5m"] = data_5m
-    _DATA_CACHE["market"] = market_data
-    _DATA_CACHE["regime"] = regime_data
-    _DATA_CACHE["last_fetch"] = time.time()
+    # Update Cache (Only if default)
+    if tickers is None:
+        _DATA_CACHE["30m"] = data_30m
+        _DATA_CACHE["5m"] = data_5m
+        _DATA_CACHE["1d"] = data_1d
+        _DATA_CACHE["market"] = market_data
+        _DATA_CACHE["regime"] = regime_data
+        _DATA_CACHE["last_fetch"] = time.time()
     
-    return data_30m, data_5m, market_data, regime_data
-    return data_30m, data_5m, market_data, None
+    return data_30m, data_5m, data_1d, market_data, regime_data
 
 def calculate_sma(series, window):
     return series.rolling(window=window).mean()
@@ -208,7 +215,50 @@ def check_box_pattern(df_30m, days=7, tolerance=5.0):
     is_box = diff_pct <= tolerance
     return is_box, high_max, low_min, diff_pct
 
-def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0, is_held=False, real_time_info=None, holdings_data=None, strategy_info=None):
+def parse_strategy_config(strategy_str):
+    config = {
+        "ma_type": "sma", 
+        "ma_fast": 10,
+        "ma_slow": 30,
+        "box_tol": None,
+        "vol_req": None,
+        "rsi_min": None,
+        "daily_ema200": False,
+        "daily_sma200": False
+    }
+    if not strategy_str: return config
+    
+    # MA Check
+    ma_match = re.search(r'(EMA|SMA)\s*(\d+)/(\d+)', strategy_str, re.IGNORECASE)
+    if ma_match:
+        config['ma_type'] = ma_match.group(1).lower()
+        config['ma_fast'] = int(ma_match.group(2))
+        config['ma_slow'] = int(ma_match.group(3))
+        
+    # Box check
+    box_match = re.search(r'박스권\s*(\d+(\.\d+)?)%', strategy_str)
+    if box_match:
+        config['box_tol'] = float(box_match.group(1))
+        
+    # Volume
+    vol_match = re.search(r'거래량\s*(\d+)%', strategy_str)
+    if vol_match:
+        config['vol_req'] = float(vol_match.group(1))
+        
+    # RSI
+    rsi_match = re.search(r'RSI\s*(\d+)', strategy_str, re.IGNORECASE)
+    if rsi_match:
+        config['rsi_min'] = float(rsi_match.group(1))
+        
+    # Daily Filter
+    if "일봉 EMA 200" in strategy_str or "EMA 200 필터" in strategy_str:
+        config['daily_ema200'] = True
+    if "일봉 SMA 200" in strategy_str or "SMA 200 위에서만" in strategy_str:
+        config['daily_sma200'] = True
+        
+    return config
+
+def analyze_ticker(ticker, df_30mRaw, df_5mRaw, df_1dRaw, market_vol_score=0, is_held=False, real_time_info=None, holdings_data=None, strategy_info=None):
     # Retrieve Stock Name
     stock_name = TICKER_NAMES.get(ticker, ticker)
     
@@ -216,6 +266,7 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0, is_held=Fals
         # Match ticker using MultiIndex or Flat
         df_30 = None
         df_5 = None
+        df_1d = None
 
         if isinstance(df_30mRaw.columns, pd.MultiIndex):
             if ticker in df_30mRaw.columns.levels[0]:
@@ -228,6 +279,12 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0, is_held=Fals
             if ticker in df_5mRaw.columns.levels[0]:
                 df_5 = df_5mRaw[ticker].copy()
                 df_5.dropna(subset=['Close'], inplace=True)
+                
+        if df_1dRaw is not None:
+            if isinstance(df_1dRaw.columns, pd.MultiIndex):
+                if ticker in df_1dRaw.columns.levels[0]:
+                    df_1d = df_1dRaw[ticker].copy()
+                    df_1d.dropna(subset=['Close'], inplace=True)
         
         if df_30 is None or df_5 is None or df_30.empty or df_5.empty:
             return {"ticker": ticker, "name": stock_name, "error": "No data"}
@@ -330,122 +387,112 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0, is_held=Fals
         last_ema15 = df_30['EMA15'].iloc[-1]
         last_ema50 = df_30['EMA50'].iloc[-1]
         
-        # --- Cheongan 2.0: Custom Strategy Overlay ---
-        # Logic: First determine the 'Standard Signal' (Cross), then FILTER it based on strategy rules.
-        # If rules not met, force position to 'Observing'.
-        
+        # === Cheongan 2.1: Dynamic Strategy Overlay (DB Driven) ===
         strategy_desc = "Standard Formula"
         pass_filter = True
         
-        # Check Box Breakout Custom %
-        # Default box detection uses 5%. Some stocks need 10% or 15%.
-        # We need to re-check box with custom tolerance if valid buy signal detected.
-        
         if strategy_info:
-            t = ticker
-            desc_log = []
-            
-            # 1. Box & Volume Rules (SOXL, IONQ)
-            if t in ['SOXL', 'IONQ']:
-                req_vol = 250 if t == 'SOXL' else 300
-                req_box = 10.0 if t == 'SOXL' else 15.0
-                
-                # Re-check Box with custom tolerance
-                c_is_box, c_box_high, c_box_low, c_box_pct = check_box_pattern(df_30, tolerance=req_box)
-                
-                if recent_cross_type == 'gold':
-                    # Filter: Must be Box Breakout OR Strong Volume? 
-                    # "SMA 10/30 TC + Box 10% Break + Vol 250%+" -> AND condition?
-                    # "Box 10% 돌파" implies it WAS in box, and now broke out.
-                    # If just trending without box, is it ignored? "Golden Cross + Box Break" implies stricter.
-                    # Let's assume: If Box Active -> Must Break. If No Box -> Vol Limit?
-                    # Spec: "Golden Cross + Box 10% Break + Vol" -> Sounds like ALL 3 required.
-                    # This is very strict. If stock is trending nicely without box, we miss it?
-                    # "가짜 신호 제거" is the goal. So yes, Strict.
-                    
-                    if c_is_box: # Currently in box (or just broke?) check_box_pattern checks recent 7 days range.
-                        # Breakout check
-                        if current_price > c_box_high:
-                            desc_log.append(f"BoxBreak(>{req_box}%):OK")
-                        else:
-                            pass_filter = False
-                            desc_log.append(f"BoxBreak:Fail(Price<=High)")
-                    else:
-                        # Not in box? If range > 10%, it's already volatile.
-                        # Spec says "Box ... Break". If no box, maybe just Volume?
-                        desc_log.append("NoBox:Pass")
-
-                    if vol_ratio < req_vol:
-                        pass_filter = False
-                        desc_log.append(f"Vol({vol_ratio:.0f}% < {req_vol}%)")
-                    else:
-                        desc_log.append("Vol:OK")
-                        
-            # 2. TSLA: Box 5% + RSI 60
-            elif t == 'TSLA':
-                c_is_box, c_box_high, _, _ = check_box_pattern(df_30, tolerance=5.0)
-                rsi_val = df_30['RSI'].iloc[-1]
-                
-                if recent_cross_type == 'gold':
-                    if c_is_box and current_price <= c_box_high:
-                        pass_filter = False
-                        desc_log.append("BoxBreak:Fail")
-                    
-                    if rsi_val < 60:
-                        pass_filter = False
-                        desc_log.append(f"RSI({rsi_val:.1f} < 60)")
-                        
-            # 3. UPRO/TMF: EMA 15/50 Cross (Not SMA 10/30)
-            elif t in ['UPRO', 'TMF']:
-                # Override Cross Type Calculation for these!
-                # Re-calc 'recent_cross_type' based on EMA 15/50
-                # Scan last 50 candles for EMA Cross
-                ema_cross = None
-                ema_idx = -1
-                e_sig_time = ""
-                
-                for i in range(1, 50):
-                     c_15 = df_30['EMA15'].iloc[-i]
-                     c_50 = df_30['EMA50'].iloc[-i]
-                     p_15 = df_30['EMA15'].iloc[-(i+1)]
-                     p_50 = df_30['EMA50'].iloc[-(i+1)]
+             # Parse
+             st_conf = parse_strategy_config(strategy_info.get('buy_strategy', ''))
+             desc_log = []
+             
+             # 1. Custom MA Cross Check (if different from default SMA 10/30)
+             if st_conf['ma_type'] != 'sma' or st_conf['ma_fast'] != 10 or st_conf['ma_slow'] != 30:
+                 # Re-calculate Cross
+                 c_ma_cross = None
+                 c_idx = -1
+                 c_sig_time = ""
+                 
+                 # Calc indicators on df_30
+                 fast_col = f"MA_FAST_{st_conf['ma_fast']}"
+                 slow_col = f"MA_SLOW_{st_conf['ma_slow']}"
+                 
+                 if st_conf['ma_type'] == 'ema':
+                     df_30[fast_col] = calculate_ema(df_30['Close'], st_conf['ma_fast'])
+                     df_30[slow_col] = calculate_ema(df_30['Close'], st_conf['ma_slow'])
+                     desc_log.append(f"Strat:EMA{st_conf['ma_fast']}/{st_conf['ma_slow']}")
+                 else:
+                     df_30[fast_col] = calculate_sma(df_30['Close'], st_conf['ma_fast'])
+                     df_30[slow_col] = calculate_sma(df_30['Close'], st_conf['ma_slow'])
+                     desc_log.append(f"Strat:SMA{st_conf['ma_fast']}/{st_conf['ma_slow']}")
                      
-                     if p_15 <= p_50 and c_15 > c_50:
-                         ema_cross = 'gold'
-                         ema_idx = -i
-                         e_sig_time = df_30.index[-i]
+                 # Scan for cross
+                 for i in range(1, 50):
+                     if i >= len(df_30): break
+                     c_f = df_30[fast_col].iloc[-i]
+                     c_s = df_30[slow_col].iloc[-i]
+                     p_f = df_30[fast_col].iloc[-(i+1)]
+                     p_s = df_30[slow_col].iloc[-(i+1)]
+                     
+                     if p_f <= p_s and c_f > c_s:
+                         c_ma_cross = 'gold'
+                         c_idx = -i
+                         c_sig_time = df_30.index[-i]
                          break
-                     elif p_15 >= p_50 and c_15 < c_50:
-                         ema_cross = 'dead'
-                         ema_idx = -i
-                         e_sig_time = df_30.index[-i]
+                     elif p_f >= p_s and c_f < c_s:
+                         c_ma_cross = 'dead'
+                         c_idx = -i
+                         c_sig_time = df_30.index[-i]
                          break
-                
-                # Override standard SMA signals
-                recent_cross_type = ema_cross
-                cross_idx = ema_idx
-                if e_sig_time: signal_time = e_sig_time
-                desc_log.append(f"Strategy:EMA15/50")
-                
-                # Filter: UPRO needs EMA 200 Filter (Daily?) -> User says "EMA 200 필터" in Buy formula.
-                # Assuming Daily EMA 200.
-                if t == 'UPRO' and recent_cross_type == 'gold':
-                     # Need Daily EMA 200. How to get? 
-                     # fetch_data fetches regime data (daily). But analyze_ticker inputs are 30m/5m.
-                     # We didn't pass Daily data to analyze_ticker. 
-                     # Workaround: Use 30m EMA ~ SMA * factor? No.
-                     # Simply skip this advanced filter for this iteration or assume Bull Regime check covers it.
-                     pass 
+                 
+                 # Override Global Result
+                 recent_cross_type = c_ma_cross
+                 cross_idx = c_idx
+                 if c_sig_time: signal_time = c_sig_time
+                 
+             # 2. Box Filter
+             if st_conf['box_tol']:
+                 if recent_cross_type == 'gold':
+                     c_is_box, c_box_high, _, _ = check_box_pattern(df_30, tolerance=st_conf['box_tol'])
+                     if c_is_box:
+                         if current_price > c_box_high:
+                             desc_log.append(f"BoxBreak(>{st_conf['box_tol']}%):OK")
+                         else:
+                             pass_filter = False
+                             desc_log.append(f"BoxBreak:Fail(Price<=High)")
+                     else:
+                         # Strategy usually implies we want to catch the breakout.
+                         # If no box, we pass (lenient) or fail?
+                         # Let's say lenient for now unless explicitly strict.
+                         desc_log.append("NoBox:Pass")
 
-            # 4. GOOGL: RSI 50+
-            elif t == 'GOOGL':
-                rsi_val = df_30['RSI'].iloc[-1]
-                if recent_cross_type == 'gold' and rsi_val < 50:
-                    pass_filter = False
-                    desc_log.append(f"RSI({rsi_val:.1f} < 50)")
+             # 3. Volume Filter
+             if st_conf['vol_req']:
+                 if recent_cross_type == 'gold':
+                      if vol_ratio < st_conf['vol_req']:
+                          pass_filter = False
+                          desc_log.append(f"Vol({vol_ratio:.0f}% < {st_conf['vol_req']}%)")
 
-            if desc_log:
-                strategy_desc = ", ".join(desc_log)
+             # 4. RSI Filter (Min)
+             if st_conf['rsi_min']:
+                  if recent_cross_type == 'gold':
+                      rsi_val = df_30['RSI'].iloc[-1]
+                      if rsi_val < st_conf['rsi_min']:
+                          pass_filter = False
+                          desc_log.append(f"RSI({rsi_val:.1f} < {st_conf['rsi_min']})")
+                          
+             # 5. Daily MA Filter
+             if st_conf['daily_ema200'] or st_conf['daily_sma200']:
+                 if recent_cross_type == 'gold':
+                     if df_1d is not None and len(df_1d) >= 200:
+                          d_close = df_1d['Close'].iloc[-1]
+                          ma_val = 0
+                          if st_conf['daily_ema200']:
+                              ma_val = calculate_ema(df_1d['Close'], 200).iloc[-1]
+                              lbl = "EMA200"
+                          else:
+                              ma_val = calculate_sma(df_1d['Close'], 200).iloc[-1]
+                              lbl = "SMA200"
+                              
+                          if d_close < ma_val:
+                              pass_filter = False
+                              desc_log.append(f"Daily{lbl}:Fail(Close<MA)")
+                          else:
+                              desc_log.append(f"Daily{lbl}:OK")
+                     else:
+                          desc_log.append("DailyMA:NoData") 
+
+             if desc_log: strategy_desc = ", ".join(desc_log)
         
         # Force "Observing" if filter failed
         if not pass_filter and recent_cross_type == 'gold':
@@ -906,27 +953,7 @@ def generate_trade_guidelines(results, market_data, regime_info, total_capital=1
     return "\n\n".join(guidelines)
 
 
-def run_analysis(held_tickers=[]):
-    data_30m, data_5m, market_data, regime_daily = fetch_data()
-    # Calculate Market Volatility Score
-    market_vol_score = -5 # Default: Neutral/Flat (Bad? User says High Volatility is Good (+5))
-    # User: "보합/혼조세면 -5점 , 강한 상승장이나 하락장이면 +5점"
-    
-    if "S&P500" in market_data:
-        df_spy = market_data["S&P500"]
-        if not df_spy.empty and len(df_spy) >= 2:
-            # Check 1 day change
-            curr = df_spy['Close'].iloc[-1]
-            prev = df_spy['Close'].iloc[-2]
-            spy_change = ((curr - prev) / prev) * 100
-            
-            if abs(spy_change) >= 0.5:
-                market_vol_score = 5
-    
-    # --- Cheongan 2.0: Analyze Market Regime ---
-    # Need UPRO, GSPC, IXIC daily data.
-    # We need to pass held_tickers or another way to get managed stocks strategies? 
-    # For now, let's just analyze regime.
+def determine_market_regime(regime_daily, data_30m):
     
     regime = "Sideways" # Default
     regime_details = {}
@@ -1024,10 +1051,6 @@ def run_analysis(held_tickers=[]):
     try:
         from db import update_market_status
         update_market_status(regime, regime_details)
-    except: pass
-
-    
-    # Fetch Real-time Prices (KIS)
     except Exception as e:
         print(f"DB Update Market Status Error: {e}")
 
@@ -1041,7 +1064,14 @@ def run_analysis(held_tickers=[]):
     # DYNAMIC TICKER FETCHING (Cheongan 2.0)
     # -------------------------------------------------------------
     from db import get_managed_stocks, get_total_capital, get_current_holdings, update_market_status
-    from kis_api import KISClient, EXCHANGE_MAP_KIS # Moved KIS imports here for clarity
+    from kis_api import kis_client  # Import singleton instance
+    
+    # Exchange Mapping for Speed (Avoid 3 sequential requests)
+    # Ideally should be in database or global config, but keeping here for now.
+    EXCHANGE_MAP_KIS = {
+        "TSLA": "NAS", "GOOGL": "NAS", "AMZU": "NAS", "UFO": "NAS", "NVDA": "NAS", "AAPL": "NAS", "MSFT": "NAS", "AMZN": "NAS", "NFLX": "NAS", "AMD": "NAS", "INTC": "NAS", "QQQ": "NAS", "TQQQ": "NAS", "SQQQ": "NAS", "XPON": "NAS",
+        "SOXL": "NYS", "SOXS": "NYS", "UPRO": "NYS", "AAAU": "NYS", "IONQ": "NYS", "SPY": "NYS", "IVV": "NYS", "VOO": "NYS"
+    }
     
     managed_stocks_list = get_managed_stocks()
     if not managed_stocks_list:
@@ -1062,7 +1092,9 @@ def run_analysis(held_tickers=[]):
     # Update TICKER_NAMES map if possible (optional but good for display)
     if managed_stocks_list:
         for s in managed_stocks_list:
-            TICKER_NAMES[s['ticker']] = s['name']
+            t_ticker = s.get('ticker')
+            if t_ticker:
+                TICKER_NAMES[t_ticker] = s.get('name', t_ticker)
             
     # -------------------------------------------------------------
 
@@ -1072,7 +1104,7 @@ def run_analysis(held_tickers=[]):
     # We need to ensure fetch_market_data returns what's needed for determine_market_regime
     # Let's adjust fetch_data to return all necessary components.
     # Assuming fetch_data() is modified to take active_tickers and return all necessary dataframes.
-    data_30m, data_5m, market_data, regime_daily_data = fetch_data(active_tickers) # Assuming fetch_data now takes tickers
+    data_30m, data_5m, data_1d, market_data, regime_daily_data = fetch_data(active_tickers) # Assuming fetch_data now takes tickers
     
     # 2. Determine Market Regime
     # Pass the relevant daily data for regime analysis.
@@ -1096,10 +1128,10 @@ def run_analysis(held_tickers=[]):
     
     # 3. Analyze Tickers (Real-time KIS Price Fetching)
     real_time_map = {}
+    real_time_map = {}
     try:
-        kis_client = KISClient()
-        if not kis_client.access_token:
-            kis_client._auth()
+        # kis_client imported from kis_api is already instantiated
+        pass
         
         def fetch_wrapper(t):
              excd = EXCHANGE_MAP_KIS.get(t)
@@ -1136,11 +1168,32 @@ def run_analysis(held_tickers=[]):
         strategy_info = managed_map.get(ticker, None)
         
         # held_tickers is the dict from db.get_current_holdings
-        res = analyze_ticker(ticker, data_30m, data_5m, market_vol_score, is_held, real_time_info=rt_info, holdings_data=held_tickers, strategy_info=strategy_info)
+        res = analyze_ticker(ticker, data_30m, data_5m, data_1d, market_vol_score, is_held, real_time_info=rt_info, holdings_data=held_tickers, strategy_info=strategy_info)
         
-        # Attach strategy target ratio for guideline generation
+        # Attach strategy target ratio logic (Cheongan 2.1 Regime-based)
         if strategy_info:
-            res['target_ratio'] = strategy_info.get('target_ratio', 0)
+            regime = regime_info.get('regime', 'Sideways')
+            base_target = strategy_info.get('target_ratio', 0)
+            group_name = strategy_info.get('group_name', '')
+            final_target = base_target
+            
+            # Regime Adjustment
+            if regime == 'Bear':
+                if ticker == 'SOXS': 
+                     final_target = 20 # Active Hedge
+                elif '헷지' in group_name or '안정성' in group_name:
+                     final_target = base_target
+                else:
+                     final_target = int(base_target * 0.3) # Heavy cut on Growth
+            elif regime == 'Bull':
+                final_target = base_target
+                if ticker == 'SOXS': final_target = 0
+            else: # Sideways
+                if ticker == 'SOXS': final_target = 5
+                else: final_target = int(base_target * 0.8)
+
+            res['target_ratio'] = final_target
+            res['base_target'] = base_target
             
         results.append(res)
         
