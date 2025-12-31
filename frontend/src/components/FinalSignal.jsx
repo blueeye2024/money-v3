@@ -105,8 +105,9 @@ const PortfolioCard = ({ stock, rank }) => {
                 borderRight: isRank1 ? '1px solid var(--accent-gold)' : '1px solid #E2E8F0',
                 borderBottom: isRank1 ? '1px solid var(--accent-gold)' : '1px solid #E2E8F0'
             }}>
-                {isRank1 ? '👑 1st Pick' : '🥈 2nd Pick'}
+                {rank === 1 ? '👑 1st Pick' : rank === 2 ? '🥈 2nd Pick' : rank === 3 ? '🥉 3rd Pick' : `${rank}th Pick`}
             </div>
+
 
 
 

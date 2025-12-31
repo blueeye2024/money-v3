@@ -128,34 +128,31 @@ def monitor_signals():
                             print(f"SMS Throttled for {ticker}: Already sent in last {SMS_THROTTLE_MINUTES} mins.")
                         else:
                             # Send
-                            # User Request: Ticker, KST Time, Type, Price, Total Score, Interpretation
-                            interpretation = res.get('score_interpretation', '')
+                            # User Request: Ticker, Type(Buy/Sell), Price, Score
+                            short_pos = "매수" if "매수" in res['position'] or "상단" in res['position'] else "매도"
                             score = res.get('score', 0)
-                            
-                            # Update Reason for SMS
-                            reason = f"{score}점 [{interpretation}]"
+                            sms_reason = f"{score}점"
                             
                             success = send_sms(
-                                stock_name=res['name'], 
-                                signal_type=res['position'], 
+                                stock_name=ticker, # Use Ticker instead of Name
+                                signal_type=short_pos, 
                                 price=res['current_price'], 
-                                signal_time=res['signal_time'], 
-                                reason=reason
+                                signal_time="", # Time removed per request
+                                reason=sms_reason
                             )
                             if success:
                                 is_sent = True
-                                msg = f"[{res['signal_time']}] [{res['name']}] [{res['position']}] [${res['current_price']}] [{reason}]"
+                                msg = f"[{ticker}] [{short_pos}] [${res['current_price']}] [{sms_reason}]"
                                 save_sms_log(receiver="01044900528", message=msg, status="Success")
 
-                    # 2. Save Signal to DB (Only if SMS sent, per user request)
-                    if is_sent:
-                        save_signal({
-                            'ticker': ticker,
-                            'name': res['name'],
-                            'signal_type': "BUY" if "매수" in res['position'] or "상단" in res['position'] else "SELL",
+                    # 2. Save Signal to DB (Ensures history is populated for all detected signals)
+                    save_signal({
+                        'ticker': ticker,
+                        'name': res['name'],
+                        'signal_type': "BUY" if "매수" in res['position'] or "상단" in res['position'] else "SELL",
                         'position': res['position'],
                         'current_price': res['current_price'],
-                        'signal_time_raw': current_raw_time, # Assuming KST or adjusted
+                        'signal_time_raw': current_raw_time,
                         'is_sent': is_sent,
                         'score': res.get('score', 0),
                         'interpretation': res.get('score_interpretation', '')

@@ -355,7 +355,7 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0, is_held=Fals
         news_prob = max(0, min(100, news_prob))
         
         # === Cheongan Scoring Engine (User Rules) ===
-        base_main = 50 if not is_observing else 20
+        base_main = 20 if not is_observing else 10
         base_confluence = 10 if t30 == t5 else -10
         
         # Auxiliary Indicators (Max 20)
