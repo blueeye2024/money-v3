@@ -161,9 +161,9 @@ function Dashboard() {
 
             {data?.market && <MarketStats market={data.market} />}
 
-            {data?.stocks && <FinalSignal stocks={visibleStocks} />}
-
             {data && <MarketInsight market={data} />}
+
+            {data?.stocks && <FinalSignal stocks={visibleStocks} />}
 
             <h2 style={{ fontSize: '1.5rem', marginBottom: '1.5rem', marginTop: '3rem' }}>종목별 상세 분석</h2>
             <div className="grid-cards">

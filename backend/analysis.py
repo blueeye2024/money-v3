@@ -837,21 +837,33 @@ def generate_trade_guidelines(results, market_data, regime_info, total_capital=1
                 needed_amt = target_amt - current_amt
                 if needed_amt > 0:
                     buy_qty = int(needed_amt / curr_price)
-                    if buy_qty > 0:
-                        buy_candidates.append(f"{ticker} (+{buy_qty}주, 목표 {target_ratio}%)")
-                    else:
-                        buy_candidates.append(f"{ticker} (비중 충족)")
+                    msg = f"{ticker}: "
+                    if is_held:
+                        avg = held_tickers[ticker]['avg_price']
+                        msg += f"보유 {held_qty}주(${avg:.1f}) → "
+                    msg += f"**{buy_qty}주 추가 매수** (목표 {target_ratio}%)"
+                    buy_candidates.append(msg)
                 else:
-                     buy_candidates.append(f"{ticker} (비중 초과, 추가 매수 금지)")
+                     buy_candidates.append(f"{ticker}: 비중 충족 (보유 {held_qty}주)")
             else:
-                buy_candidates.append(f"{ticker} (단타 접근)")
+                 # No target ratio or bad price
+                 buy_candidates.append(f"{ticker}: 단타 진입 (목표 비중 미설정)")
 
         elif "진입" in pos and "매도" in pos:
              # Sell Logic
-             sell_candidates.append(f"{ticker} (전량/분할 매도)")
+             msg = f"{ticker}: "
+             if is_held:
+                 avg = held_tickers[ticker]['avg_price']
+                 msg += f"보유 {held_qty}주(${avg:.1f}) → "
+             msg += "**전량 매도 권고**"
+             sell_candidates.append(msg)
              
         elif "유지" in pos:
-             hold_maintenance.append(f"{ticker}")
+             if is_held:
+                 avg = held_tickers[ticker]['avg_price']
+                 hold_maintenance.append(f"{ticker}: 보유 {held_qty}주 유지")
+             else:
+                 hold_maintenance.append(f"{ticker}: 관망")
 
     if buy_candidates:
         guidelines.append(f"✅ **매수 추천**: {', '.join(buy_candidates)}")

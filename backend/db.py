@@ -451,6 +451,7 @@ def get_managed_stocks():
     try:
         with conn.cursor() as cursor:
             cursor.execute("SELECT * FROM managed_stocks ORDER BY group_name, ticker")
+            return cursor.fetchall()
     finally:
         conn.close()
 

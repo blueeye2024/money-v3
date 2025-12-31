@@ -10,7 +10,7 @@ const JournalPage = () => {
 
     const [exchangeRate, setExchangeRate] = useState(1350);
     const [prices, setPrices] = useState({}); // {ticker: current_price}
-    const [totalCapital, setTotalCapital] = useState(10000);  // New State for Capital
+    const [totalCapitalKRW, setTotalCapitalKRW] = useState(0);  // Store in KRW
     const [capitalLoading, setCapitalLoading] = useState(false);
 
     // Form State (Journal)
@@ -37,8 +37,6 @@ const JournalPage = () => {
     useEffect(() => {
         fetchStocks();
         fetchTransactions();
-        fetchStocks();
-        fetchTransactions();
         fetchStats();
         fetchExchangeRate();
         fetchCurrentPrices();
@@ -50,18 +48,38 @@ const JournalPage = () => {
             const res = await fetch('/api/capital');
             if (res.ok) {
                 const d = await res.json();
-                setTotalCapital(d.amount);
+                // Convert USD to KRW for display (approx) or wait for Exchange Rate?
+                // Better to refetch after exchange rate is set. 
+                // However, useEffect calls them in parallel.
+                // Let's assume exchangeRate is updated or default 1350.
+                setTotalCapitalKRW(Math.round(d.amount * 1350)); // Initial approx
             }
         } catch (e) { console.error(e); }
     };
 
+    // Need to update capital display when exchange rate loads properly
+    useEffect(() => {
+        if (exchangeRate > 0) {
+            const reloadCapital = async () => {
+                const res = await fetch('/api/capital');
+                if (res.ok) {
+                    const d = await res.json();
+                    setTotalCapitalKRW(Math.round(d.amount * exchangeRate));
+                }
+            };
+            reloadCapital();
+        }
+    }, [exchangeRate]);
+
     const saveCapital = async (val) => {
         setCapitalLoading(true);
         try {
+            // Convert input KRW to USD
+            const usdAmount = parseFloat(val) / exchangeRate;
             await fetch('/api/capital', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ amount: parseFloat(val) })
+                body: JSON.stringify({ amount: usdAmount })
             });
         } catch (e) { console.error(e); }
         setCapitalLoading(false);
