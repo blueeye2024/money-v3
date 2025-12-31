@@ -14,16 +14,10 @@ const FinalSignal = ({ stocks }) => {
     const portfolio = useMemo(() => {
         if (!stocks || stocks.length === 0) return [];
 
-        // Priority:
-        // 1. Buy Signal (Entry / Add)
-        // 2. Sell Signal (Exit / Partial)
-        // 3. Held (Hold/Wait)
-        // 4. Watchlist (Others)
-
         const categorized = stocks.map(stock => {
             const pos = stock.position || "";
             const isHeld = stock.is_held || false;
-            const score = stock.score || 0;
+            // score is available but not shown in summary
             const target = stock.target_ratio || 0;
 
             let type = "WATCH"; // DEFAULT
@@ -32,23 +26,28 @@ const FinalSignal = ({ stocks }) => {
 
             const isBuy = pos.includes('매수') || pos.includes('상단');
             const isSell = pos.includes('매도') || pos.includes('하단');
-            const isHold = pos.includes('유지') || pos.includes('관망'); // Using '유지' keyword from analysis
+            const isHold = pos.includes('유지') || pos.includes('관망');
+
+            // Use backend recommendation if available, else fallback
+            const backendAction = stock.action_recommendation;
 
             if (isBuy) {
                 type = "BUY";
-                action = isHeld ? `추가 매수 (목표 ${target}%)` : `신규 진입 (목표 ${target}%)`;
+                action = backendAction || (isHeld ? `추가 매수 (목표 ${target}%)` : `신규 진입 (목표 ${target}%)`);
                 priority = 1;
             } else if (isSell && isHeld) {
                 type = "SELL";
-                action = "매도 대응 (Profit/Cut)";
+                action = backendAction || "전량 매도 권고";
                 priority = 2;
             } else if (isHeld) {
                 type = "HOLD";
-                action = "보유 (Hold)";
+                action = backendAction || "보유 유지";
                 priority = 3;
+            } else {
+                action = backendAction || "관망";
             }
 
-            return { ...stock, type, action, priority };
+            return { ...stock, type, action, priority, target };
         });
 
         // Sort
@@ -72,10 +71,10 @@ const FinalSignal = ({ stocks }) => {
                             <th style={{ padding: '1rem', textAlign: 'center' }}>Rank</th>
                             <th style={{ padding: '1rem', textAlign: 'left' }}>Stock</th>
                             <th style={{ padding: '1rem', textAlign: 'center' }}>Position</th>
-                            <th style={{ padding: '1rem', textAlign: 'left' }}>Action Plan</th>
-                            <th style={{ padding: '1rem', textAlign: 'right' }}>Score</th>
+                            <th style={{ padding: '1rem', textAlign: 'left' }}>Guideline (Action)</th>
+                            <th style={{ padding: '1rem', textAlign: 'right' }}>Target %</th>
                             <th style={{ padding: '1rem', textAlign: 'right' }}>Price</th>
-                            <th style={{ padding: '1rem', textAlign: 'center' }}>Reason</th>
+                            <th style={{ padding: '1rem', textAlign: 'center' }}>Signal</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -102,11 +101,11 @@ const FinalSignal = ({ stocks }) => {
                                             {stock.type}
                                         </span>
                                     </td>
-                                    <td style={{ padding: '1rem', color: isBuy ? '#4ade80' : isSell ? '#f87171' : '#ddd' }}>
+                                    <td style={{ padding: '1rem', color: isBuy ? '#4ade80' : isSell ? '#f87171' : '#ddd', fontWeight: isBuy || isSell ? 'bold' : 'normal' }}>
                                         {stock.action}
                                     </td>
-                                    <td style={{ padding: '1rem', textAlign: 'right', fontWeight: 'bold' }}>
-                                        {stock.score}
+                                    <td style={{ padding: '1rem', textAlign: 'right' }}>
+                                        {stock.target}%
                                     </td>
                                     <td style={{ padding: '1rem', textAlign: 'right' }}>
                                         ${stock.current_price?.toFixed(2)}
@@ -123,8 +122,5 @@ const FinalSignal = ({ stocks }) => {
         </div>
     );
 };
-
-
-
 
 export default FinalSignal;

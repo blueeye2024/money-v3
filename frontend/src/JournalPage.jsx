@@ -374,6 +374,24 @@ const JournalPage = () => {
                                     (약 {(totalUnrealized * exchangeRate).toLocaleString(undefined, { maximumFractionDigits: 0 })}원)
                                 </div>
                             </div>
+
+                            {/* Total Capital Input */}
+                            <div style={{ marginTop: '1rem', paddingTop: '0.8rem', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <label style={{ fontSize: '0.85rem', color: '#ccc' }}>💰 총 자산 (KRW):</label>
+                                <input
+                                    type="number"
+                                    className="input-field"
+                                    style={{ width: '120px', height: '32px', textAlign: 'right', fontWeight: 'bold', color: 'var(--accent-gold)', padding: '0 0.5rem' }}
+                                    value={totalCapitalKRW}
+                                    onChange={(e) => setTotalCapitalKRW(e.target.value)}
+                                    onBlur={(e) => saveCapital(e.target.value)}
+                                    placeholder="원화 입력"
+                                />
+                                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                    (Rate: {exchangeRate})
+                                </span>
+                                {capitalLoading && <span style={{ fontSize: '0.8rem' }}>💾</span>}
+                            </div>
                         </div>
                         <div className="summary-item">
                             <div style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>Invested</div>

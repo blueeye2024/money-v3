@@ -828,42 +828,63 @@ def generate_trade_guidelines(results, market_data, regime_info, total_capital=1
         is_held = ticker in held_tickers
         held_qty = held_tickers[ticker]['qty'] if is_held else 0
         
-        # Action Logic
+        # ------------------------------------------------------------------
+        # NEW: Inject Action Plan into Result Object for Frontend Table
+        # ------------------------------------------------------------------
+        res['held_qty'] = held_qty
+        res['held_avg'] = held_tickers[ticker]['avg_price'] if is_held else 0
+        res['target_ratio'] = target_ratio
+        
+        action_plan = "-"
+        
         if "진입" in pos and "매수" in pos:
             # Calculate Recommended Buy Qty
             if target_ratio > 0 and curr_price > 0:
                 target_amt = total_capital * (target_ratio / 100.0)
                 current_amt = held_qty * curr_price
                 needed_amt = target_amt - current_amt
+                
                 if needed_amt > 0:
                     buy_qty = int(needed_amt / curr_price)
-                    msg = f"{ticker}: "
-                    if is_held:
-                        avg = held_tickers[ticker]['avg_price']
-                        msg += f"보유 {held_qty}주(${avg:.1f}) → "
-                    msg += f"**{buy_qty}주 추가 매수** (목표 {target_ratio}%)"
-                    buy_candidates.append(msg)
+                    if buy_qty > 0:
+                        msg = f"{ticker}: "
+                        if is_held:
+                            avg = held_tickers[ticker]['avg_price']
+                            msg += f"보유 {held_qty}주 → "
+                        msg += f"**{buy_qty}주 추가 매수**"
+                        buy_candidates.append(msg)
+                        action_plan = f"추가 매수 {buy_qty}주 (목표 {target_ratio}%)"
+                    else:
+                        buy_candidates.append(f"{ticker}: 비중 충족")
+                        action_plan = "현 비중 유지 (목표 달성)"
                 else:
-                     buy_candidates.append(f"{ticker}: 비중 충족 (보유 {held_qty}주)")
+                     buy_candidates.append(f"{ticker}: 비중 충족")
+                     action_plan = "현 비중 유지 (목표 달성)"
             else:
-                 # No target ratio or bad price
-                 buy_candidates.append(f"{ticker}: 단타 진입 (목표 비중 미설정)")
+                 # No target ratio
+                 buy_candidates.append(f"{ticker}: 신규 진입 (목표 미설정)")
+                 action_plan = "신규 진입 (단타)"
 
         elif "진입" in pos and "매도" in pos:
              # Sell Logic
              msg = f"{ticker}: "
              if is_held:
                  avg = held_tickers[ticker]['avg_price']
-                 msg += f"보유 {held_qty}주(${avg:.1f}) → "
-             msg += "**전량 매도 권고**"
+                 msg += f"보유 {held_qty}주 → "
+             msg += "**전량 매도**"
              sell_candidates.append(msg)
+             action_plan = "전량 매도 권고"
              
         elif "유지" in pos:
              if is_held:
-                 avg = held_tickers[ticker]['avg_price']
-                 hold_maintenance.append(f"{ticker}: 보유 {held_qty}주 유지")
+                 hold_maintenance.append(f"{ticker}: 보유 유지")
+                 action_plan = f"보유 유지 ({held_qty}주)"
              else:
                  hold_maintenance.append(f"{ticker}: 관망")
+                 action_plan = "관망"
+        
+        res['action_recommendation'] = action_plan
+        # ------------------------------------------------------------------
 
     if buy_candidates:
         guidelines.append(f"✅ **매수 추천**: {', '.join(buy_candidates)}")
