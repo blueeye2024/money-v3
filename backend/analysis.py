@@ -62,6 +62,11 @@ def get_current_time_str():
         "full_str": f"{now_kst.strftime('%Y-%m-%d %H:%M:%S')} KST (EST: {now_est.strftime('%m/%d %H:%M:%S')})"
     }
 
+def get_current_time_str_sms():
+    kst = pytz.timezone('Asia/Seoul')
+    now_kst = datetime.now(timezone.utc).astimezone(kst)
+    return now_kst.strftime("%Y.%m.%d %H:%M")
+
 def fetch_data():
     global _DATA_CACHE
     
@@ -757,23 +762,67 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, market_vol_score=0, is_held=Fals
         return {"ticker": ticker, "name": stock_name, "error": str(e)}
 
 def generate_market_insight(results, market_data):
-    # Determine overall sentiment
-    buy_signals = sum(1 for r in results if r.get('position', '').strip().startswith("🚨 매수") or r.get('position', '').strip().startswith("🔴 매수") or "상단" in r.get('position', ''))
-    sell_signals = sum(1 for r in results if r.get('position', '').strip().startswith("🚨 매도") or r.get('position', '').strip().startswith("🔵 매도") or "하단" in r.get('position', ''))
-    total = len(results)
-    
-    insight = f"현재 분석된 {total}개 주요 종목 중 {buy_signals}개 종목이 매수 우위, {sell_signals}개 종목이 매도 우위를 보이고 있습니다."
-    
-    if buy_signals > sell_signals:
-        insight += " 전반적으로 기술적 반등 및 상승 추세가 감지되고 있으며, 특히 반도체 및 기술주 섹터의 흐름을 주시해야 합니다."
-    elif sell_signals > buy_signals:
-        insight += " 시장 전반에 차익 실현 매물 및 하락 압력이 존재하므로 보수적인 접근이 권장됩니다."
-    else:
-        insight += " 매수와 매도 힘이 팽팽하게 맞서고 있는 혼조세가 지속되고 있습니다."
-        
-    insight += "\n\n[주요 뉴스 요약]\n- 연준(Fed) 금리 정책 및 주요 경제 지표 발표에 따른 변동성 확대 주의\n- S&P500 및 나스닥 지수의 주요 지지선 테스트 진행 중\n- 개별 기업 실적 이슈에 따른 기술적 등락폭 확대 가능성 존재"
-    
     return insight
+
+def generate_trade_guidelines(results, market_data, regime_info):
+    """
+    Generate logic-based trade guidelines for Cheongan 2.0.
+    Replaces generic news with actionable advice based on Holdings & Signals.
+    """
+    guidelines = []
+    
+    # 1. Market Regime Context
+    regime = regime_info.get('regime', 'Sideways')
+    regime_kr = "보합장(Sideways)"
+    if regime == 'Bull': regime_kr = "상승장(Bull)"
+    elif regime == 'Bear': regime_kr = "하락장(Bear)"
+    
+    guidelines.append(f"현재 시장은 **{regime_kr}** 국면입니다.")
+    
+    # 2. Holdings Action Plan
+    # We need to know what is held. Analyze 'position' field in results.
+    # Results have 'is_held' field inside them? No, 'position' text implies it.
+    # Actually run_analysis passes 'held_tickers'. But results[i] has 'ticker' and analyzed 'position'.
+    
+    # Let's categorize actions
+    buy_candidates = []
+    sell_candidates = []
+    hold_maintenance = []
+    
+    for res in results:
+        pos = res.get('position', '')
+        ticker = res.get('ticker')
+        score = res.get('score', 0)
+        
+        if "진입" in pos and "매수" in pos:
+            buy_candidates.append(f"{ticker} ({score}점)")
+        elif "진입" in pos and "매도" in pos:
+            sell_candidates.append(f"{ticker} ({score}점)")
+        elif "유지" in pos:
+            hold_maintenance.append(f"{ticker}")
+            
+    if buy_candidates:
+        guidelines.append(f"✅ **매수 포착**: {', '.join(buy_candidates)} - 분할 매수 진입 유효.")
+    
+    if sell_candidates:
+        guidelines.append(f"🚨 **매도/손절**: {', '.join(sell_candidates)} - 리스크 관리 및 차익 실현 필요.")
+        
+    if hold_maintenance:
+        guidelines.append(f"🛡️ **보유 관망**: {', '.join(hold_maintenance)} - 추세 지속 여부 모니터링.")
+        
+    if not buy_candidates and not sell_candidates and not hold_maintenance:
+        guidelines.append("현재 특이 신호가 없으며, **관망(Observing)**을 추천합니다. 무리한 진입을 자제하십시오.")
+
+    # 3. Strategy Tip based on Regime
+    if regime == 'Bull':
+        guidelines.append("Tip: 주도주(SOXL, UPRO) 눌림목 매수 및 길게 가져가는 추세 추종 전략이 유리합니다.")
+    elif regime == 'Bear':
+        guidelines.append("Tip: 현금 비중을 확대하고, 반등 시 매도(SOXS, TMF 헤지) 전략으로 대응하십시오.")
+    else:
+        guidelines.append("Tip: 박스권 상단 매도/하단 매수 전략. 짧은 호흡으로 대응하며 휩소(Whipsaw)에 주의하십시오.")
+
+    return "\n\n".join(guidelines)
+
 
 def run_analysis(held_tickers=[]):
     data_30m, data_5m, market_data, regime_daily = fetch_data()
@@ -964,9 +1013,6 @@ def run_analysis(held_tickers=[]):
         except Exception as e:
              indicators[name] = {"value": 0.0, "change": 0.0}
 
-    # Generate Insight
-    insight_text = generate_market_insight(results, market_data)
-
     # Fetch Regime Info from DB
     regime_info = {"regime": "Sideways", "details": {}}
     try:
@@ -979,6 +1025,9 @@ def run_analysis(held_tickers=[]):
                 "updated_at": str(last_stat['updated_at'])
             }
     except: pass
+
+    # Generate Trade Guidelines (Was Insight)
+    insight_text = generate_trade_guidelines(results, market_data, regime_info)
 
     return {
         "timestamp": get_current_time_str(),

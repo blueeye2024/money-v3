@@ -12,8 +12,11 @@ def send_sms(stock_name, signal_type, price, signal_time, reason=""):
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
     # Format message
-    # Msg Format: [SOXL] [매수] [45.20] [85점]
-    msg = f"[{stock_name}] [{signal_type}] [${price}] [{reason}]"
+    # Msg Format: [yyyy.MM.dd HH:mm] [SOXL] [매수] [45.20] [85점]
+    # signal_time arg is passed from main.py
+    
+    msg_time = signal_time if signal_time else datetime.now().strftime("%Y.%m.%d %H:%M")
+    msg = f"[{msg_time}] [{stock_name}] [{signal_type}] [${price}] [{reason}]"
     
     data = {
         "sms_id": "leeyw94",

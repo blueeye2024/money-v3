@@ -133,11 +133,14 @@ def monitor_signals():
                             score = res.get('score', 0)
                             sms_reason = f"{score}점"
                             
+                            from analysis import get_current_time_str_sms
+                            time_str = get_current_time_str_sms()
+                            
                             success = send_sms(
                                 stock_name=ticker, # Use Ticker instead of Name
                                 signal_type=short_pos, 
                                 price=res['current_price'], 
-                                signal_time="", # Time removed per request
+                                signal_time=time_str,
                                 reason=sms_reason
                             )
                             if success:
