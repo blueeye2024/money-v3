@@ -19,9 +19,10 @@ const FinalSignal = ({ stocks }) => {
             const isHeld = stock.is_held || false;
             // score is available but not shown in summary
             const target = stock.target_ratio || 0;
+            const currentRatio = stock.current_ratio || 0;
 
             let type = "WATCH"; // DEFAULT
-            let action = "관망 (Wait)";
+            let action = "관망";
             let priority = 4;
 
             const isBuy = pos.includes('매수') || pos.includes('상단');
@@ -47,7 +48,7 @@ const FinalSignal = ({ stocks }) => {
                 action = backendAction || "관망";
             }
 
-            return { ...stock, type, action, priority, target };
+            return { ...stock, type, action, priority, target, currentRatio };
         });
 
         // Sort
@@ -61,7 +62,7 @@ const FinalSignal = ({ stocks }) => {
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', marginBottom: '3rem' }}>
             <h2 style={{ fontSize: '1.2rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', letterSpacing: '2px', textAlign: 'center' }}>
-                ⭐ Cheongan Recommended Portfolio
+                ⭐ Cheongan Recommended Portfolio (Rebalancing)
             </h2>
 
             <div className="glass-panel" style={{ padding: '0', overflowX: 'auto' }}>
@@ -71,9 +72,9 @@ const FinalSignal = ({ stocks }) => {
                             <th style={{ padding: '1rem', textAlign: 'center' }}>Rank</th>
                             <th style={{ padding: '1rem', textAlign: 'left' }}>Stock</th>
                             <th style={{ padding: '1rem', textAlign: 'center' }}>Type</th>
-                            <th style={{ padding: '1rem', textAlign: 'center' }}>Holding (Qty / Avg)</th>
-                            <th style={{ padding: '1rem', textAlign: 'left' }}>Guideline (Action)</th>
-                            <th style={{ padding: '1rem', textAlign: 'right' }}>Target %</th>
+                            <th style={{ padding: '1rem', textAlign: 'center' }}>Holding (Qty / %)</th>
+                            <th style={{ padding: '1rem', textAlign: 'center' }}>Target %</th>
+                            <th style={{ padding: '1rem', textAlign: 'left' }}>Rebalancing Action</th>
                             <th style={{ padding: '1rem', textAlign: 'right' }}>Price</th>
                             <th style={{ padding: '1rem', textAlign: 'center' }}>Signal</th>
                         </tr>
@@ -107,15 +108,17 @@ const FinalSignal = ({ stocks }) => {
                                         {hasHolding ? (
                                             <>
                                                 <div style={{ fontWeight: 'bold' }}>{stock.held_qty} 주</div>
-                                                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>@ ${stock.held_avg?.toFixed(2)}</div>
+                                                <div style={{ fontSize: '0.8rem', color: 'var(--accent-gold)' }}>
+                                                    {stock.currentRatio?.toFixed(1)}% <span style={{ color: '#666', fontSize: '0.75em' }}>curr</span>
+                                                </div>
                                             </>
                                         ) : '-'}
                                     </td>
-                                    <td style={{ padding: '1rem', color: isBuy ? '#4ade80' : isSell ? '#f87171' : '#ddd', fontWeight: isBuy || isSell ? 'bold' : 'normal' }}>
-                                        {stock.action}
-                                    </td>
-                                    <td style={{ padding: '1rem', textAlign: 'right' }}>
+                                    <td style={{ padding: '1rem', textAlign: 'center', fontWeight: 'bold', color: '#fff' }}>
                                         {stock.target}%
+                                    </td>
+                                    <td style={{ padding: '1rem', color: isBuy ? '#4ade80' : isSell ? '#f87171' : '#ddd', fontWeight: 'bold' }}>
+                                        {stock.action}
                                     </td>
                                     <td style={{ padding: '1rem', textAlign: 'right' }}>
                                         ${stock.current_price?.toFixed(2)}

@@ -824,134 +824,98 @@ def generate_trade_guidelines(results, market_data, regime_info, total_capital=1
     
     # 1. Market Regime & Capital Status
     regime = regime_info.get('regime', 'Sideways')
-    regime_kr = "보합장(Sideways)"
-    if regime == 'Bull': regime_kr = "상승장(Bull)"
-    elif regime == 'Bear': regime_kr = "하락장(Bear)"
+    
+    regime_kr = "보합장 (Sideways)"
+    strategy_summary = "원금 보존 및 박스권 매매 (가치 방어 40%, 전술 30%, 현금 20%)"
+    if regime == 'Bull': 
+        regime_kr = "상승장 (Bull)"
+        strategy_summary = "핵심 레버리지 확대 (SOXL/UPRO 50%, 성장 20%, 현금 5%)"
+    elif regime == 'Bear': 
+        regime_kr = "하락장 (Bear)"
+        strategy_summary = "인버스/안전 자산 (SOXS 35%, TMF 30%, 금 20%, 현금 15%)"
     
     # Calculate Capital Status
     current_holdings_value = 0.0
     for ticker, info in held_tickers.items():
-        # info has {qty, avg_price}
-        # Ideally use current price if available in results
         curr_price = info.get('avg_price', 0)
         # Find current price in results
         for r in results:
             if r['ticker'] == ticker:
-                curr_price = r['current_price']
+                curr_price = r.get('current_price', 0)
                 break
         current_holdings_value += (info['qty'] * curr_price)
         
     cash_balance = total_capital - current_holdings_value
     cash_ratio = (cash_balance / total_capital) * 100 if total_capital > 0 else 0
     
-    guidelines.append(f"현재 시장은 **{regime_kr}** 국면입니다.")
-    guidelines.append(f"💰 **자산 현황**: 총 ${total_capital:,.0f} | 주식 ${current_holdings_value:,.0f} | 현금 ${cash_balance:,.0f} ({cash_ratio:.1f}%)")
+    guidelines.append(f"### 📡 시장 국면: **{regime_kr}**")
+    guidelines.append(f"📋 **전략 목표**: {strategy_summary}")
+    guidelines.append(f"💰 **자산 현황**: 주식 ${current_holdings_value:,.0f} | 현금 ${cash_balance:,.0f} ({cash_ratio:.1f}%) | 총 ${total_capital:,.0f}")
     
-    # 2. Holdings & Rebalancing Action Plan
-    buy_candidates = []
-    sell_candidates = []
-    hold_maintenance = []
+    guidelines.append("\n**[종목별 리밸런싱 가이드]**")
     
-    # Map results to dict
-    res_map = {r['ticker']: r for r in results}
-    
-    # Process Managed Stocks (Strategies)
-    # We should iterate through results to find signals
+    # 2. Rebalancing Action Plan
+    actions = []
     
     for res in results:
         ticker = res['ticker']
-        pos = res.get('position', '')
-        score = res.get('score', 0)
+        target_ratio = res.get('target_ratio', 0)
+        action_qty = res.get('action_qty', 0) # Calculated in run_analysis
+        current_ratio = res.get('current_ratio', 0)
+        held_qty = res.get('held_qty', 0)
         curr_price = res.get('current_price', 0)
-        strategy_info = res.get('strategy_info') # Passed from analyze_ticker? 
-        # Actually analyze_ticker returns dict, but does it include strategy_info? 
-        # No, analyze_ticker consumes it. We need access to target_ratio here?
-        # Let's rely on what we can infer or fetch managed_stocks map here inside function if needed,
-        # but better if result has 'target_ratio'.
-        # Let's assume result has 'target_ratio' if we add it in analyze_ticker or merge it in run_analysis.
-        # For now, let's use a quick lookup if passed or just generic logic if missing.
         
-        target_ratio = res.get('target_ratio', 0) # Needs to be added to analyze_ticker return or run_analysis merge
+        # Determine Action String for Frontend Table & Summary
+        action_str = "-"
         
-        is_held = ticker in held_tickers
-        held_qty = held_tickers[ticker]['qty'] if is_held else 0
+        # Logic:
+        # If Target=0 and Held>0 -> "전량 매도" (qty = -held_qty)
+        # If Target>0 and Action!=0 -> "+N" or "-N"
         
-        # ------------------------------------------------------------------
-        # NEW: Inject Action Plan into Result Object for Frontend Table
-        # ------------------------------------------------------------------
-        res['held_qty'] = held_qty
-        res['held_avg'] = held_tickers[ticker]['avg_price'] if is_held else 0
-        res['target_ratio'] = target_ratio
-        
-        action_plan = "-"
-        
-        if "진입" in pos and "매수" in pos:
-            # Calculate Recommended Buy Qty
-            if target_ratio > 0 and curr_price > 0:
-                target_amt = total_capital * (target_ratio / 100.0)
-                current_amt = held_qty * curr_price
-                needed_amt = target_amt - current_amt
-                
-                if needed_amt > 0:
-                    buy_qty = int(needed_amt / curr_price)
-                    if buy_qty > 0:
-                        msg = f"{ticker}: "
-                        if is_held:
-                            avg = held_tickers[ticker]['avg_price']
-                            msg += f"보유 {held_qty}주 → "
-                        msg += f"**{buy_qty}주 추가 매수**"
-                        buy_candidates.append(msg)
-                        action_plan = f"추가 매수 {buy_qty}주 (목표 {target_ratio}%)"
-                    else:
-                        buy_candidates.append(f"{ticker}: 비중 충족")
-                        action_plan = "현 비중 유지 (목표 달성)"
-                else:
-                     buy_candidates.append(f"{ticker}: 비중 충족")
-                     action_plan = "현 비중 유지 (목표 달성)"
-            else:
-                 # No target ratio
-                 buy_candidates.append(f"{ticker}: 신규 진입 (목표 미설정)")
-                 action_plan = "신규 진입 (단타)"
-
-        elif "진입" in pos and "매도" in pos:
-             # Sell Logic
-             msg = f"{ticker}: "
-             if is_held:
-                 avg = held_tickers[ticker]['avg_price']
-                 msg += f"보유 {held_qty}주 → "
-             msg += "**전량 매도**"
-             sell_candidates.append(msg)
-             action_plan = "전량 매도 권고"
+        if target_ratio == 0 and held_qty > 0:
+             action_str = f"🛑 전량 매도 (-{held_qty})"
+             actions.append(f"- **{ticker}**: {action_str} (비중 축소)")
+             res['action_qty'] = -held_qty # Ensure negative
              
-        elif "유지" in pos:
-             if is_held:
-                 hold_maintenance.append(f"{ticker}: 보유 유지")
-                 action_plan = f"보유 유지 ({held_qty}주)"
+        elif action_qty > 0:
+             est_cost = action_qty * curr_price
+             if est_cost > cash_balance:
+                  action_str = f"➕ {action_qty}주 (현금부족)"
+                  actions.append(f"- **{ticker}**: {action_qty}주 추가 매수 필요 (가용 현금 확인 요망)")
              else:
-                 hold_maintenance.append(f"{ticker}: 관망")
-                 action_plan = "관망"
+                  action_str = f"➕ {action_qty}주 매수"
+                  actions.append(f"- **{ticker}**: {action_qty}주 추가 매수 (목표 {target_ratio}%)")
+             
+        elif action_qty < 0:
+             sell_q = abs(action_qty)
+             action_str = f"➖ {sell_q}주 매도"
+             actions.append(f"- **{ticker}**: {sell_q}주 부분 매도 (목표 {target_ratio}% 초과)")
+             
+        elif held_qty > 0:
+             action_str = "✅ 유지"
+             # actions.append(f"- {ticker}: 비중 적정 (유지)")
+             
+        elif target_ratio > 0 and held_qty == 0:
+             # Look to buy but maybe cash issue or action_qty=0 due to rounding?
+             # If action_qty=0 but target>0, it means capital is too small for 1 share?
+             if curr_price > 0 and (total_capital * target_ratio/100) < curr_price:
+                 action_str = "대기 (자본부족)"
+             else:
+                 # Normally action_qty would catch this.
+                 action_str = "관망"
         
-        res['action_recommendation'] = action_plan
-        # ------------------------------------------------------------------
+        else:
+             action_str = "-"
 
-    if buy_candidates:
-        guidelines.append(f"✅ **매수 추천**: {', '.join(buy_candidates)}")
-    
-    if sell_candidates:
-        guidelines.append(f"🚨 **매도 신호**: {', '.join(sell_candidates)}")
+        # Inject into Result for Table Display
+        res['action_recommendation'] = action_str
         
-    if hold_maintenance:
-        guidelines.append(f"🛡️ **보유/관망**: {', '.join(hold_maintenance)}")
-
-    # 3. Strategy Tip
-    if regime == 'Bull':
-        guidelines.append("Tip: 상승장에서는 주도주(SOXL, IONQ) 비중을 꽉 채우고(Target %), 조정 시 추가 매수하십시오.")
-    elif regime == 'Bear':
-        guidelines.append("Tip: 하락장에서는 현금 비중 50% 이상 확보하고, 헷지(SOXS) 단타로 방어하십시오.")
+    if actions:
+        guidelines.extend(actions)
     else:
-        guidelines.append("Tip: 보합장에서는 박스권 매매(RSI 하단 매수/상단 매도)로 짧게 대응하십시오.")
+        guidelines.append("- 특이사항 없음 (현재 포트폴리오 목표 비중 유지 중)")
 
-    return "\n\n".join(guidelines)
+    return "\n".join(guidelines)
 
 
 def determine_market_regime(regime_daily, data_30m):
@@ -1213,6 +1177,25 @@ def run_analysis(held_tickers=[]):
                 res['target_ratio'] = final_target
                 res['base_target'] = base_target
                 res['strategy_text'] = strategy_info.get('buy_strategy', '-')
+                
+                # Calculate Action Qty & Current Ratio
+                curr_p = res.get('current_price', 0)
+                held_q = res.get('held_qty', 0)
+                
+                if curr_p and curr_p > 0 and total_capital > 0:
+                    current_val = held_q * curr_p
+                    current_ratio = (current_val / total_capital) * 100
+                    
+                    target_val = total_capital * (final_target / 100.0)
+                    diff_val = target_val - current_val
+                    
+                    action_qty = int(diff_val / curr_p)
+                else:
+                    current_ratio = 0
+                    action_qty = 0
+                    
+                res['current_ratio'] = current_ratio
+                res['action_qty'] = action_qty # Positive = Buy, Negative = Sell
                 
             results.append(res)
         
