@@ -26,7 +26,11 @@ function Dashboard() {
             const response = await fetch('/api/report');
             if (!response.ok) throw new Error('Failed to fetch data');
             const jsonData = await response.json();
-            setData(jsonData);
+            if (jsonData.error) {
+                setError(jsonData.error);
+            } else {
+                setData(jsonData);
+            }
             setLoading(false);
         } catch (err) {
             console.error(err);

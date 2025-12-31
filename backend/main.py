@@ -195,16 +195,15 @@ def get_report():
         prediction = "보합/혼조세 (Neutral)"
         desc = "현재 S&P 500 및 나스닥 지수가 뚜렷한 방향성 없이 등락을 반복하고 있습니다."
         
-        if 'market' in data and 'indices' in data['market']:
-            sp500 = next((item for item in data['market']['indices'] if 'S&P500' in item['name']), None)
-            if sp500:
-                change = sp500.get('change_pct', 0)
-                if change > 0.5:
-                    prediction = "상승 우세 (Bullish)"
-                    desc = "미국 증시가 20일 이동평균선을 지지하며 견고한 상승 흐름을 보이고 있습니다. 기술주 중심의 매수세가 유입되고 있습니다."
-                elif change < -0.5:
-                    prediction = "하락 조정 (Bearish)"
-                    desc = "주요 저항선을 돌파하지 못하고 매물 출회가 지속되고 있습니다. 리스크 관리가 필요한 시점입니다."
+        if 'market' in data and 'S&P500' in data['market']:
+            sp500_data = data['market']['S&P500']
+            change = sp500_data.get('change', 0)
+            if change > 0.5:
+                prediction = "상승 우세 (Bullish)"
+                desc = "미국 증시가 20일 이동평균선을 지지하며 견고한 상승 흐름을 보이고 있습니다. 기술주 중심의 매수세가 유입되고 있습니다."
+            elif change < -0.5:
+                prediction = "하락 조정 (Bearish)"
+                desc = "주요 저항선을 돌파하지 못하고 매물 출회가 지속되고 있습니다. 리스크 관리가 필요한 시점입니다."
         
         # Mock News (User asked for 5 summaries in Korean)
         # Since we can't fetch real news easily in Korean without external API, we generate strictly formatted placeholders or generic market news based on time.
