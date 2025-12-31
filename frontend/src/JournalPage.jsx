@@ -309,14 +309,14 @@ const JournalPage = () => {
 
                 <div style={{ display: 'flex', gap: '0.75rem', background: 'rgba(255,255,255,0.05)', padding: '0.4rem', borderRadius: '10px' }}>
                     <TabButton active={view === 'journal'} onClick={() => setView('journal')} icon="📝">일지</TabButton>
-                    <TabButton active={view === 'stocks'} onClick={() => setView('stocks')} icon="💼">종목</TabButton>
+                    <TabButton active={view === 'stocks'} onClick={() => setView('stocks')} icon="💼">포트폴리오</TabButton>
                 </div>
             </div>
 
             {/* Content Switch */}
             {view === 'stocks' && (
                 <div className="glass-panel" style={{ padding: '1.5rem' }}>
-                    <h2 style={{ fontSize: '1.5rem', marginBottom: '1.5rem', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '1rem' }}>💼 관심 종목 관리</h2>
+                    <h2 style={{ fontSize: '1.5rem', marginBottom: '1.5rem', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '1rem' }}>💼 포트폴리오(관심 종목) 관리</h2>
 
                     {/* Add Stock Form */}
                     <form onSubmit={handleStockSubmit} style={{

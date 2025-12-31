@@ -70,7 +70,8 @@ const FinalSignal = ({ stocks }) => {
                         <tr style={{ background: 'rgba(255, 255, 255, 0.05)', color: 'var(--text-secondary)' }}>
                             <th style={{ padding: '1rem', textAlign: 'center' }}>Rank</th>
                             <th style={{ padding: '1rem', textAlign: 'left' }}>Stock</th>
-                            <th style={{ padding: '1rem', textAlign: 'center' }}>Position</th>
+                            <th style={{ padding: '1rem', textAlign: 'center' }}>Type</th>
+                            <th style={{ padding: '1rem', textAlign: 'center' }}>Holding (Qty / Avg)</th>
                             <th style={{ padding: '1rem', textAlign: 'left' }}>Guideline (Action)</th>
                             <th style={{ padding: '1rem', textAlign: 'right' }}>Target %</th>
                             <th style={{ padding: '1rem', textAlign: 'right' }}>Price</th>
@@ -82,6 +83,7 @@ const FinalSignal = ({ stocks }) => {
                             const isBuy = stock.type === 'BUY';
                             const isSell = stock.type === 'SELL';
                             const rowBg = index % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent';
+                            const hasHolding = stock.held_qty && stock.held_qty > 0;
 
                             return (
                                 <tr key={stock.ticker} style={{ background: rowBg, borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
@@ -100,6 +102,14 @@ const FinalSignal = ({ stocks }) => {
                                         }}>
                                             {stock.type}
                                         </span>
+                                    </td>
+                                    <td style={{ padding: '1rem', textAlign: 'center', color: hasHolding ? '#fff' : 'var(--text-secondary)' }}>
+                                        {hasHolding ? (
+                                            <>
+                                                <div style={{ fontWeight: 'bold' }}>{stock.held_qty} 주</div>
+                                                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>@ ${stock.held_avg?.toFixed(2)}</div>
+                                            </>
+                                        ) : '-'}
                                     </td>
                                     <td style={{ padding: '1rem', color: isBuy ? '#4ade80' : isSell ? '#f87171' : '#ddd', fontWeight: isBuy || isSell ? 'bold' : 'normal' }}>
                                         {stock.action}
