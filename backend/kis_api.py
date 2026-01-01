@@ -65,12 +65,15 @@ class KisApi:
             res = self._fetch_price_request(excd, symbol)
             if res and res.get('rt_cd') == '0':
                 out = res['output']
-                return {
-                    'price': float(out['last']),
-                    'diff': float(out['diff']),
-                    'rate': float(out['rate']),
-                    'exchange': excd
-                }
+                try:
+                    return {
+                        'price': float(out['last']) if out.get('last') else 0.0,
+                        'diff': float(out['diff']) if out.get('diff') else 0.0,
+                        'rate': float(out['rate']) if out.get('rate') else 0.0,
+                        'exchange': excd
+                    }
+                except (ValueError, TypeError):
+                    continue
             
         return None
 

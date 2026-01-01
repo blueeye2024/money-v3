@@ -1,7 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
-import StockCard from './components/StockCard';
-import SummaryTable from './components/SummaryTable';
 import FinalSignal from './components/FinalSignal';
 import MarketStats from './components/MarketStats';
 import MarketInsight from './components/MarketInsight';
@@ -14,6 +12,7 @@ import packageJson from '../package.json'; // Version Import
 
 function Dashboard() {
     const [data, setData] = useState(null);
+    const [signalHistory, setSignalHistory] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
@@ -28,10 +27,17 @@ function Dashboard() {
             const response = await fetch('/api/report');
             if (!response.ok) throw new Error('Failed to fetch data');
             const jsonData = await response.json();
+
+            // Fetch Signal History
+            const historyRes = await fetch('/api/signals?limit=5');
+            let historyData = [];
+            if (historyRes.ok) historyData = await historyRes.json();
+
             if (jsonData.error) {
                 setError(jsonData.error);
             } else {
                 setData(jsonData);
+                setSignalHistory(historyData);
             }
             setLoading(false);
         } catch (err) {
@@ -161,18 +167,10 @@ function Dashboard() {
 
             {data?.market && <MarketStats market={data.market} />}
 
-            {data && <MarketInsight market={data} />}
 
-            {data?.stocks && <FinalSignal stocks={visibleStocks} />}
+            {data && <MarketInsight market={data} stocks={visibleStocks} signalHistory={signalHistory} />}
 
-            <h2 style={{ fontSize: '1.5rem', marginBottom: '1.5rem', marginTop: '3rem' }}>종목별 상세 분석</h2>
-            <div className="grid-cards">
-                {visibleStocks.map(stock => (
-                    <StockCard key={stock.ticker} data={stock} />
-                ))}
-            </div>
-
-            {data?.stocks && <SummaryTable stocks={sortedStocks} onToggleVisibility={toggleTickerVisibility} />}
+            {data?.stocks && <FinalSignal stocks={visibleStocks} total_assets={data.total_assets} />}
         </div>
     );
 }
@@ -231,7 +229,7 @@ function Layout() {
                 textAlign: 'center', padding: '2rem', marginTop: '4rem',
                 borderTop: '1px solid var(--glass-border)', color: 'var(--text-secondary)'
             }}>
-                <p>&copy; 2024 Cheongan FinTech. All rights reserved. Ver {packageJson.version}</p>
+                <p>&copy; 2024 Cheongan FinTech. All rights reserved. Ver 2.4.0 (Build: 2026-01-01 23:30)</p>
             </footer>
         </div>
     );

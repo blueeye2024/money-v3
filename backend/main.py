@@ -25,14 +25,20 @@ app.add_middleware(
 # 1. Initialize DB & Scheduler
 @app.on_event("startup")
 def on_startup():
+    from db import init_db, get_global_config
     init_db()
+    
+    # Load SMS Setting from DB
+    global SMS_ENABLED
+    SMS_ENABLED = get_global_config("sms_enabled", True)
+    print(f"Startup: SMS Enabled = {SMS_ENABLED}")
+
     # Start Scheduler
     scheduler = BackgroundScheduler()
-    # Interval set to 1 minute as requested
     scheduler.add_job(monitor_signals, 'interval', minutes=1)
     scheduler.start()
 
-# Global SMS Control
+# Global SMS Control (Now persistent via DB)
 SMS_ENABLED = True
 SMS_THROTTLE_MINUTES = 30
 
@@ -48,14 +54,19 @@ class CapitalModel(BaseModel):
 
 @app.get("/api/settings/sms")
 def get_sms_setting():
+    from db import get_global_config
+    enabled = get_global_config("sms_enabled", True)
     global SMS_ENABLED
+    SMS_ENABLED = enabled
     return {"enabled": SMS_ENABLED}
 
 @app.post("/api/settings/sms")
 def set_sms_setting(setting: SMSSettingModel):
+    from db import set_global_config
     global SMS_ENABLED
     SMS_ENABLED = setting.enabled
-    print(f"SMS System Enabled: {SMS_ENABLED}")
+    set_global_config("sms_enabled", SMS_ENABLED)
+    print(f"SMS System Enabled (Saved to DB): {SMS_ENABLED}")
     return {"status": "success", "enabled": SMS_ENABLED}
     return {"status": "success", "enabled": SMS_ENABLED}
 
@@ -83,11 +94,13 @@ def monitor_signals():
     print(f"[{datetime.now()}] Monitoring Signals... SMS Enabled: {SMS_ENABLED}")
     
     try:
-        # Fetch fresh data
-        data_30m, data_5m, _, _ = fetch_data()
+        # Use run_analysis for all processing to ensure consistency with dashboard
+        full_report = run_analysis()
+        stocks_data = full_report.get('stocks', [])
         
-        for ticker in TARGET_TICKERS:
-            res = analyze_ticker(ticker, data_30m, data_5m)
+        for stock_res in stocks_data:
+            ticker = stock_res['ticker']
+            res = stock_res # Use the result from run_analysis
             
             # Skip if analysis failed
             if 'error' in res or 'position' not in res:
@@ -134,6 +147,24 @@ def monitor_signals():
                         if str(last_time) == str(current_raw_time):
                             is_new = False
                 
+                # 7-day de-duplication for standard signal saving
+                if is_new: # Only check if not already marked as duplicate by 30-min window
+                    try:
+                        from db import get_connection
+                        with get_connection() as conn:
+                            with conn.cursor() as cursor:
+                                cursor.execute("""
+                                    SELECT id FROM signal_history 
+                                    WHERE ticker=%s AND position_desc=%s 
+                                    AND created_at >= NOW() - INTERVAL 7 DAY
+                                    LIMIT 1
+                                """, (ticker, res['position']))
+                                if cursor.fetchone():
+                                    print(f"Skipping 7-day duplicate signal for {ticker} ({res['position']})")
+                                    is_new = False
+                    except Exception as e:
+                        print(f"Signal de-duplication error {ticker}: {e}")
+                
                 if is_new:
                     print(f"NEW SIGNAL DETECTED: {ticker} {res['position']}")
                     
@@ -170,7 +201,6 @@ def monitor_signals():
                                 msg = f"[{ticker}] [{short_pos}] [${res['current_price']}] [{sms_reason}]"
                                 save_sms_log(receiver="01044900528", message=msg, status="Success")
 
-                    # 2. Save Signal to DB (Ensures history is populated for all detected signals)
                     save_signal({
                         'ticker': ticker,
                         'name': res['name'],
@@ -182,6 +212,62 @@ def monitor_signals():
                         'score': res.get('score', 0),
                         'interpretation': res.get('score_interpretation', '')
                     })
+
+        # --- Cheongan Master Signal Monitoring ---
+        regime_data = full_report.get('market_regime', {}).get('details', {})
+        if regime_data:
+            for k_ticker in ['SOXL', 'SOXS']:
+                m_res = regime_data.get(k_ticker.lower(), {})
+                if not m_res: continue
+                
+                # A. Final Signal Met
+                if m_res.get('final'):
+                    from db import check_recent_sms_log
+                    m_pos = f"마스터 {k_ticker} 진입"
+                    # User: 30 min throttle
+                    recent = check_recent_sms_log(k_ticker, m_pos, 30)
+                    
+                    if not recent and SMS_ENABLED:
+                        send_sms(
+                            stock_name=k_ticker,
+                            signal_type="마스터 진입",
+                            price=full_report['holdings'].get(k_ticker, {}).get('current_price', 0),
+                            signal_time=m_res.get('signal_time', '지금'),
+                            reason="3종 필터 완성"
+                        )
+                        save_sms_log(receiver="01044900528", message=f"[{k_ticker}] [{m_pos}] 완성", status="Success")
+
+                # B. 5m Dead Cross Warning (Warning 5m)
+                if m_res.get('warning_5m'):
+                    from db import check_recent_sms_log
+                    w_pos = f"{k_ticker} 5분봉 경고"
+                    recent_w = check_recent_sms_log(k_ticker, w_pos, 30)
+                    
+                    if not recent_w and SMS_ENABLED:
+                        send_sms(
+                            stock_name=k_ticker,
+                            signal_type="주의 경보",
+                            price=full_report['holdings'].get(k_ticker, {}).get('current_price', 0),
+                            signal_time="현재",
+                            reason="5분봉 데드크로스 발생"
+                        )
+                        save_sms_log(receiver="01044900528", message=f"[{k_ticker}] [{w_pos}] 주의!!", status="Success")
+
+                # C. Trend Break (Sell Signal)
+                if m_res.get('is_sell_signal'):
+                    from db import check_recent_sms_log
+                    s_pos = f"{k_ticker} 추세 붕괴(SELL)"
+                    recent_s = check_recent_sms_log(k_ticker, s_pos, 30)
+                    
+                    if not recent_s and SMS_ENABLED:
+                        send_sms(
+                            stock_name=k_ticker,
+                            signal_type="매도(EXIT)",
+                            price=full_report['holdings'].get(k_ticker, {}).get('current_price', 0),
+                            signal_time="현재",
+                            reason="30분봉 추세 이탈"
+                        )
+                        save_sms_log(receiver="01044900528", message=f"[{k_ticker}] [{s_pos}] 발생", status="Success")
 
     except Exception as e:
         print(f"Monitor Error: {e}")
@@ -245,6 +331,26 @@ def get_managed_stocks_api():
     except Exception as e:
         print(f"Error fetching managed stocks: {e}")
         return []
+
+@app.post("/api/managed-stocks")
+def add_managed_stock_api(data: dict):
+    from db import add_managed_stock
+    if add_managed_stock(data):
+        return {"status": "success"}
+    return {"status": "error"}
+
+@app.put("/api/managed-stocks/{id}")
+def update_managed_stock_api(id: int, data: dict):
+    from db import update_managed_stock
+    if update_managed_stock(id, data):
+        return {"status": "success"}
+    return {"status": "error"}
+
+@app.delete("/api/managed-stocks/{id}")
+def delete_managed_stock_api(id: int):
+    from db import delete_managed_stock
+    if delete_managed_stock(id):
+        return {"status": "success"}
     return {"status": "error"}
 
 @app.get("/api/dashboard-settings")

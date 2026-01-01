@@ -3,7 +3,7 @@
 # 자동 배포 스크립트 (web-run100 실행 및 비밀번호 자동 입력)
 
 PASSWORD="blueeye0037!"
-COMMAND="web-run100"
+COMMAND="/home/blue/blue/my_project/money/deploy.sh"
 
 echo "🚀 자동 배포 명령($COMMAND)을 실행합니다..."
 

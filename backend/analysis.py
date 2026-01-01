@@ -1,28 +1,25 @@
-
 import yfinance as yf
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import pytz
 import os
 import time
 import re
+from concurrent.futures import ThreadPoolExecutor
+from kis_api import kis_client
 
 # Global Cache for Historical Data
 _DATA_CACHE = {
     "30m": None,
     "5m": None,
+    "1d": None,
     "market": None,
-    "last_fetch": 0
+    "regime": None,
+    "last_fetch_realtime": 0,
+    "last_fetch_longterm": 0
 }
 
-
-def get_score_interpretation(score, position_text=""):
-    is_sell = "매도" in position_text or "하단" in position_text
-    if score >= 80: return "🚨긴급 매도" if is_sell else "✨강력 매수"
-    if score >= 70: return "📉매도" if is_sell else "🟢매수"
-    if score >= 50: return "⚠경계" if is_sell else "🟡관망"
-    return "📉조정" if is_sell else "⚪관망"
 
 # Stock Names Mapping
 TICKER_NAMES = {
@@ -68,66 +65,91 @@ def get_current_time_str_sms():
     now_kst = datetime.now(timezone.utc).astimezone(kst)
     return now_kst.strftime("%Y.%m.%d %H:%M")
 
+def is_market_open():
+    """Checks if US Market is currently open (Regular Hours)"""
+    est = pytz.timezone('US/Eastern')
+    now_est = datetime.now(timezone.utc).astimezone(est)
+    
+    # Check Weekend
+    if now_est.weekday() >= 5: return False
+    
+    # Regular Hours: 09:30 - 16:00
+    market_start = now_est.replace(hour=9, minute=30, second=0, microsecond=0)
+    market_end = now_est.replace(hour=16, minute=0, second=0, microsecond=0)
+    
+    return market_start <= now_est <= market_end
+
 def fetch_data(tickers=None):
     global _DATA_CACHE
     
     target_list = tickers if tickers else TARGET_TICKERS
+    now = time.time()
     
-    # Check Cache (Only if default tickers used, for simplicity)
-    if tickers is None and time.time() - _DATA_CACHE["last_fetch"] < 300 and _DATA_CACHE["30m"] is not None:
-        # Return cached data
+    # 1. Tiered Fetching Logic
+    # check real-time (30m, 5m): 1 min
+    needs_realtime = (now - _DATA_CACHE.get("last_fetch_realtime", 0)) > 60
+    # check long-term (1d, indices): 10 min
+    needs_longterm = (now - _DATA_CACHE.get("last_fetch_longterm", 0)) > 600
+    
+    # If using default tickers and everything is fresh, return cache
+    if tickers is None and not needs_realtime and _DATA_CACHE["30m"] is not None:
         return _DATA_CACHE["30m"], _DATA_CACHE["5m"], _DATA_CACHE.get("1d"), _DATA_CACHE["market"], _DATA_CACHE.get("regime")
 
-    # Fetch 30m data (Main) for Stocks
-    tickers_str = " ".join(target_list)
-    
-    print(f"Fetching 30m data for {len(target_list)} Stocks...")
-    # Hide progress to keep logs clean
-    data_30m = yf.download(tickers_str, period="5d", interval="30m", prepost=True, group_by='ticker', threads=False, progress=False)
-    
-    print(f"Fetching 5m data for {len(target_list)} Stocks...")
-    data_5m = yf.download(tickers_str, period="5d", interval="5m", prepost=True, group_by='ticker', threads=False, progress=False)
-
-    print(f"Fetching 1d data for {len(target_list)} Stocks...")
-    data_1d = yf.download(tickers_str, period="1y", interval="1d", prepost=True, group_by='ticker', threads=False, progress=False)
-    
-    # Market indicators - Use Ticker.history for stability
-    print("Fetching market data (Indices)...")
-    market_data = {}
-    for name, ticker in MARKET_INDICATORS.items():
+    # 2. Real-time Data Fetch (30m, 5m)
+    if needs_realtime or tickers is not None:
         try:
-            t = yf.Ticker(ticker)
-            # Fetch history (need enough for prev close)
-            hist = t.history(period="5d")
-            if not hist.empty:
-                market_data[name] = hist
-            else:
-                print(f"Warning: No data for {name}")
-                market_data[name] = pd.DataFrame()
-        except Exception as e:
-            print(f"Failed to fetch {name}: {e}")
-            market_data[name] = pd.DataFrame()
+            tickers_str = " ".join(target_list)
+            print(f"Fetching Real-time (30m, 5m) for {len(target_list)} Stocks...")
+            new_30m = yf.download(tickers_str, period="1mo", interval="30m", prepost=True, group_by='ticker', threads=True, progress=False, timeout=15)
+            new_5m = yf.download(tickers_str, period="1mo", interval="5m", prepost=True, group_by='ticker', threads=True, progress=False, timeout=15)
             
-    # Fetch Daily data for Market Regime (UPRO, S&P500, NASDAQ)
-    print("Fetching Daily data for Market Regime...")
-    regime_tickers = ["UPRO", "^GSPC", "^IXIC"]
-    regime_data = yf.download(regime_tickers, period="1y", interval="1d", group_by='ticker', threads=False, progress=False)
+            if not new_30m.empty: _DATA_CACHE["30m"] = new_30m
+            if not new_5m.empty: _DATA_CACHE["5m"] = new_5m
+            _DATA_CACHE["last_fetch_realtime"] = now
+        except Exception as e:
+            print(f"Real-time Fetch Error: {e}")
 
-    print("Data fetch complete.")
+    # 3. Long-term Data Fetch (1d, Market, Regime)
+    if needs_longterm or _DATA_CACHE.get("1d") is None:
+        try:
+            tickers_str = " ".join(target_list)
+            print("Fetching Long-term (1d) for Stocks...")
+            new_1d = yf.download(tickers_str, period="6mo", interval="1d", group_by='ticker', threads=False, progress=False, timeout=10)
+            if not new_1d.empty: _DATA_CACHE["1d"] = new_1d
+            
+            print("Fetching market data (Indices)...")
+            market_data = {}
+            for name, tic_sym in MARKET_INDICATORS.items():
+                t = yf.Ticker(tic_sym)
+                hist = t.history(period="5d")
+                if not hist.empty: market_data[name] = hist
+                elif _DATA_CACHE.get("market") and name in _DATA_CACHE["market"]:
+                    market_data[name] = _DATA_CACHE["market"][name]
+            _DATA_CACHE["market"] = market_data
+
+            print("Fetching Daily data for Market Regime...")
+            reg_tickers = ["UPRO", "^GSPC", "^IXIC", "SPY"]
+            new_regime = yf.download(reg_tickers, period="6mo", interval="1d", group_by='ticker', threads=False, progress=False, timeout=10)
+            if not new_regime.empty: _DATA_CACHE["regime"] = new_regime
+            
+            _DATA_CACHE["last_fetch_longterm"] = now
+        except Exception as e:
+            print(f"Long-term Fetch Error: {e}")
+
+    # Final Robustness: If something is still None, return structure with cached/empty
+    d30 = _DATA_CACHE.get("30m") if _DATA_CACHE.get("30m") is not None else pd.DataFrame()
+    d5 = _DATA_CACHE.get("5m") if _DATA_CACHE.get("5m") is not None else pd.DataFrame()
+    d1 = _DATA_CACHE.get("1d") if _DATA_CACHE.get("1d") is not None else pd.DataFrame()
+    m = _DATA_CACHE.get("market") if _DATA_CACHE.get("market") is not None else {}
+    reg = _DATA_CACHE.get("regime") if _DATA_CACHE.get("regime") is not None else pd.DataFrame()
     
-    # Update Cache (Only if default)
-    if tickers is None:
-        _DATA_CACHE["30m"] = data_30m
-        _DATA_CACHE["5m"] = data_5m
-        _DATA_CACHE["1d"] = data_1d
-        _DATA_CACHE["market"] = market_data
-        _DATA_CACHE["regime"] = regime_data
-        _DATA_CACHE["last_fetch"] = time.time()
-    
-    return data_30m, data_5m, data_1d, market_data, regime_data
+    return d30, d5, d1, m, reg
 
 def calculate_sma(series, window):
     return series.rolling(window=window).mean()
+
+def calculate_ema(series, span):
+    return series.ewm(span=span, adjust=False).mean()
 
 def calculate_rsi(series, window=14):
     delta = series.diff()
@@ -136,84 +158,35 @@ def calculate_rsi(series, window=14):
     rs = gain / loss
     return 100 - (100 / (1 + rs))
 
-    return 100 - (100 / (1 + rs))
-
-def calculate_ema(series, span):
-    return series.ewm(span=span, adjust=False).mean()
-
-def calculate_atr(df, window=14):
-    high = df['High']
-    low = df['Low']
-    close = df['Close'].shift(1)
-    
-    tr1 = high - low
-    tr2 = (high - close).abs()
-    tr3 = (low - close).abs()
-    
-    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-    return tr.rolling(window=window).mean()
-
-def calculate_adx(df, window=14):
-    high = df['High']
-    low = df['Low']
-    close = df['Close']
-    
-    # TR
-    close_shift = close.shift(1)
-    tr1 = high - low
-    tr2 = (high - close_shift).abs()
-    tr3 = (low - close_shift).abs()
-    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-    
-    # DM
-    up_move = high - high.shift(1)
-    down_move = low.shift(1) - low
-    
-    plus_dm = np.where((up_move > down_move) & (up_move > 0), up_move, 0.0)
-    minus_dm = np.where((down_move > up_move) & (down_move > 0), down_move, 0.0)
-    
-    # Smooth (Wilder's Smoothing is complicated, using SMA for approx)
-    tr_s = tr.rolling(window=window).mean()
-    plus_dm_s = pd.Series(plus_dm, index=df.index).rolling(window=window).mean()
-    minus_dm_s = pd.Series(minus_dm, index=df.index).rolling(window=window).mean()
-    
-    # DI
-    plus_di = 100 * (plus_dm_s / tr_s)
-    minus_di = 100 * (minus_dm_s / tr_s)
-    
-    # DX
-    dx = 100 * (abs(plus_di - minus_di) / (plus_di + minus_di))
-    
-    # ADX
-    adx = dx.rolling(window=window).mean()
-    return adx
+def get_score_interpretation(score, position):
+    if "매수" in position:
+        if score >= 80: return "강력 매수 분출"
+        if score >= 60: return "매수 우위 지속"
+        return "신중한 매수"
+    elif "매도" in position:
+        if score >= 80: return "급격한 투매 주의"
+        if score >= 60: return "매도 압력 강함"
+        return "기술적 매도 구간"
+    else:
+        if score >= 70: return "강한 반등 대기"
+        if score >= 40: return "박스권 횡보"
+        return "심리적 위축"
 
 def check_box_pattern(df_30m, days=7, tolerance=5.0):
     """
     Check box pattern with flexible tolerance.
-    Default: 7 days, 5% range.
     Returns: (is_box, high_val, low_val, pct_diff)
     """
-    if df_30m.empty:
-        return False, 0, 0, 0
-
-    last_idx = df_30m.index[-1]
-    cutoff_time = last_idx - timedelta(days=days)
-    
-    recent_data = df_30m[df_30m.index >= cutoff_time]
-    
-    if recent_data.empty:
-        return False, 0, 0, 0
-        
-    high_max = recent_data['High'].max()
-    low_min = recent_data['Low'].min()
-    
-    if low_min == 0: return False, 0, 0, 0
-    
-    diff_pct = ((high_max - low_min) / low_min) * 100
-    
-    is_box = diff_pct <= tolerance
-    return is_box, high_max, low_min, diff_pct
+    if df_30m.empty: return False, 0, 0, 0
+    try:
+        # Use last N 30-min candles
+        n_candles = int(days * 13) 
+        sub = df_30m.tail(n_candles)
+        h = sub['High'].max()
+        l = sub['Low'].min()
+        diff = ((h - l) / l) * 100 if l > 0 else 0
+        return diff <= tolerance, h, l, diff
+    except: return False, 0, 0, 0
 
 def parse_strategy_config(strategy_str):
     config = {
@@ -306,6 +279,7 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, df_1dRaw, market_vol_score=0, is
         exp26 = df_30['Close'].ewm(span=26, adjust=False).mean()
         df_30['MACD'] = exp12 - exp26
         df_30['Signal'] = df_30['MACD'].ewm(span=9, adjust=False).mean()
+        df_30['RSI'] = calculate_rsi(df_30['Close'], 14)
 
         # 5m
         df_5['SMA10'] = calculate_sma(df_5['Close'], 10)
@@ -319,11 +293,11 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, df_1dRaw, market_vol_score=0, is
         # Override with Real-time Info if available
         if real_time_info:
             current_price = float(real_time_info['price'])
-            # rate is percentage change (e.g. +0.03 means 0.03%)
+            # rate is percentage change
             change_pct = float(real_time_info['rate'])
-            # Note: Indicator checks below (SMA, Cross) use df_30 (Candle Close). 
-            # This is acceptable (Signals on close, Price on live).
-            # But Box Breakout uses `current_price` variable, so it will be accurate.
+        elif (kp := kis_client.get_price(ticker)):
+             current_price = kp['price']
+             change_pct = kp['rate']
         
         # Signal Detection (Previous Logic)
         last_sma10 = df_30['SMA10'].iloc[-1]
@@ -516,13 +490,13 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, df_1dRaw, market_vol_score=0, is
             if is_box:
                 if current_price > box_high: pass
                 else: valid = False
-            position = "🚨 매수 진입" if cross_idx == -1 else "🔴 매수 유지" if valid else "관망 (매수 신호 무효화)"
+            position = "🔴 매수 진입" if cross_idx == -1 else "🔴 매수 유지" if valid else "관망 (매수 신호 무효화)"
         elif recent_cross_type == 'dead':
             if last_5m_sma10 > last_5m_sma30: valid = False
             if is_box:
                  if current_price < box_low: pass
                  else: valid = False
-            position = "🚨 매도 진입" if cross_idx == -1 else "🔵 매도 유지" if valid else "관망 (매도 신호 무효화)"
+            position = "🔹 매도 진입" if cross_idx == -1 else "🔵 매도 유지" if valid else "관망 (매도 신호 무효화)"
             
             if current_price > box_high: position = "✨ 박스권 돌파 성공 (상단)"
             elif current_price < box_low: position = "✨ 박스권 돌파 성공 (하단)"
@@ -561,26 +535,14 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, df_1dRaw, market_vol_score=0, is
         if is_held:
             # Holding
             if "매도" in tech_position or "하단" in tech_position:
-                 position = "🚨 매도"
+                 position = "🔹 매도"
             else:
                  # Buy, Buy Hold, Observe -> Maintain Buy
-                 position = "🔵 매수 유지"
+                 position = "🔴 매수 유지"
         else:
-            # Check for specific signals to alert (User Request: Score >= 70 OR Entry/Breakout)
-            # Note: 'score' is calculated later, so we need to use a placeholder or re-evaluate.
-            # For now, we'll use the tech_position and assume score will be checked externally for alerts.
-            # The instruction seems to imply this logic is for the *final* `position` string,
-            # which is then used to derive `is_buy_signal` etc. for scoring.
-            # However, the `score` itself is not available here yet.
-            # Let's interpret the instruction as: if not held, only show "매수" if it's a strong technical buy signal (entry/breakout).
-            # Otherwise, if it's a sell or observe, show "미보유".
-            # The score >= 70 part is likely for the `monitor_signals` function in `main.py`
-            # where the full `res` dictionary (including score) is available.
-            
-            # For `analyze_ticker`, we stick to the original logic for `position` based on `tech_position`
-            # and let the `monitor_signals` function handle the score-based filtering.
+            # Check for specific signals to alert
             if "매수" in tech_position or "상단" in tech_position:
-                 position = "🚨 매수"
+                 position = "🔴 매수"
             else:
                  # Sell, Sell Hold, Observe -> Not Held
                  position = "미보유"
@@ -814,7 +776,7 @@ def generate_market_insight(results, market_data):
 
     return insight
 
-def generate_trade_guidelines(results, market_data, regime_info, total_capital=10000.0, held_tickers={}):
+def generate_trade_guidelines(results, market_data, regime_info, total_capital=10000.0, held_tickers={}, krw_rate=1460.0):
     """
     Generate logic-based trade guidelines for Cheongan 2.1.
     """
@@ -825,16 +787,14 @@ def generate_trade_guidelines(results, market_data, regime_info, total_capital=1
     details = regime_info.get('details', {})
     reason = details.get('reason', '시장 데이터 분석 중')
     
-    regime_kr = "보합장 (Sideways)"
-    # Update summaries to match new targets
-    strategy_summary = "방어 우량주 및 현금 비중 확대 (Cash 30%)"
+    regime_kr = f"{regime}: {reason}"
     
     if regime == 'Bull': 
-        regime_kr = "상승장 (Bull)"
-        strategy_summary = "주도주/레버리지 적극 공략 (SOXL/IONQ 40%, Cash 5%)"
+        strategy_summary = "공격적 매수 (SOXL/UPRO/TSLA/IONQ/현금15%)"
     elif regime == 'Bear': 
-        regime_kr = "하락장 (Bear)"
-        strategy_summary = "숏/채권/금 안전자산 집중 (SOXS/TMF 50%, Cash 30%)"
+        strategy_summary = "인버스 수익 및 안전자산 대피 (SOXS/TMF/AAAU/현금20%)"
+    else:
+        strategy_summary = "자산 방어 및 현금 대기 (AAAU/GOOGL/현금50%)"
     
     # Calculate Capital Status
     current_holdings_value = 0.0
@@ -849,10 +809,20 @@ def generate_trade_guidelines(results, market_data, regime_info, total_capital=1
         
     cash_balance = total_capital - current_holdings_value
     
+    # Asset Object for Frontend Header
+    total_assets = {
+        "usd": total_capital,
+        "krw": total_capital * krw_rate,
+        "cash_usd": cash_balance,
+        "cash_krw": cash_balance * krw_rate,
+        "stock_usd": current_holdings_value,
+        "stock_krw": current_holdings_value * krw_rate
+    }
+    
     guidelines.append(f"### 📡 시장 국면: **{regime_kr}**")
     guidelines.append(f"🔍 **판단 사유**: {reason}")
     guidelines.append(f"📋 **핵심 전략**: {strategy_summary}")
-    guidelines.append(f"💰 **총 자산**: ${total_capital:,.0f} (주식 ${current_holdings_value:,.0f} / 현금 ${cash_balance:,.0f})")
+    # Total Asset line removed (Moved to Top Header)
     
     guidelines.append("\n**[종목별 리밸런싱 실행 가이드]**")
     
@@ -885,7 +855,6 @@ def generate_trade_guidelines(results, market_data, regime_info, total_capital=1
              action_str = "✅ 유지"
              
         elif target_ratio > 0 and held_qty == 0:
-             # Look to buy, potentially wait for signal
              action_str = "관망/진입대기"
         
         res['action_recommendation'] = action_str
@@ -902,135 +871,42 @@ def generate_trade_guidelines(results, market_data, regime_info, total_capital=1
         if t_w > 0:
             p = res.get('current_price', 0)
             req_q = int((total_capital * (t_w/100.0)) / p) if p > 0 else 0
+            req_amt = req_q * p
             strategy_list.append({
                 "ticker": res['ticker'], 
                 "weight": t_w, 
                 "price": p, 
                 "req_qty": req_q,
+                "req_amt_usd": req_amt,
+                "req_amt_krw": req_amt * krw_rate,
                 "held_qty": res.get('held_qty', 0)
             })
     
-    # Cash Target based on Regime (Updated percentages)
-    cash_w = 30 # Sideways default
-    if regime == 'Bull': cash_w = 5
-    elif regime == 'Bear': cash_w = 30
+    # Cash Target
+    # Cash Target
+    cash_w = 50 # Sideways Trap default
+    if regime == 'Bull': cash_w = 15
+    elif regime == 'Bear': cash_w = 20
     
     curr_cash = total_capital - current_holdings_value
+    target_cash_amt = total_capital * (cash_w/100.0)
+    
     strategy_list.append({
         "ticker": "CASH",
         "weight": cash_w,
         "price": 1.0,
-        "req_qty": int(total_capital * (cash_w/100.0)),
+        "req_qty": int(target_cash_amt),
+        "req_amt_usd": target_cash_amt,
+        "req_amt_krw": target_cash_amt * krw_rate,
         "held_qty": int(curr_cash)
     })
     
     strategy_list.sort(key=lambda x: x['weight'], reverse=True)
 
-    return "\n".join(guidelines), strategy_list
+    return "\n".join(guidelines), strategy_list, total_assets
 
 
-def determine_market_regime(regime_daily, data_30m):
-    
-    regime = "Sideways" # Default
-    regime_details = {}
-    
-    if regime_daily is not None and not regime_daily.empty:
-        try:
-            # UPRO
-            upro_df = regime_daily['UPRO'].dropna() if 'UPRO' in regime_daily.columns.levels[0] else None
-            # GSPC
-            gspc_df = regime_daily['^GSPC'].dropna() if '^GSPC' in regime_daily.columns.levels[0] else None
-            # IXIC
-            ixic_df = regime_daily['^IXIC'].dropna() if '^IXIC' in regime_daily.columns.levels[0] else None
-            
-            is_bull = False
-            is_bear = False
-            
-            # Helper for EMA 200 checks
-            def check_ema200(df):
-                if df is None or len(df) < 200: return False
-                ema200 = calculate_ema(df['Close'], 200).iloc[-1]
-                return df['Close'].iloc[-1] > ema200
-            
-            # --- Bull Condition ---
-            # S&P500(UPRO) > EMA 200 & NASDAQ > EMA 200
-            # AND 30m SMA 10 > 30 (Check SPY/QQQ 30m? Let's use UPRO 30m from data_30m)
-            
-            bull_daily = check_ema200(upro_df) and check_ema200(ixic_df)
-            
-            # Check 30m alignment for Bull
-            bull_30m = False
-            if 'UPRO' in data_30m.columns.levels[0]:
-                upro_30 = data_30m['UPRO'].dropna()
-                if not upro_30.empty:
-                     upro_30['SMA10'] = calculate_sma(upro_30['Close'], 10)
-                     upro_30['SMA30'] = calculate_sma(upro_30['Close'], 30)
-                     if upro_30['SMA10'].iloc[-1] > upro_30['SMA30'].iloc[-1]:
-                         bull_30m = True
-            
-            if bull_daily and bull_30m:
-                is_bull = True
-                
-            # --- Bear Condition ---
-            # Close < EMA 200 (Daily) OR Weekly Drop > -5%
-            # Check UPRO or GSPC? Using GSPC for broader market Bear check
-            bear_daily = not check_ema200(gspc_df)
-            
-            # Weekly Drop
-            weekly_drop = False
-            if gspc_df is not None and len(gspc_df) > 5:
-                curr = gspc_df['Close'].iloc[-1]
-                week_ago = gspc_df['Close'].iloc[-5]
-                drop_pct = ((curr - week_ago) / week_ago) * 100
-                if drop_pct < -5.0:
-                    weekly_drop = True
-            
-            if bear_daily or weekly_drop:
-                is_bear = True
-            
-            # --- Sideways Condition ---
-            # ADX(14) < 20 OR 5-day Range < 1.5 * ATR(14)
-            is_sideways = False
-            if upro_df is not None:
-                adx_series = calculate_adx(upro_df)
-                adx_val = adx_series.iloc[-1]
-                
-                atr_series = calculate_atr(upro_df)
-                atr_val = atr_series.iloc[-1]
-                
-                # 5-day range
-                recent_5 = upro_df.iloc[-5:]
-                range_5 = recent_5['High'].max() - recent_5['Low'].min()
-                
-                if adx_val < 20 or range_5 < (1.5 * atr_val):
-                    is_sideways = True
-            
-            # Decision Priority: Bear > Bull > Sideways (Defensive first?)
-            # User Scenario: Bull, Bear, Sideways. 
-            # If conflicts? Bear signals are usually critical (Safety).
-            if is_bull: regime = "Bull"
-            elif is_bear: regime = "Bear"
-            elif is_sideways: regime = "Sideways"
-            else: regime = "Sideways" # Default fallback
-            
-            regime_details = {
-                "bull_cond": f"Daily>EMA200:{bull_daily}, 30mUp:{bull_30m}",
-                "bear_cond": f"Daily<EMA200:{bear_daily}, WeeklyDrop:{weekly_drop}",
-                "side_cond": f"ADX<20:{is_sideways}"
-            }
-            
-        except Exception as e:
-            print(f"Regime Analysis Error: {e}")
-            regime = "Sideways" # Safe default
-
-    # Update DB with Regime
-    try:
-        from db import update_market_status
-        update_market_status(regime, regime_details)
-    except Exception as e:
-        print(f"DB Update Market Status Error: {e}")
-
-    return {"regime": regime, "details": regime_details}
+# Legacy regime functions removed.
 
 
 def run_analysis(held_tickers=[]):
@@ -1082,25 +958,11 @@ def run_analysis(held_tickers=[]):
     # Assuming fetch_data() is modified to take active_tickers and return all necessary dataframes.
     data_30m, data_5m, data_1d, market_data, regime_daily_data = fetch_data(active_tickers) # Assuming fetch_data now takes tickers
     
-    # 2. Determine Market Regime
-    # Pass the relevant daily data for regime analysis.
-    # Assuming regime_daily_data contains UPRO, GSPC, IXIC daily data.
-    regime_info = determine_market_regime(regime_daily_data, data_30m)
+    # 2. Determine Market Regime (V2.3 Master Signal)
+    regime_info = determine_market_regime_v2(regime_daily_data, data_30m, data_5m)
     
-    # Calculate Market Volatility Score (using market_data from fetch_data)
-    market_vol_score = -5 # Default: Neutral/Flat (Bad? User says High Volatility is Good (+5))
-    # User: "보합/혼조세면 -5점 , 강한 상승장이나 하락장이면 +5점"
-    
-    if "S&P500" in market_data:
-        df_spy = market_data["S&P500"]
-        if not df_spy.empty and len(df_spy) >= 2:
-            # Check 1 day change
-            curr = df_spy['Close'].iloc[-1]
-            prev = df_spy['Close'].iloc[-2]
-            spy_change = ((curr - prev) / prev) * 100
-            
-            if abs(spy_change) >= 0.5:
-                market_vol_score = 5
+    # Calculate Market Volatility Score (V2.3: Replaced by Master Signals, but keeping variable for compatibility)
+    market_vol_score = 5 if regime_info.get('regime') in ['Bull', 'Bear'] else -5
     
     # 3. Analyze Tickers (Real-time KIS Price Fetching)
     real_time_map = {}
@@ -1147,6 +1009,46 @@ def run_analysis(held_tickers=[]):
             # held_tickers is the dict from db.get_current_holdings
             res = analyze_ticker(ticker, data_30m, data_5m, data_1d, market_vol_score, is_held, real_time_info=rt_info, holdings_data=held_tickers, strategy_info=strategy_info)
             
+            # --- V2.3 SYNC LOGIC OVERRIDE ---
+            regime = regime_info.get('regime', 'Sideways')
+            
+            sync_categories = {
+                "High_Beta": ["SOXL", "UPRO", "IONQ"],
+                "Growth": ["TSLA", "GOOGL"],
+                "Defensive": ["SOXS", "TMF", "AAAU"],
+                "Other": ["UFO", "AMZU"]
+            }
+            
+            if regime == "Bull": # SOXL FINAL_BUY (Risk-On)
+                if ticker in sync_categories["High_Beta"]:
+                    if "매도" in res['position'] or "미보유" in res['position']:
+                        res['position'] = "🔴 적극 매수 (Master Sync)"
+                elif ticker in sync_categories["Growth"]:
+                    res['position'] = "🔴 매수 유지 (Master Sync)"
+                elif ticker in sync_categories["Other"]:
+                    res['position'] = "⚪ 보유 (Master Sync)"
+                elif ticker in sync_categories["Defensive"]:
+                    res['position'] = "🔹 전량 매도 (Master Sync)"
+                    
+            elif regime == "Bear": # SOXS FINAL_BUY (Risk-Off)
+                if ticker in sync_categories["Defensive"]:
+                    if "매도" in res['position'] or "미보유" in res['position']:
+                        res['position'] = "🔴 적극 매수 (Master Sync)"
+                elif ticker in sync_categories["High_Beta"]:
+                    res['position'] = "🔹 전량 매도 (Master Sync)"
+                elif ticker in sync_categories["Growth"]:
+                    res['position'] = "🔹 비중 축소 (Master Sync)"
+                elif ticker in sync_categories["Other"]:
+                    res['position'] = "🔹 매도 (Master Sync)"
+            
+            # Inject Holding Info for Frontend (Cheongan 2.1)
+            if ticker in held_tickers:
+                 res['held_qty'] = held_tickers[ticker]['qty']
+                 res['avg_price'] = held_tickers[ticker]['avg_price']
+            else:
+                 res['held_qty'] = 0
+                 res['avg_price'] = 0
+            
             # Error Handling: Ensure keys exist
             if "error" in res:
                 res.setdefault('current_price', 0)
@@ -1164,30 +1066,24 @@ def run_analysis(held_tickers=[]):
                 # Cheongan 2.1: Advanced Regime Portfolio Matrix (User Definied)
                 t_map = {
                     'Bull': {
-                        'SOXL': 20, 'IONQ': 20,
-                        'UPRO': 15, 'TSLA': 15,
-                        'GOOGL': 8, 'UFO': 7, 
-                        'AAAU': 5, 'TMF': 5, 'SOXS': 0
+                        'SOXL': 25, 'UPRO': 20, 'TSLA': 20, 'IONQ': 20,
+                        'GOOGL': 0, 'AAAU': 0, 'TMF': 0, 'SOXS': 0, 'UFO': 0
                     },
                     'Sideways': {
-                        'GOOGL': 20, 'AAAU': 20,
-                        'TMF': 10, 'UFO': 10,
-                        'UPRO': 10, 
-                        'TSLA': 0, 'SOXL': 0, 'IONQ': 0, 'SOXS': 0
+                        'AAAU': 30, 'GOOGL': 20,
+                        'SOXL': 0, 'UPRO': 0, 'TSLA': 0, 'IONQ': 0, 'SOXS': 0, 'TMF': 0, 'UFO': 0
                     },
                     'Bear': {
-                        'SOXS': 25, 'TMF': 25, 'AAAU': 20,
-                        'SOXL': 0, 'UPRO': 0, 'IONQ': 0, 'TSLA': 0, 'GOOGL': 0, 'UFO': 0
+                        'SOXS': 35, 'TMF': 25, 'AAAU': 20,
+                        'SOXL': 0, 'UPRO': 0, 'TSLA': 0, 'IONQ': 0, 'GOOGL': 0, 'UFO': 0
                     }
                 }
                 
-                if ticker in t_map.get(regime, {}):
-                    final_target = t_map[regime][ticker]
-                else:
-                    # Fallback for unlisted tickers (e.g. XPON)
-                    if regime == 'Bear': final_target = 0
-                    elif regime == 'Sideways': final_target = 0
-                    else: final_target = base_target
+                # Disable Regime-based Filtering (User Request: Show All)
+                # if ticker in t_map.get(regime, {}): ...
+                
+                final_target = base_target
+
     
                 res['target_ratio'] = final_target
                 res['base_target'] = base_target
@@ -1205,9 +1101,11 @@ def run_analysis(held_tickers=[]):
                     diff_val = target_val - current_val
                     
                     action_qty = int(diff_val / curr_p)
+                    res['action_est_cost'] = action_qty * curr_p
                 else:
                     current_ratio = 0
                     action_qty = 0
+                    res['action_est_cost'] = 0
                     
                 res['current_ratio'] = current_ratio
                 res['action_qty'] = action_qty # Positive = Buy, Negative = Sell
@@ -1247,36 +1145,359 @@ def run_analysis(held_tickers=[]):
         except Exception as e:
              indicators[name] = {"value": 0.0, "change": 0.0}
 
-    # Fetch Regime Info from DB
-    regime_info = {"regime": "Sideways", "details": {}}
+    # Fetch Total Capital
     try:
-        from db import get_latest_market_status, get_total_capital
-        last_stat = get_latest_market_status()
-        if last_stat:
-            regime_info = {
-                "regime": last_stat['regime'],
-                "details": last_stat['details'],
-                "updated_at": str(last_stat['updated_at'])
-            }
-        
-        # Fetch Total Capital
+        from db import get_total_capital
         total_cap = get_total_capital()
-        
-    except: 
+    except:
         total_cap = 10000.0
-        pass
 
     # Generate Trade Guidelines (Was Insight)
-    insight_text, strategy_list = generate_trade_guidelines(results, market_data, regime_info, total_cap, held_tickers)
+    insight_text, strategy_list, total_assets = generate_trade_guidelines(results, market_data, regime_info, total_cap, held_tickers)
+
+    # Calculate Market Volatility Score (V2.3: Replaced by Master Signals, but keeping variable for compatibility)
+    market_vol_score = 5 if regime_info.get('regime') in ['Bull', 'Bear'] else -5
+
+    # --- JSON CLEANUP (Remove NaN) ---
+    def clean_nan(obj):
+        if isinstance(obj, list):
+            return [clean_nan(i) for i in obj]
+        elif isinstance(obj, dict):
+            return {k: clean_nan(v) for k, v in obj.items()}
+        elif isinstance(obj, float) and (np.isnan(obj) or np.isinf(obj)):
+            return 0.0
+        return obj
+
+    final_results = clean_nan(results)
+    final_indicators = clean_nan(indicators)
+    final_regime = clean_nan(regime_info)
 
     return {
         "timestamp": get_current_time_str(),
-        "stocks": results,
-        "market": indicators,
+        "stocks": final_results,
+        "market": final_indicators,
         "insight": insight_text,
-        "strategy_list": strategy_list,
-        "market_regime": regime_info
+        "strategy_list": clean_nan(strategy_list),
+        "total_assets": clean_nan(total_assets),
+        "market_regime": final_regime
     }
+
+# --- 2026 Project: New Regime Logic V2 ---
+# --- 2026 Project: New Regime Logic V2 ---
+def analyze_30m_box(df_30m):
+    try:
+        if df_30m is None or len(df_30m) < 60:
+            return "INSUFFICIENT_DATA", 0.0, 0.0, 0.0
+        recent_bars = df_30m.tail(60)
+        # Ensure High/Low exist
+        if 'High' not in recent_bars.columns: return "ERROR_COLS", 0,0,0
+        
+        box_high = recent_bars['High'].max()
+        box_low = recent_bars['Low'].min()
+        current_price = df_30m['Close'].iloc[-1]
+        
+        if box_low == 0: return "ERROR_ZERO", 0,0,0
+        
+        box_width_pct = (box_high - box_low) / box_low * 100
+        
+        status = "TRENDING_UNDEFINED"
+        if current_price > box_high * 1.003: status = "BOX_BREAKOUT_UP"
+        elif current_price < box_low * 0.997: status = "BOX_BREAKDOWN_DOWN"
+        elif box_width_pct < 3.0: status = "BOX_SIDEWAYS"
+        
+        return status, box_high, box_low, box_width_pct
+    except: return "ERROR_EXCEPTION", 0,0,0
+
+
+def get_us_reg_close(df):
+    """Find the last close price from US regular hours (09:30-16:00 ET) before current day"""
+    try:
+        if df.empty: return None
+        # Convert index to ET
+        df_et = df.copy()
+        df_et.index = df_et.index.tz_convert('US/Eastern')
+        
+        # Filter for regular hours (9:30 to 16:00)
+        reg_hours = df_et.between_time('09:30', '16:00')
+        if reg_hours.empty: return None
+        
+        # Get last date in reg_hours
+        last_date = reg_hours.index[-1].date()
+        # Find the close of the last bar of the PREVIOUS regular trading day
+        prev_reg_days = reg_hours[reg_hours.index.date < last_date]
+        if prev_reg_days.empty:
+            # If only one day in data, return the first available reg hour close as fallback
+            return float(reg_hours['Close'].iloc[-1])
+            
+        prev_date = prev_reg_days.index[-1].date()
+        prev_day_close = prev_reg_days[prev_reg_days.index.date == prev_date]['Close'].iloc[-1]
+        return float(prev_day_close)
+    except:
+        return None
+
+def check_triple_filter(ticker, data_30m, data_5m):
+    """
+    Cheongan V2.5 Master Filter Logic
+    Order: Step 1 (5m Timing), Step 2 (30m Trend), Step 3 (2% Strength)
+    - Step 2 (30m) is "Sticky": Once met, stays True until Dead Cross.
+    - Tracks completion time/price for each step.
+    """
+    from db import get_global_config, set_global_config
+    
+    result = {
+        "step1": False, "step2": False, "step3": False, "final": False, 
+        "step1_color": None, "step2_color": None, "step3_color": None,
+        "target": 0, "signal_time": None, "is_sell_signal": False,
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "step_details": {
+            "step1": "대기 중", "step2": "대기 중", "step3": "대기 중"
+        }
+    }
+    
+    try:
+        # 1. Load Persisted State
+        all_states = get_global_config("triple_filter_states", {})
+        state = all_states.get(ticker, {
+            "final_met": False, "signal_time": None,
+            "step1_done_time": None,
+            "step2_done_time": None, "step2_done_price": None,
+            "step3_done_time": None, "step3_done_pct": None
+        })
+
+        # 2. Get Price & Data
+        kis_data = kis_client.get_price(ticker)
+        kis_price = kis_data['price'] if kis_data else None
+
+        df30 = None
+        if isinstance(data_30m, dict): df30 = data_30m.get(ticker)
+        elif hasattr(data_30m, 'columns') and ticker in data_30m.columns: df30 = data_30m[ticker]
+        df5 = None
+        if isinstance(data_5m, dict): df5 = data_5m.get(ticker)
+        elif hasattr(data_5m, 'columns') and ticker in data_5m.columns: df5 = data_5m[ticker]
+
+        if df30 is None or df30.empty or df5 is None or df5.empty:
+            return result
+
+        # Force Numeric and Sync KIS
+        try:
+            df30 = df30.copy()
+            df5 = df5.copy()
+            df30['Close'] = pd.to_numeric(df30['Close'], errors='coerce').dropna()
+            df5['Close'] = pd.to_numeric(df5['Close'], errors='coerce').dropna()
+            if kis_price:
+                df30.iloc[-1, df30.columns.get_loc('Close')] = kis_price
+                df5.iloc[-1, df5.columns.get_loc('Close')] = kis_price
+        except: return result
+
+        current_price = float(df30['Close'].iloc[-1])
+        kst = pytz.timezone('Asia/Seoul')
+        now_time_str = datetime.now(kst).strftime("%H:%M:%S")
+
+        # --- CALCULATIONS ---
+        # Step 1: 5m SMA Timing
+        sma10_5 = float(df5['Close'].rolling(window=10).mean().iloc[-1])
+        sma30_5 = float(df5['Close'].rolling(window=30).mean().iloc[-1])
+        step1_live = bool(sma10_5 > sma30_5)
+
+        # Step 2: 30m SMA Trend (Sticky)
+        sma10_30 = float(df30['Close'].rolling(window=10).mean().iloc[-1])
+        sma30_30 = float(df30['Close'].rolling(window=30).mean().iloc[-1])
+        step2_live_now = bool(sma10_30 > sma30_30)
+
+        # Step 3: Strength (2% Breakout)
+        prev_reg_close = get_us_reg_close(df30)
+        target_v = float((prev_reg_close * 1.02) if prev_reg_close else (float(df30['Close'].iloc[0]) * 1.02))
+        result["target"] = round(target_v, 2)
+        step3_live = bool(current_price >= target_v)
+
+        # --- LOGIC & PERSISTENCE ---
+
+        # 1. 30m Trend (THE MASTER CONTROL)
+        if not step2_live_now:
+            # RESET ALL IF TREND BREAKS
+            if state.get("final_met"): result["is_sell_signal"] = True
+            state = {
+                "final_met": False, "signal_time": None,
+                "step1_done_time": None,
+                "step2_done_time": None, "step2_done_price": None,
+                "step3_done_time": None, "step3_done_pct": None
+            }
+            result["step1_color"] = result["step2_color"] = result["step3_color"] = "red"
+        else:
+            # Trend is Active
+            result["step2"] = True
+            if not state.get("step2_done_time"):
+                state["step2_done_time"] = now_time_str
+                state["step2_done_price"] = current_price
+            
+            # 2. Timing (5m)
+            result["step1"] = step1_live
+            if step1_live and not state.get("step1_done_time"):
+                state["step1_done_time"] = now_time_str
+
+            # 3. Strength (2%)
+            result["step3"] = step3_live
+            if step3_live and not state.get("step3_done_time"):
+                state["step3_done_time"] = now_time_str
+                pct = ((current_price / prev_reg_close) - 1) * 100 if prev_reg_close else 2.0
+                state["step3_done_pct"] = round(pct, 1)
+
+            # FINAL SIGNAL
+            if result["step1"] and result["step2"] and result["step3"]:
+                if not state.get("final_met"):
+                    state["final_met"] = True
+                    state["signal_time"] = now_time_str
+                    
+                    # Store Signal 
+                    try:
+                        from db import save_signal, get_connection
+                        
+                        # Calculate Timestamps
+                        us_et = pytz.timezone('US/Eastern')
+                        utc = pytz.utc
+                        now_utc = datetime.now(utc)
+                        us_time_str = now_utc.astimezone(us_et).strftime("%Y-%m-%d %H:%M:%S ET")
+                        kr_time_str = now_utc.astimezone(kst).strftime("%Y-%m-%d %H:%M:%S KST")
+                        
+                        full_msg = f"조건완성: 1.타이밍({state.get('step1_done_time', '-')}) 2.추세({state.get('step2_done_time', '-')}) 3.강도({state.get('step3_done_time', '-')})\n시간: {us_time_str} / {kr_time_str}\n가격: ${current_price}"
+
+                        with get_connection() as conn:
+                            with conn.cursor() as cursor:
+                                cursor.execute("SELECT id FROM signal_history WHERE ticker=%s AND signal_type='BUY (MASTER)' AND created_at >= NOW() - INTERVAL 7 DAY LIMIT 1", (ticker,))
+                                if not cursor.fetchone():
+                                    save_signal({
+                                        'ticker': ticker, 'name': f"Master Signal ({ticker})",
+                                        'signal_type': "BUY (MASTER)", 'position': full_msg,
+                                        'current_price': current_price, 'signal_time_raw': datetime.now(),
+                                        'is_sent': True, 'score': 100, 'interpretation': "마스터 트리플 필터 완성 히스토리"
+                                    })
+                    except Exception as e:
+                        print(f"Master Signal Save Error: {e}")
+
+            # WARNINGS (Post-Final)
+            if state.get("final_met"):
+                result["final"] = True
+                result["signal_time"] = state["signal_time"]
+                
+                # Check 5m (Step 1)
+                if not step1_live:
+                    result["step1_color"] = "yellow"
+                    result["step1"] = False 
+                # Check Strength (Step 3)
+                if not step3_live:
+                    result["step3_color"] = "orange"
+                    result["step3"] = False
+
+        # --- PREPARE DETAILED LOGS ---
+        if state.get("step1_done_time"): 
+            result["step_details"]["step1"] = f"{state['step1_done_time']} 완료"
+        if state.get("step2_done_time"): 
+            result["step_details"]["step2"] = f"{state['step2_done_time']} 성립 ({state['step2_done_price']}$)"
+        if state.get("step3_done_time"): 
+            result["step_details"]["step3"] = f"{state['step3_done_time']} 돌파 ({state.get('step3_done_pct', 2.0)}%)"
+
+        # Save & Clean
+        all_states[ticker] = state
+        set_global_config("triple_filter_states", all_states)
+
+        # JSON Safe
+        result["step1"] = bool(result["step1"])
+        result["step2"] = bool(result["step2"])
+        result["step3"] = bool(result["step3"])
+        result["final"] = bool(result["final"])
+        result["target"] = float(result["target"])
+        result["is_sell_signal"] = bool(result.get("is_sell_signal", False))
+
+    except Exception as e:
+        print(f"Triple Filter Error ({ticker}): {e}")
+        
+    return result
+
+def determine_market_regime_v2(daily_data, data_30m, data_5m=None):
+    """
+    Cheongan V2.3 Master Signal Logic (Control Tower)
+    """
+    if data_5m is None:
+        data_5m = _DATA_CACHE.get("5m")
+
+    soxl_res = check_triple_filter("SOXL", data_30m, data_5m)
+    soxs_res = check_triple_filter("SOXS", data_30m, data_5m)
+
+    regime = "Sideways"
+    reason = "시장 관망 (조건 탐색 중)"
+    comment = "SOXL(상승) 또는 SOXS(하락)의 3가지 조건이 모두 충족되어야 방향성이 확정됩니다."
+    
+    # Calculate Stages
+    soxl_count = sum([soxl_res["step1"], soxl_res["step2"], soxl_res["step3"]])
+    soxs_count = sum([soxs_res["step1"], soxs_res["step2"], soxs_res["step3"]])
+    
+    current_strategy = "마스터 신호를 대기하며 현금 비중을 유지합니다. 조건이 완성되는 방향으로 즉각 진입을 준비하세요."
+    risk_plan = "현재는 중립 구간입니다. 상승 또는 하락 1단계 진입 시 해당 방향으로 정찰병(5~10%) 투입을 고려하세요."
+
+    # Priority: 1. Final Signal, 2. High Condition Count, 3. Recency (if possible, but count is usually enough)
+    if soxs_res["final"]:
+        regime = "Bear"
+        reason = "🚩 SOXS 진입 조건 완성 (매수)"
+        comment = "하락 추세가 확정되었습니다. 공포 심리가 확산되는 구간입니다."
+        current_strategy = "SOXS 적극 매수. 레버리지(SOXL, UPRO) 전량 매도. TMF, AAAU 피난처 포트폴리오 구축."
+        risk_plan = "하락 3단계 확정. 방어적 포트폴리오 전환 및 인버스 비중 극대화."
+    elif soxl_res["final"]:
+        regime = "Bull"
+        reason = "🚩 SOXL 진입 조건 완성 (매수)"
+        comment = "반도체 상승 에너지가 폭발했습니다. 시장 전체가 강력한 상승 추세로 진입했습니다."
+        current_strategy = "SOXL, UPRO, IONQ 적극 매수 및 보유. TSLA, GOOGL 추가 매수 전략 유효. 방어 자산 전량 매도."
+        risk_plan = "상승 3단계 확정. 공격적 포트폴리오 운용. 손절 라인 평단 대비 -5% 설정."
+    elif soxs_count > soxl_count:
+        regime = f"Bear (Stage {soxs_count})"
+        reason = f"⚠️ 하락 {soxs_count}단계 진행 중"
+        if soxs_count == 1:
+            risk_plan = "하락 1단계: 30분봉 추세 이탈 감지. 수익 실현 및 비중 축소 권장."
+        else:
+            risk_plan = "하락 2단계: 하락 압력 강화. 인버스(SOXS) 정찰병 진입 및 현금 확보."
+    elif soxl_count > soxs_count:
+        regime = f"Bull (Stage {soxl_count})"
+        reason = f"🔍 상승 {soxl_count}단계 진행 중"
+        if soxl_count == 1:
+            risk_plan = "상승 1단계: 30분봉 추세 전환 확인. 관망 또는 소량 분할 매수 시작."
+        else:
+            risk_plan = "상승 2단계: 강한 돌파 확인. 5분봉 골든크로스(3단계) 발생 시 즉시 추가 매수."
+    elif soxs_count == soxl_count and soxs_count > 0:
+        # Both have progress, check which is more significant (e.g., price change)
+        reason = "🌓 혼조세 (방향성 탐색 중)"
+        comment = "상승과 하락 조건이 동시에 감지되고 있습니다. 확실한 돌파가 나오기까지 관망이 유리합니다."
+
+    # UPRO status (Requirement #4) - for Journal Header
+    upro_change = 0.0
+    upro_label = "보합장"
+    try:
+        upro_df = daily_data.get("UPRO") if isinstance(daily_data, dict) else daily_data["UPRO"]
+        if upro_df is not None and not upro_df.empty:
+            upro_change = ((upro_df['Close'].iloc[-1] - upro_df['Close'].iloc[-2]) / upro_df['Close'].iloc[-2]) * 100
+            if upro_change > 0.5: upro_label = "상승장"
+            elif upro_change < -0.5: upro_label = "하락장"
+    except: pass
+
+    details = {
+        "version": "2.4.0",
+        "regime": regime,
+        "reason": reason,
+        "comment": comment,
+        "current_strategy": current_strategy,
+        "risk_plan": risk_plan,
+        "upro_status": {"label": upro_label, "change_pct": round(upro_change, 2)},
+        "soxl": soxl_res,
+        "soxs": soxs_res,
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
+
+    try:
+        from db import update_market_status
+        update_market_status(regime, details)
+    except: pass
+
+    return {"regime": regime, "details": details}
+    
+
 
 if __name__ == "__main__":
     # Test run

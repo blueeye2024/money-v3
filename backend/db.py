@@ -101,6 +101,7 @@ def init_db():
             CREATE TABLE IF NOT EXISTS managed_stocks (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 ticker VARCHAR(10) UNIQUE,
+                name VARCHAR(100),
                 group_name VARCHAR(50), -- Group 1, 2, 3
                 buy_strategy TEXT,
                 sell_strategy TEXT,
@@ -455,6 +456,75 @@ def get_managed_stocks():
     finally:
         conn.close()
 
+def add_managed_stock(data):
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            sql = """
+            INSERT INTO managed_stocks 
+            (ticker, name, group_name, buy_strategy, sell_strategy, target_ratio, scenario_yield, memo)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            """
+            cursor.execute(sql, (
+                data['ticker'],
+                data.get('name', ''),
+                data['group_name'],
+                data['buy_strategy'],
+                data['sell_strategy'],
+                data['target_ratio'],
+                data.get('scenario_yield', 0),
+                data.get('memo', '')
+            ))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Add Managed Stock Error: {e}")
+        return False
+    finally:
+        conn.close()
+
+def update_managed_stock(id, data):
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            sql = """
+            UPDATE managed_stocks 
+            SET ticker=%s, name=%s, group_name=%s, buy_strategy=%s, sell_strategy=%s, 
+                target_ratio=%s, scenario_yield=%s, memo=%s
+            WHERE id=%s
+            """
+            cursor.execute(sql, (
+                data['ticker'],
+                data.get('name', ''),
+                data['group_name'],
+                data['buy_strategy'],
+                data['sell_strategy'],
+                data['target_ratio'],
+                data.get('scenario_yield', 0),
+                data.get('memo', ''),
+                id
+            ))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Update Managed Stock Error: {e}")
+        return False
+    finally:
+        conn.close()
+
+def delete_managed_stock(id):
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("DELETE FROM managed_stocks WHERE id=%s", (id,))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Delete Managed Stock Error: {e}")
+        return False
+    finally:
+        conn.close()
+
 def get_total_capital():
     conn = get_connection()
     try:
@@ -590,6 +660,41 @@ def update_ticker_setting(ticker, is_visible):
         return True
     except Exception as e:
         print(f"Error updating ticker setting: {e}")
+        return False
+    finally:
+        conn.close()
+
+def get_global_config(key_name, default=None):
+    """Retrieve JSON config from global_config table"""
+    conn = get_connection()
+    try:
+        import json
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT value_json FROM global_config WHERE key_name = %s", (key_name,))
+            row = cursor.fetchone()
+            if row:
+                val = row['value_json']
+                return json.loads(val) if isinstance(val, str) else val
+            return default
+    except Exception as e:
+        print(f"Error fetching global config {key_name}: {e}")
+        return default
+    finally:
+        conn.close()
+
+def set_global_config(key_name, value):
+    """Save JSON config to global_config table"""
+    conn = get_connection()
+    try:
+        import json
+        val = json.dumps(value)
+        with conn.cursor() as cursor:
+            sql = "INSERT INTO global_config (key_name, value_json) VALUES (%s, %s) ON DUPLICATE KEY UPDATE value_json = VALUES(value_json)"
+            cursor.execute(sql, (key_name, val))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Error saving global config {key_name}: {e}")
         return False
     finally:
         conn.close()
