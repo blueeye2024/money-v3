@@ -2,9 +2,9 @@ import React from 'react';
 
 const TripleFilterStatus = ({ title, status, isBear = false }) => {
     const conditions = [
-        { key: 'step1', label: '타이밍 조건', desc: status?.step_details?.step1 || '5분봉 이평' },
-        { key: 'step2', label: '추세 조건', desc: status?.step_details?.step2 || '30분봉 이평' },
-        { key: 'step3', label: '강도 조건', desc: status?.step_details?.step3 || '+2% 돌파' }
+        { key: 'step1', label: '30분봉 기준', desc: status?.step_details?.step1 || 'SMA 10 > 30' },
+        { key: 'step2', label: '박스권 돌파 조건', desc: status?.step_details?.step2 || '상단 2% 돌파' },
+        { key: 'step3', label: '5분봉 기준', desc: status?.step_details?.step3 || 'SMA 10 > 30' }
     ];
 
     const activeColor = isBear ? '#3b82f6' : '#ef4444';

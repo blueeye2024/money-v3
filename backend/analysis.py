@@ -1291,110 +1291,200 @@ def check_triple_filter(ticker, data_30m, data_5m):
 
         current_price = float(df30['Close'].iloc[-1])
         kst = pytz.timezone('Asia/Seoul')
-        now_time_str = datetime.now(kst).strftime("%H:%M:%S")
+        now_time_str = datetime.now(kst).strftime("%H:%M:%S") # For internal step_done_time
 
-        # --- CALCULATIONS ---
-        # Step 1: 5m SMA Timing
-        sma10_5 = float(df5['Close'].rolling(window=10).mean().iloc[-1])
-        sma30_5 = float(df5['Close'].rolling(window=30).mean().iloc[-1])
-        step1_live = bool(sma10_5 > sma30_5)
-
-        # Step 2: 30m SMA Trend (Sticky)
+    # --- CALCULATIONS (Updated V2.4 Guidelines) ---
+        # Filter 1: 30m Trend (SMA 10 > 30)
         sma10_30 = float(df30['Close'].rolling(window=10).mean().iloc[-1])
         sma30_30 = float(df30['Close'].rolling(window=30).mean().iloc[-1])
-        step2_live_now = bool(sma10_30 > sma30_30)
+        filter1_met = bool(sma10_30 > sma30_30)
 
-        # Step 3: Strength (2% Breakout)
-        prev_reg_close = get_us_reg_close(df30)
-        target_v = float((prev_reg_close * 1.02) if prev_reg_close else (float(df30['Close'].iloc[0]) * 1.02))
-        result["target"] = round(target_v, 2)
-        step3_live = bool(current_price >= target_v)
+        # Filter 2: Strength (Box Breakout > 2%)
+        recent_20 = df30['High'].tail(21).iloc[:-1] # Last 20 completed bars
+        if len(recent_20) < 20: recent_20 = df30['High'].tail(20) # Fallback
+        
+        box_high_val = float(recent_20.max())
+        target_v = round(box_high_val * 1.02, 2)
+        result["target"] = target_v
+        
+        # Check breakout: Current Price >= Target
+        filter2_met = bool(current_price >= target_v)
+
+        # Filter 3: Timing (5m SMA 10 > 30)
+        sma10_5 = float(df5['Close'].rolling(window=10).mean().iloc[-1])
+        sma30_5 = float(df5['Close'].rolling(window=30).mean().iloc[-1])
+        filter3_met = bool(sma10_5 > sma30_5)
+
+        # Time Strings for Signal Time
+        us_et = pytz.timezone('US/Eastern')
+        utc = pytz.utc
+        now_utc = datetime.now(utc)
+        us_time_formatted = now_utc.astimezone(us_et).strftime("%Y-%m.%d %H:%M")
+        kr_time_formatted = now_utc.astimezone(kst).strftime("%Y-%m.%d %H:%M")
+        dual_time_str = f"{us_time_formatted} (US) / {kr_time_formatted} (KR)"
 
         # --- LOGIC & PERSISTENCE ---
-
-        # 1. 30m Trend (THE MASTER CONTROL)
-        if not step2_live_now:
-            # RESET ALL IF TREND BREAKS
-            if state.get("final_met"): result["is_sell_signal"] = True
-            state = {
-                "final_met": False, "signal_time": None,
-                "step1_done_time": None,
-                "step2_done_time": None, "step2_done_price": None,
-                "step3_done_time": None, "step3_done_pct": None
-            }
-            result["step1_color"] = result["step2_color"] = result["step3_color"] = "red"
+        
+        # 1. Check for Reset (30m Trend Break)
+        if not filter1_met:
+            # If we were in Final Met state, checking reset timer
+            if state.get("final_met"):
+                reset_start = state.get("reset_start_time")
+                if not reset_start:
+                    # First time 30m trend broke after final_met
+                    state["reset_start_time"] = time.time()
+                    result["step1_color"] = "red"
+                    result["step1"] = False
+                    result["is_sell_signal"] = True # Indicate a sell signal
+                    
+                    # Send Exit Signal immediately (rate-limited)
+                    try:
+                        from db import save_signal, get_connection
+                        with get_connection() as conn:
+                            with conn.cursor() as cursor:
+                                cursor.execute("SELECT id FROM signal_history WHERE ticker=%s AND created_at >= NOW() - INTERVAL 30 MINUTE LIMIT 1", (ticker,))
+                                if not cursor.fetchone(): # Only send if no signal in last 30 mins for this ticker
+                                    save_signal({
+                                        'ticker': ticker, 'name': f"Exit Signal ({ticker})",
+                                        'signal_type': "SELL (MASTER)", 
+                                        'position': f"30분봉 데드크로스 발생: 전량 매도 신호\n시간: {dual_time_str}",
+                                        'current_price': current_price, 'signal_time_raw': datetime.now(),
+                                        'is_sent': True, 'score': -100, 'interpretation': "추세 이탈 매도"
+                                    })
+                    except Exception as e:
+                        print(f"Master Signal Exit Save Error: {e}")
+                else:
+                    # Timer Active
+                    elapsed = time.time() - reset_start
+                    if elapsed > 1800: # 30 minutes
+                        # Reset All state after 30 minutes of 30m trend break
+                        state = {
+                            "final_met": False, "signal_time": None,
+                            "step1_done_time": None, "step2_done_time": None,
+                            "step3_done_time": None, "step2_done_price": None,
+                            "reset_start_time": None
+                        }
+                        # Result will now reflect "대기 중" (grey)
+                    else:
+                        # Still within 30 min reset window, show red warning
+                        result["step1_color"] = "red"
+                        result["step1"] = False
+                        result["is_sell_signal"] = True # Keep indicating sell
+            else:
+                 # Normal waiting state (filter1_met is False, and final_met was also False)
+                 # No specific color needed, defaults to None (grey)
+                 pass
         else:
-            # Trend is Active
-            result["step2"] = True
-            if not state.get("step2_done_time"):
-                state["step2_done_time"] = now_time_str
-                state["step2_done_price"] = current_price
+            # Filter 1 (30m Trend) Met
+            # Clear Reset Timer if it was active
+            if state.get("reset_start_time"): 
+                del state["reset_start_time"]
             
-            # 2. Timing (5m)
-            result["step1"] = step1_live
-            if step1_live and not state.get("step1_done_time"):
-                state["step1_done_time"] = now_time_str
+            result["step1"] = True
+            if not state.get("step1_done_time"):
+                state["step1_done_time"] = now_time_str # Use KST H:M:S for internal step tracking
+            
+            # Filter 2 (Box) Check - Sticky if previously met, or live check
+            if filter2_met or state.get("step2_done_time"):
+                result["step2"] = True
+                if not state.get("step2_done_time"):
+                    state["step2_done_time"] = now_time_str
+                    state["step2_done_price"] = current_price
+            else:
+                result["step2"] = False # Not met, and not previously met
 
-            # 3. Strength (2%)
-            result["step3"] = step3_live
-            if step3_live and not state.get("step3_done_time"):
-                state["step3_done_time"] = now_time_str
-                pct = ((current_price / prev_reg_close) - 1) * 100 if prev_reg_close else 2.0
-                state["step3_done_pct"] = round(pct, 1)
+            # Filter 3 (5m) Check - Live
+            result["step3"] = filter3_met
+            if filter3_met and result["step2"]: # Only if Box is also met (or previously met)
+                 if not state.get("step3_done_time"):
+                     state["step3_done_time"] = now_time_str
 
-            # FINAL SIGNAL
+            # FINAL ENTRY SIGNAL
             if result["step1"] and result["step2"] and result["step3"]:
                 if not state.get("final_met"):
                     state["final_met"] = True
-                    state["signal_time"] = now_time_str
+                    state["signal_time"] = dual_time_str # Use combined time for final signal
                     
-                    # Store Signal 
                     try:
                         from db import save_signal, get_connection
-                        
-                        # Calculate Timestamps
-                        us_et = pytz.timezone('US/Eastern')
-                        utc = pytz.utc
-                        now_utc = datetime.now(utc)
-                        us_time_str = now_utc.astimezone(us_et).strftime("%Y-%m-%d %H:%M:%S ET")
-                        kr_time_str = now_utc.astimezone(kst).strftime("%Y-%m-%d %H:%M:%S KST")
-                        
-                        full_msg = f"조건완성: 1.타이밍({state.get('step1_done_time', '-')}) 2.추세({state.get('step2_done_time', '-')}) 3.강도({state.get('step3_done_time', '-')})\n시간: {us_time_str} / {kr_time_str}\n가격: ${current_price}"
-
                         with get_connection() as conn:
                             with conn.cursor() as cursor:
-                                cursor.execute("SELECT id FROM signal_history WHERE ticker=%s AND signal_type='BUY (MASTER)' AND created_at >= NOW() - INTERVAL 7 DAY LIMIT 1", (ticker,))
-                                if not cursor.fetchone():
+                                cursor.execute("SELECT id FROM signal_history WHERE ticker=%s AND created_at >= NOW() - INTERVAL 30 MINUTE LIMIT 1", (ticker,))
+                                if not cursor.fetchone(): # Only send if no signal in last 30 mins for this ticker
                                     save_signal({
                                         'ticker': ticker, 'name': f"Master Signal ({ticker})",
-                                        'signal_type': "BUY (MASTER)", 'position': full_msg,
+                                        'signal_type': "BUY (MASTER)", 
+                                        'position': f"진입조건완성: 1.30분추세 2.박스돌파 3.5분타이밍\n시간: {dual_time_str}\n가격: ${current_price}",
                                         'current_price': current_price, 'signal_time_raw': datetime.now(),
-                                        'is_sent': True, 'score': 100, 'interpretation': "마스터 트리플 필터 완성 히스토리"
+                                        'is_sent': True, 'score': 100, 'interpretation': "마스터 트리플 필터 진입"
                                     })
                     except Exception as e:
                         print(f"Master Signal Save Error: {e}")
 
-            # WARNINGS (Post-Final)
-            if state.get("final_met"):
-                result["final"] = True
-                result["signal_time"] = state["signal_time"]
-                
-                # Check 5m (Step 1)
-                if not step1_live:
-                    result["step1_color"] = "yellow"
-                    result["step1"] = False 
-                # Check Strength (Step 3)
-                if not step3_live:
-                    result["step3_color"] = "orange"
-                    result["step3"] = False
+        # --- POST-ENTRY WARNINGS (Only if final_met is True) ---
+        if state.get("final_met"):
+            result["final"] = True
+            result["signal_time"] = state.get("signal_time", dual_time_str) # Use stored signal_time if available
+            
+            # Warning 1: 5m Dead Cross (filter3_met is False)
+            if not filter3_met:
+                result["step3_color"] = "yellow"
+                result["step3"] = False # Visually indicate it's not met
+                # Send SMS/History (rate-limited)
+                try:
+                    from db import save_signal, get_connection
+                    with get_connection() as conn:
+                        with conn.cursor() as cursor:
+                            cursor.execute("SELECT id FROM signal_history WHERE ticker=%s AND created_at >= NOW() - INTERVAL 30 MINUTE LIMIT 1", (ticker,))
+                            if not cursor.fetchone():
+                                save_signal({
+                                    'ticker': ticker, 'name': f"Warning ({ticker})",
+                                    'signal_type': "WARNING (5M)", 
+                                    'position': f"5분봉 데드크로스: 긴급 익절(50%) 권장\n현재가: ${current_price}\n시간: {dual_time_str}",
+                                    'current_price': current_price, 'signal_time_raw': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                                    'is_sent': True, 'score': -50, 'interpretation': "단기 조정 경고"
+                                })
+                except Exception as e:
+                    print(f"Master Signal 5M Warning Save Error: {e}")
+
+            # Warning 2: Strength Weakened (Price fell back below target, filter2_met is False)
+            # This check should only apply if step2 was previously met (i.e., state["step2_done_time"] exists)
+            # and the current price is below the target.
+            if state.get("step2_done_time") and not filter2_met:
+                result["step2_color"] = "orange"
+                # Send SMS/History (rate-limited)
+                try:
+                    from db import save_signal, get_connection
+                    with get_connection() as conn:
+                        with conn.cursor() as cursor:
+                            cursor.execute("SELECT id FROM signal_history WHERE ticker=%s AND created_at >= NOW() - INTERVAL 30 MINUTE LIMIT 1", (ticker,))
+                            if not cursor.fetchone():
+                                save_signal({
+                                    'ticker': ticker, 'name': f"Warning ({ticker})",
+                                    'signal_type': "WARNING (BOX)", 
+                                    'position': f"박스권 하향 이탈: 강도 약화 주의\n목표: ${target_v}, 현재: ${current_price}\n시간: {dual_time_str}",
+                                    'current_price': current_price, 'signal_time_raw': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                                    'is_sent': True, 'score': -30, 'interpretation': "모멘텀 약화 경고"
+                                })
+                except Exception as e:
+                    print(f"Master Signal Box Warning Save Error: {e}")
 
         # --- PREPARE DETAILED LOGS ---
         if state.get("step1_done_time"): 
-            result["step_details"]["step1"] = f"{state['step1_done_time']} 완료"
+            result["step_details"]["step1"] = f"진입: {state['step1_done_time']}"
+        else:
+             result["step_details"]["step1"] = f"대기 중 (SMA10: {sma10_30:.2f} / 30: {sma30_30:.2f})"
+             
         if state.get("step2_done_time"): 
-            result["step_details"]["step2"] = f"{state['step2_done_time']} 성립 ({state['step2_done_price']}$)"
+            result["step_details"]["step2"] = f"돌파: {state['step2_done_price']}$"
+        else:
+            diff_pct = ((current_price / target_v) - 1) * 100
+            result["step_details"]["step2"] = f"대기 중 (목표: ${target_v}, 현재: {diff_pct:.1f}%)"
+            
         if state.get("step3_done_time"): 
-            result["step_details"]["step3"] = f"{state['step3_done_time']} 돌파 ({state.get('step3_done_pct', 2.0)}%)"
+            result["step_details"]["step3"] = f"진입: {state['step3_done_time']}"
+        else:
+            result["step_details"]["step3"] = f"대기 중 (5분 추세 확인 필요)"
 
         # Save & Clean
         all_states[ticker] = state
@@ -1410,6 +1500,8 @@ def check_triple_filter(ticker, data_30m, data_5m):
 
     except Exception as e:
         print(f"Triple Filter Error ({ticker}): {e}")
+        import traceback
+        traceback.print_exc()
         
     return result
 
@@ -1441,12 +1533,26 @@ def determine_market_regime_v2(daily_data, data_30m, data_5m=None):
         comment = "하락 추세가 확정되었습니다. 공포 심리가 확산되는 구간입니다."
         current_strategy = "SOXS 적극 매수. 레버리지(SOXL, UPRO) 전량 매도. TMF, AAAU 피난처 포트폴리오 구축."
         risk_plan = "하락 3단계 확정. 방어적 포트폴리오 전환 및 인버스 비중 극대화."
+        
+        # Check Warnings
+        if soxs_res.get("step3_color") == "yellow":
+            risk_plan = "⚠️ 경고: SOXS 5분봉 데드크로스 발생! 긴급 익절(50%) 및 리스크 관리 필요."
+        elif soxs_res.get("step2_color") == "orange":
+            risk_plan = "⚠️ 경고: SOXS 박스권 하향 이탈. 매수 강도 약화 주의."
+
     elif soxl_res["final"]:
         regime = "Bull"
         reason = "🚩 SOXL 진입 조건 완성 (매수)"
         comment = "반도체 상승 에너지가 폭발했습니다. 시장 전체가 강력한 상승 추세로 진입했습니다."
         current_strategy = "SOXL, UPRO, IONQ 적극 매수 및 보유. TSLA, GOOGL 추가 매수 전략 유효. 방어 자산 전량 매도."
         risk_plan = "상승 3단계 확정. 공격적 포트폴리오 운용. 손절 라인 평단 대비 -5% 설정."
+        
+        # Check Warnings
+        if soxl_res.get("step3_color") == "yellow":
+            risk_plan = "⚠️ 경고: SOXL 5분봉 데드크로스 발생! 긴급 익절(50%) 및 리스크 관리 필요."
+        elif soxl_res.get("step2_color") == "orange":
+            risk_plan = "⚠️ 경고: SOXL 박스권 하향 이탈. 매수 강도 약화 주의."
+
     elif soxs_count > soxl_count:
         regime = f"Bear (Stage {soxs_count})"
         reason = f"⚠️ 하락 {soxs_count}단계 진행 중"
@@ -1473,8 +1579,8 @@ def determine_market_regime_v2(daily_data, data_30m, data_5m=None):
         upro_df = daily_data.get("UPRO") if isinstance(daily_data, dict) else daily_data["UPRO"]
         if upro_df is not None and not upro_df.empty:
             upro_change = ((upro_df['Close'].iloc[-1] - upro_df['Close'].iloc[-2]) / upro_df['Close'].iloc[-2]) * 100
-            if upro_change > 0.5: upro_label = "상승장"
-            elif upro_change < -0.5: upro_label = "하락장"
+            if upro_change > 1.5: upro_label = "상승장"
+            elif upro_change < -1.5: upro_label = "하락장"
     except: pass
 
     details = {
