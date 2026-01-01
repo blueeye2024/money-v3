@@ -207,7 +207,7 @@ def monitor_signals():
                         'signal_type': "BUY" if "매수" in res['position'] or "상단" in res['position'] else "SELL",
                         'position': res['position'],
                         'current_price': res['current_price'],
-                        'signal_time_raw': current_raw_time,
+                        'signal_time_raw': current_raw_time.strftime('%Y-%m-%d %H:%M:%S') if isinstance(current_raw_time, datetime) else str(current_raw_time).split('.')[0].replace('T', ' '),
                         'is_sent': is_sent,
                         'score': res.get('score', 0),
                         'interpretation': res.get('score_interpretation', '')
