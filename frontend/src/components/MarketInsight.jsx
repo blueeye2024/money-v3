@@ -110,7 +110,7 @@ const TripleFilterStatus = ({ title, status, isBear = false }) => {
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed rgba(255,255,255,0.05)', paddingTop: '8px' }}>
                     <div style={{ fontSize: '0.7rem', color: '#555' }}>
-                        {status?.signal_time ? `신호 완성: ${status.signal_time}` : `체크: ${status?.timestamp ? status.timestamp.split(' ')[1] : '-'}`}
+                        {status?.signal_time ? `신호 완성: ${status.signal_time}` : `체크: ${status?.timestamp ? String(status.timestamp).split(' ')[1] : '-'}`}
                     </div>
                     {status?.target > 0 && (
                         <div style={{ fontSize: '0.7rem', color: '#555' }}>
@@ -124,11 +124,13 @@ const TripleFilterStatus = ({ title, status, isBear = false }) => {
 };
 
 const MarketInsight = ({ market, stocks, signalHistory }) => {
+    if (!market) return <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>데이터 로딩 중...</div>;
+
     const { market_regime } = market;
     const regimeDetails = market_regime?.details;
 
-    const activeStocks = stocks
-        ? stocks.sort((a, b) => (b.current_ratio || 0) - (a.current_ratio || 0))
+    const activeStocks = stocks && Array.isArray(stocks)
+        ? [...stocks].sort((a, b) => (b.current_ratio || 0) - (a.current_ratio || 0))
         : [];
 
     return (
@@ -181,8 +183,8 @@ const MarketInsight = ({ market, stocks, signalHistory }) => {
                                 {signalHistory && Array.isArray(signalHistory) && signalHistory.length > 0 ? (
                                     signalHistory.map(sig => (
                                         <div key={sig.id} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed rgba(255,255,255,0.1)', paddingBottom: '4px' }}>
-                                            <span style={{ color: '#bbb' }}>{sig.created_at.split(' ')[1].substring(0, 5)}</span>
-                                            <span style={{ color: sig.signal_type.includes('BUY') ? '#ef4444' : '#3b82f6', fontWeight: 'bold' }}>{sig.ticker} {sig.signal_type.replace(' (MASTER)', '')}</span>
+                                            <span style={{ color: '#bbb' }}>{sig.created_at && sig.created_at.includes(' ') ? sig.created_at.split(' ')[1].substring(0, 5) : (sig.created_at || '-')}</span>
+                                            <span style={{ color: (sig.signal_type || '').includes('BUY') ? '#ef4444' : '#3b82f6', fontWeight: 'bold' }}>{sig.ticker || '-'} {(sig.signal_type || '').replace(' (MASTER)', '')}</span>
                                             <span style={{ color: '#aaa' }}>${sig.price}</span>
                                         </div>
                                     ))
@@ -212,10 +214,11 @@ const MarketInsight = ({ market, stocks, signalHistory }) => {
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1.5rem' }}>
-                    {activeStocks.map(stock => {
-                        const isSync = stock.position?.includes('Master Sync') || stock.position?.includes('🔴') || stock.position?.includes('🔹');
-                        const isBuy = stock.position?.includes('매수');
-                        const isSell = stock.position?.includes('매도');
+                    {activeStocks.filter(stock => stock && typeof stock === 'object').map(stock => {
+                        const position = String(stock.position || '');
+                        const isSync = position.includes('Master Sync') || position.includes('🔴') || position.includes('🔹');
+                        const isBuy = position.includes('매수');
+                        const isSell = position.includes('매도');
 
                         return (
                             <div key={stock.ticker} style={{
@@ -245,7 +248,7 @@ const MarketInsight = ({ market, stocks, signalHistory }) => {
                                     </div>
                                     <div style={{ textAlign: 'right' }}>
                                         <div style={{ color: '#4ade80', fontWeight: '900', fontSize: '1.4rem' }}>
-                                            {stock.current_ratio ? parseFloat(stock.current_ratio).toFixed(1) : '0.0'}%
+                                            {stock.current_ratio && !isNaN(parseFloat(String(stock.current_ratio))) ? parseFloat(String(stock.current_ratio)).toFixed(1) : '0.0'}%
                                         </div>
                                         <div style={{ fontSize: '0.75rem', color: '#666', marginTop: '4px' }}>
                                             TARGET: {stock.target_ratio}%
