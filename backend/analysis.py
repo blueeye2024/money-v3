@@ -1431,113 +1431,103 @@ def check_triple_filter(ticker, data_30m, data_5m):
             else:
                 chart_time = datetime.now(timezone.utc)
             
-            # Ensure it's timezone aware (usually UTC from yfinance)
+            # Ensure it's timezone aware
+            # Ensure it's timezone aware
             if chart_time.tzinfo is None:
                 chart_time = chart_time.replace(tzinfo=timezone.utc)
             
-            # Convert to KST for display consistency
+            # Prepare format string (NY Time is Primary for US Stocks)
+            ny_tz = pytz.timezone('America/New_York')
+            chart_time_ny = chart_time.astimezone(ny_tz)
             chart_time_kst = chart_time.astimezone(kst)
-            signal_timestamp = chart_time_kst.strftime("%Y-%m-%d %H:%M:%S")
             
-            # Use this timestamp for all signal records
-            now_utc = chart_time # Keep now_utc as datetime object for raw signal time
-        except:
-             now_utc = datetime.now(timezone.utc) # Fallback to current UTC datetime
-             signal_timestamp = now_utc.astimezone(kst).strftime("%Y-%m-%d %H:%M:%S")
+            # Strict Chart Time String
+            signal_timestamp_str = chart_time_ny.strftime("%Y-%m-%d %H:%M:%S")
+            display_time_str = f"{chart_time_ny.strftime('%Y-%m-%d %H:%M')} (NY)"
+            
+            # Use this for State Update
+            now_time_str = display_time_str
+            now_utc = chart_time # raw datetime for DB
+            
+        except Exception as e:
+             # Fallback
+             now_time_str = datetime.now(kst).strftime("%Y-%m-%d %H:%M:%S (KST)")
+             now_utc = datetime.now(timezone.utc)
 
-        # User requested: yyyy.MM.dd HH:mm (Corrected format with dots)
-        us_time_formatted = now_utc.astimezone(us_et).strftime("%Y.%m.%d %H:%M")
-        kr_time_formatted = now_utc.astimezone(kst).strftime("%Y.%m.%d %H:%M")
-        dual_time_str = f"{us_time_formatted} (US) / {kr_time_formatted} (KR)"
-        
-        # For internal step tracking, use KST full string
-        now_time_str = signal_timestamp # Use the precise KST formatted chart time for internal tracking
-
-    # --- CALCULATIONS (Updated V2.4 Guidelines) ---
+    # --- CALCULATIONS ---
         # Filter 1: 30m Trend (SMA 10 > 30)
-        sma10_30 = float(df30['Close'].rolling(window=10).mean().iloc[-1])
-        sma30_30 = float(df30['Close'].rolling(window=30).mean().iloc[-1])
-        filter1_met = bool(sma10_30 > sma30_30)
-
-        # Filter 2: Daily Change (전일종가 대비 ±2%)
-        # Get previous day close (1d data)
+        if df30 is not None and len(df30) > 0:
+            sma10_30 = float(df30['Close'].rolling(window=10).mean().iloc[-1])
+            sma30_30 = float(df30['Close'].rolling(window=30).mean().iloc[-1])
+        else:
+            sma10_30 = 0
+            sma30_30 = 0
+            
+        # Filter 2: Daily Change (Breakout)
         try:
-            # Step 2: 30m Trend & Momentum
-            # Check Daily Context first (Optional)
             data_1d = None
             if data_1d is None:
                 from analysis import _DATA_CACHE
                 data_1d = _DATA_CACHE.get("1d")
             
             prev_close = None
+            df_1d = None
+            
             if data_1d is not None:
                 if isinstance(data_1d, dict) and ticker in data_1d:
                     df_1d = data_1d[ticker]
                 elif hasattr(data_1d, 'columns') and ticker in data_1d.columns:
                     df_1d = data_1d[ticker]
                 elif hasattr(data_1d, 'columns'):
-                    df_1d = data_1d # Single DF support
-                else:
-                    df_1d = None
+                    df_1d = data_1d 
                     
                 if df_1d is not None and not df_1d.empty:
-                    # Determine Prev Close (Handle Today's candle if present)
                     last_date = df_1d.index[-1]
                     if last_date.date() == datetime.now().date():
                          if len(df_1d) >= 2: prev_close = float(df_1d['Close'].iloc[-2])
                     else:
                          prev_close = float(df_1d['Close'].iloc[-1])
             
-            # Apply 2% Breakout Rule (User Priority)
+            # Apply 2% Breakout Rule
             is_breakout = False
             target_v = 0
             
             if prev_close and prev_close > 0:
-                target_v = prev_close * 1.02
-                if current_price >= target_v:
-                    is_breakout = True
-                    state["step2_color"] = "red" # Strong Bullish
-            
-            if is_breakout and not state.get("step2_done_time"):
-                 state["step2_done_time"] = now_time_str
-                 state["step2_done_price"] = current_price
-            
-            # If can't get prev close, use yesterday's last 30m candle
-            if prev_close is None or pd.isna(prev_close):
-                # Fallback: Use close from 24 hours ago in 30m data
-                if len(df30) >= 48:  # 24h = 48 x 30min
-                    prev_close = float(df30['Close'].iloc[-48])
+                if ticker == "SOXS":
+                    target_v = round(prev_close * 0.98, 2)
+                    if current_price <= target_v: is_breakout = True
                 else:
-                    # Last fallback: use 20-period box high for compatibility
-                    recent_20 = df30['High'].tail(21).iloc[:-1]
-                    if len(recent_20) < 20: recent_20 = df30['High'].tail(20)
-                    prev_close = float(recent_20.max()) / 1.02  # Reverse calculation
+                    target_v = round(prev_close * 1.02, 2)
+                    if current_price >= target_v:
+                         is_breakout = True
+                         state["step2_color"] = "red" 
             
-            # Calculate change percentage
-            change_pct = ((current_price - prev_close) / prev_close) * 100
-            
-            # SOXL: Need +2% or more (Bull)
-            # SOXS: Need -2% or less (Bear)
-            is_bear_ticker = ticker == "SOXS"
-            
-            if is_bear_ticker:
-                filter2_met = bool(change_pct <= -2.0)  # 2% 이상 하락
-                target_v = round(prev_close * 0.98, 2)  # 목표: 전일종가의 -2%
-            else:
-                filter2_met = bool(change_pct >= 2.0)   # 2% 이상 상승
-                target_v = round(prev_close * 1.02, 2)  # 목표: 전일종가의 +2%
+            if is_breakout:
+                 if not state.get("step2_done_time"):
+                     state["step2_done_time"] = now_time_str
+                     state["step2_done_price"] = current_price
+                     # Save History
+                     try:
+                         from db import save_signal
+                         save_signal({
+                             'ticker': ticker, 'signal_type': 'STEP2_BREAKOUT',
+                             'position': '박스권/목표가 돌파', 'current_price': current_price,
+                             'signal_time_raw': now_utc, 'score': 20,
+                             'interpretation': f"강력 상승 돌파 ({now_time_str})"
+                         })
+                     except: pass
+                     
+            change_pct = 0
+            if prev_close:
+                 change_pct = ((current_price - prev_close) / prev_close) * 100
             
             result["target"] = target_v
-            result["daily_change"] = round(change_pct, 2)  # Store for Frontend
-            
+            result["daily_change"] = round(change_pct, 2)
+
         except Exception as e:
-            print(f"Filter 2 Calculation Error ({ticker}): {e}")
-            # Fallback to old box logic if error
-            recent_20 = df30['High'].tail(20)
-            box_high_val = float(recent_20.max())
-            target_v = round(box_high_val * 1.02, 2)
-            result["target"] = target_v
-            filter2_met = bool(current_price >= target_v)
+            print(f"Filter 2 Error: {e}")
+            result["target"] = 0
+            filter2_met = False
 
         # Filter 3: 5m Timing (Golden Cross or MA Alignment)
         # Simplified: SMA 5 > 20 on 5m chart
@@ -1684,9 +1674,9 @@ def check_triple_filter(ticker, data_30m, data_5m):
             else:
                 state["step3_color"] = None
 
-            # Warning 2: Price dropped below entry price -> Orange
+            # Warning 2: Price dropped below entry price (with 1% buffer) -> Orange
             entry_price = state.get("step2_done_price")
-            if entry_price and current_price < entry_price:
+            if entry_price and current_price < (entry_price * 0.99):
                 result["step2_color"] = "orange"
                 state["step2_color"] = "orange"
                 try:
