@@ -186,10 +186,38 @@ def fetch_data(tickers=None):
     # 3. Long-term Data Fetch (1d, Market, Regime)
     if needs_longterm or _DATA_CACHE.get("1d") is None:
         try:
+            from db import save_market_candles, load_market_candles
+            
             tickers_str = " ".join(target_list)
             print("Fetching Long-term (1d) for Stocks...")
             new_1d = yf.download(tickers_str, period="6mo", interval="1d", group_by='ticker', threads=False, progress=False, timeout=10)
-            if not new_1d.empty: _DATA_CACHE["1d"] = new_1d
+            
+            # Save 1d data to DB for CORE_TICKERS
+            CORE_TICKERS = ["SOXL", "SOXS", "UPRO"]
+            for ticker in target_list:
+                if ticker not in CORE_TICKERS: continue
+                try:
+                    df = None
+                    if isinstance(new_1d.columns, pd.MultiIndex) and ticker in new_1d.columns: 
+                        df = new_1d[ticker]
+                    elif not isinstance(new_1d.columns, pd.MultiIndex) and len(target_list) == 1: 
+                        df = new_1d
+                    if df is not None and not df.empty: 
+                        save_market_candles(ticker, '1d', df, 'yfinance')
+                        print(f"  💾 Saved {ticker} 1d data to DB ({len(df)} candles)")
+                except Exception as e: 
+                    print(f"Save 1d Error {ticker}: {e}")
+            
+            # Load 1d from DB (Single Source of Truth)
+            cache_1d = {}
+            for ticker in target_list:
+                df1d = load_market_candles(ticker, "1d", limit=180)  # 6 months
+                if df1d is not None and not df1d.empty: 
+                    cache_1d[ticker] = df1d
+            
+            if cache_1d: 
+                _DATA_CACHE["1d"] = cache_1d
+                print(f"✅ Loaded {len(cache_1d)} tickers 1d data from DB")
             
             print("Fetching market data (Indices)...")
             market_data = {}
@@ -213,7 +241,25 @@ def fetch_data(tickers=None):
     # Final Robustness: If something is still None, return structure with cached/empty
     d30 = _DATA_CACHE.get("30m") if _DATA_CACHE.get("30m") is not None else pd.DataFrame()
     d5 = _DATA_CACHE.get("5m") if _DATA_CACHE.get("5m") is not None else pd.DataFrame()
-    d1 = _DATA_CACHE.get("1d") if _DATA_CACHE.get("1d") is not None else pd.DataFrame()
+    
+    # 1d Data: Try DB fallback if cache is empty
+    d1 = _DATA_CACHE.get("1d")
+    if d1 is None or (isinstance(d1, pd.DataFrame) and d1.empty):
+        try:
+            from db import load_market_candles
+            cache_1d = {}
+            for ticker in target_list:
+                df1d = load_market_candles(ticker, "1d", limit=180)
+                if df1d is not None and not df1d.empty: 
+                    cache_1d[ticker] = df1d
+            if cache_1d:
+                d1 = cache_1d
+                _DATA_CACHE["1d"] = cache_1d
+                print(f"📊 Fallback: Loaded {len(cache_1d)} tickers 1d from DB")
+        except: pass
+    
+    if d1 is None: d1 = pd.DataFrame()
+    
     m = _DATA_CACHE.get("market") if _DATA_CACHE.get("market") is not None else {}
     reg = _DATA_CACHE.get("regime") if _DATA_CACHE.get("regime") is not None else pd.DataFrame()
     
