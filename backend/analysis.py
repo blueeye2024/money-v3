@@ -1466,6 +1466,7 @@ def check_triple_filter(ticker, data_30m, data_5m):
         filter1_met = bool(sma10_30 > sma30_30) # Define filter1_met
             
         # Filter 2: Daily Change (Breakout)
+        filter2_met = False
         try:
             data_1d = None
             if data_1d is None:
@@ -1505,6 +1506,7 @@ def check_triple_filter(ticker, data_30m, data_5m):
                          state["step2_color"] = "red" 
             
             if is_breakout:
+                 filter2_met = True
                  if not state.get("step2_done_time"):
                      state["step2_done_time"] = now_time_str
                      state["step2_done_price"] = current_price
