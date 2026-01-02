@@ -1593,7 +1593,7 @@ def check_triple_filter(ticker, data_30m, data_5m):
                          from db import save_signal
                          save_signal({
                              'ticker': ticker, 'signal_type': 'SELL (MASTER)',
-                             'position': f"추세 이탈 매도 ({now_time_str})", 
+                             'position': f"🔴 Red 경보: 30분봉 데드크로스 발생\n행동: 남은 주식 전량 매도 ({now_time_str})", 
                              'score': -100,
                              'signal_time_raw': now_utc,
                              'current_price': current_price,
@@ -1670,7 +1670,7 @@ def check_triple_filter(ticker, data_30m, data_5m):
                                 save_signal({
                                     'ticker': ticker, 'name': f"Warning ({ticker})",
                                     'signal_type': "WARNING (5M)", 
-                                    'position': f"5분봉 데드크로스: 긴급 익절(50%) 권장\n현재가: ${current_price}\n시간: {now_time_str}",
+                                    'position': f"🟡 Yellow 경보: 5분봉 데드크로스 발생\n행동: 보유 주식 30% 매도\n현재가: ${current_price}\n시간: {now_time_str}",
                                     'current_price': current_price, 'signal_time_raw': now_utc,
                                     'is_sent': True, 'score': -50, 'interpretation': "단기 조정 경고"
                                 })
@@ -1681,7 +1681,7 @@ def check_triple_filter(ticker, data_30m, data_5m):
 
             # Warning 2: Price dropped below entry price (with 1% buffer) -> Orange
             entry_price = state.get("step2_done_price")
-            if entry_price and current_price < (entry_price * 0.99):
+            if entry_price and current_price < entry_price:
                 result["step2_color"] = "orange"
                 state["step2_color"] = "orange"
                 try:
@@ -1694,7 +1694,7 @@ def check_triple_filter(ticker, data_30m, data_5m):
                                 save_signal({
                                     'ticker': ticker, 'name': f"Warning ({ticker})",
                                     'signal_type': "WARNING (BOX)", 
-                                    'position': f"진입가 하회: 강도 약화 주의\n진입: ${entry_price:.2f}, 현재: ${current_price:.2f} ({price_drop_pct:+.1f}%)\n시간: {now_time_str}",
+                                    'position': f"🟠 Orange 경보: 현재가가 진입가격보다 하락\n행동: 보유 주식 30% 매도\n진입: ${entry_price:.2f}, 현재: ${current_price:.2f} ({price_drop_pct:+.1f}%)\n시간: {now_time_str}",
                                     'current_price': current_price, 'signal_time_raw': now_utc,
                                     'is_sent': True, 'score': -30, 'interpretation': "모멘텀 약화 경고"
                                 })
