@@ -968,6 +968,10 @@ def save_market_candles(ticker, timeframe, df, source='yfinance'):
                    # Convert to naive or UTC? DB is usually naive datetime.
                    # Assuming KST or UTC consistent. Let's strip tz or ensure it's correct.
                    ts = ts.replace(tzinfo=None)
+                
+                # CRITICAL: Normalize 1d candles to 00:00:00 for date-only comparison
+                if timeframe == '1d':
+                    ts = ts.replace(hour=0, minute=0, second=0, microsecond=0)
 
                 vol = row.get('Volume', 0)
                 if pd.isna(vol): vol = 0

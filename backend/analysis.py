@@ -1514,10 +1514,8 @@ def check_triple_filter(ticker, data_30m, data_5m):
         # Filter 2: Daily Change (Breakout)
         filter2_met = False
         try:
-            data_1d = None
-            if data_1d is None:
-                from analysis import _DATA_CACHE
-                data_1d = _DATA_CACHE.get("1d")
+            from analysis import _DATA_CACHE
+            data_1d = _DATA_CACHE.get("1d")
             
             prev_close = None
             df_1d = None
