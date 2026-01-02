@@ -1505,6 +1505,14 @@ def check_triple_filter(ticker, data_30m, data_5m):
                 # SOXS UP (+2%) -> Buy SOXS (Market Bearish)
                 
                 target_v = round(prev_close * 1.02, 2)
+                # Step 2 Progress (Visual only)
+                diff_pct = 0
+                if target_v > 0:
+                    diff_pct = ((current_price / target_v) - 1) * 100
+                
+                # If Step 2 is done, show how much further we went
+                if state.get("step2_done_time"):
+                     pass # Already handled visually by done color
                 if current_price >= target_v:
                      is_breakout = True
                      state["step2_color"] = "red" 
@@ -1702,7 +1710,9 @@ def check_triple_filter(ticker, data_30m, data_5m):
         if state.get("step2_done_time"): 
             result["step_details"]["step2"] = f"돌파: {state['step2_done_price']}$"
         else:
-            diff_pct = ((current_price / target_v) - 1) * 100
+            diff_pct = 0
+            if target_v > 0:
+                diff_pct = ((current_price / target_v) - 1) * 100
             result["step_details"]["step2"] = f"대기 중 (목표: ${target_v}, 현재: {diff_pct:.1f}%)"
             
         if state.get("step3_done_time"): 
@@ -1762,85 +1772,54 @@ def determine_market_regime_v2(daily_data, data_30m, data_5m=None):
     if data_5m is None:
         data_5m = _DATA_CACHE.get("5m")
 
+    # Calculate Signals
+    upro_res = check_triple_filter("UPRO", data_30m, data_5m) # For Regime Calculation
     soxl_res = check_triple_filter("SOXL", data_30m, data_5m)
     soxs_res = check_triple_filter("SOXS", data_30m, data_5m)
 
-    regime = "Sideways"
-    reason = "시장 관망 (조건 탐색 중)"
-    comment = "SOXL(상승) 또는 SOXS(하락)의 3가지 조건이 모두 충족되어야 방향성이 확정됩니다."
+    # Market Regime Logic (Based on UPRO Daily Change)
+    # Rule: Bull (>= +1.5%), Bear (<= -1.5%), Sideways (In-between)
+    upro_change = upro_res.get("daily_change", 0)
+    upro_price = upro_res.get("current_price", 0)
     
-    # Calculate Stages
+    if upro_change >= 1.5:
+        regime = "Bull"
+        reason = f"UPRO {upro_change:+.2f}% (상승장)"
+        comment = "시장 상황: 상승장 (Bull Market). SOXL 진입 기회 모색."
+        current_strategy = "추세 추종: 지수가 강한 상승 국면입니다. SOXL의 신호에 집중하세요."
+    elif upro_change <= -1.5:
+        regime = "Bear"
+        reason = f"UPRO {upro_change:+.2f}% (하락장)"
+        comment = "시장 상황: 하락장 (Bear Market). SOXS 진입 기회 모색."
+        current_strategy = "추세 하락: 지수가 약세입니다. 인버스(SOXS) 신호를 주시하거나 현금 비중을 높이세요."
+    else:
+        regime = "Sideways"
+        # reason display format for UI
+        reason = f"UPRO {upro_change:+.2f}% (보합장)"
+        comment = "시장 상황: 보합장 (Sideways). 뚜렷한 추세가 없으므로 박스권 매매 유효."
+        current_strategy = "관망 및 단기 대응: 무리한 진입보다 확실한 돌파 신호(Step 2)를 기다리세요."
+
+    # SOXL/SOXS Status Logic (For detailed view, kept for reference)
     soxl_count = sum([soxl_res["step1"], soxl_res["step2"], soxl_res["step3"]])
     soxs_count = sum([soxs_res["step1"], soxs_res["step2"], soxs_res["step3"]])
     
-    current_strategy = "마스터 신호를 대기하며 현금 비중을 유지합니다. 조건이 완성되는 방향으로 즉각 진입을 준비하세요."
-    risk_plan = "현재는 중립 구간입니다. 상승 또는 하락 1단계 진입 시 해당 방향으로 정찰병(5~10%) 투입을 고려하세요."
+    risk_plan = "변동성 관리: UPRO 등락률을 기준으로 시장의 온도를 체크하세요."
 
-    # Priority: 1. Final Signal, 2. High Condition Count, 3. Recency (if possible, but count is usually enough)
-    if soxs_res["final"]:
-        regime = "Bear"
-        reason = "🚩 SOXS 진입 조건 완성 (매수)"
-        comment = "하락 추세가 확정되었습니다. 공포 심리가 확산되는 구간입니다."
-        current_strategy = "SOXS 적극 매수. 레버리지(SOXL, UPRO) 전량 매도. TMF, AAAU 피난처 포트폴리오 구축."
-        risk_plan = "하락 3단계 확정. 방어적 포트폴리오 전환 및 인버스 비중 극대화."
-        
-        # Check Warnings
-        if soxs_res.get("step3_color") == "yellow":
-            risk_plan = "⚠️ 경고: SOXS 5분봉 데드크로스 발생! 긴급 익절(50%) 및 리스크 관리 필요."
-        elif soxs_res.get("step2_color") == "orange":
-            risk_plan = "⚠️ 경고: SOXS 박스권 하향 이탈. 매수 강도 약화 주의."
+    # Warning Checks (Keep existing logic)
+    if soxl_res.get("step3_color") == "yellow":
+         risk_plan = "⚠️ SOXL 단기/중기 이평 데드크로스 주의"
+    if soxs_res.get("step3_color") == "yellow":
+         risk_plan = "⚠️ SOXS 단기/중기 이평 데드크로스 주의"
 
-    elif soxl_res["final"]:
-        regime = "Bull"
-        reason = "🚩 SOXL 진입 조건 완성 (매수)"
-        comment = "반도체 상승 에너지가 폭발했습니다. 시장 전체가 강력한 상승 추세로 진입했습니다."
-        current_strategy = "SOXL, UPRO, IONQ 적극 매수 및 보유. TSLA, GOOGL 추가 매수 전략 유효. 방어 자산 전량 매도."
-        risk_plan = "상승 3단계 확정. 공격적 포트폴리오 운용. 손절 라인 평단 대비 -5% 설정."
-        
-        # Check Warnings
-        if soxl_res.get("step3_color") == "yellow":
-            risk_plan = "⚠️ 경고: SOXL 5분봉 데드크로스 발생! 긴급 익절(50%) 및 리스크 관리 필요."
-        elif soxl_res.get("step2_color") == "orange":
-            risk_plan = "⚠️ 경고: SOXL 박스권 하향 이탈. 매수 강도 약화 주의."
-
-    elif soxs_count > soxl_count:
-        regime = f"Bear (Stage {soxs_count})"
-        reason = f"⚠️ 하락 {soxs_count}단계 진행 중"
-        if soxs_count == 1:
-            risk_plan = "하락 1단계: 30분봉 추세 이탈 감지. 수익 실현 및 비중 축소 권장."
-        else:
-            risk_plan = "하락 2단계: 하락 압력 강화. 인버스(SOXS) 정찰병 진입 및 현금 확보."
-    elif soxl_count > soxs_count:
-        regime = f"Bull (Stage {soxl_count})"
-        reason = f"🔍 상승 {soxl_count}단계 진행 중"
-        if soxl_count == 1:
-            risk_plan = "상승 1단계: 30분봉 추세 전환 확인. 관망 또는 소량 분할 매수 시작."
-        else:
-            risk_plan = "상승 2단계: 강한 돌파 확인. 5분봉 골든크로스(3단계) 발생 시 즉시 추가 매수."
-    elif soxs_count == soxl_count and soxs_count > 0:
-        # Both have progress, check which is more significant (e.g., price change)
-        reason = "🌓 혼조세 (방향성 탐색 중)"
-        comment = "상승과 하락 조건이 동시에 감지되고 있습니다. 확실한 돌파가 나오기까지 관망이 유리합니다."
-
-    # UPRO status (Requirement #4) - for Journal Header
-    upro_change = 0.0
-    upro_label = "보합장"
-    try:
-        upro_df = daily_data.get("UPRO") if isinstance(daily_data, dict) else daily_data["UPRO"]
-        if upro_df is not None and not upro_df.empty:
-            upro_change = ((upro_df['Close'].iloc[-1] - upro_df['Close'].iloc[-2]) / upro_df['Close'].iloc[-2]) * 100
-            if upro_change > 1.5: upro_label = "상승장"
-            elif upro_change < -1.5: upro_label = "하락장"
-    except: pass
-
+    # Prepare Final Details
     details = {
-        "version": "2.4.0",
+        "version": "2.6.0",
         "regime": regime,
         "reason": reason,
         "comment": comment,
         "current_strategy": current_strategy,
         "risk_plan": risk_plan,
-        "upro_status": {"label": upro_label, "change_pct": round(upro_change, 2)},
+        "upro_status": {"label": regime, "change_pct": round(upro_change, 2)},
         "soxl": soxl_res,
         "soxs": soxs_res,
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
