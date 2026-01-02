@@ -236,7 +236,7 @@ function Layout() {
                 textAlign: 'center', padding: '2rem', marginTop: '4rem',
                 borderTop: '1px solid var(--glass-border)', color: 'var(--text-secondary)'
             }}>
-                <p>&copy; 2024 Cheongan FinTech. All rights reserved. Ver 2.5.1 (Build: 2026-01-02 16:54)</p>
+                <p>&copy; 2024 Cheongan FinTech. All rights reserved. Ver 2.5.2 (Build: 2026-01-02 17:32)</p>
             </footer>
         </div>
     );
