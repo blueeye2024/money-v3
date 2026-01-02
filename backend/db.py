@@ -954,6 +954,7 @@ def get_last_candle_time(ticker, timeframe):
 
 def save_market_candles(ticker, timeframe, df, source='yfinance'):
     """Save DataFrame to market_candles table (Upsert)"""
+    import pandas as pd
     if df is None or df.empty: return False
     
     try:
@@ -971,9 +972,14 @@ def save_market_candles(ticker, timeframe, df, source='yfinance'):
                 vol = row.get('Volume', 0)
                 if pd.isna(vol): vol = 0
                 
+                # Helper to handle NaN for MySQL
+                def clean_val(v):
+                    return None if pd.isna(v) else float(v)
+
                 data.append((
                     ticker, timeframe, ts,
-                    float(row['Open']), float(row['High']), float(row['Low']), float(row['Close']),
+                    clean_val(row['Open']), clean_val(row['High']), 
+                    clean_val(row['Low']), clean_val(row['Close']),
                     int(vol), source
                 ))
                 
@@ -1025,3 +1031,16 @@ def load_market_candles(ticker, timeframe, limit=300):
     except Exception as e:
         print(f"Error loading market candles: {e}")
         return None
+
+def cleanup_old_candles(ticker, days=90):
+    """Delete candles older than N days to save space"""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cursor:
+                sql = "DELETE FROM market_candles WHERE ticker=%s AND candle_time < DATE_SUB(NOW(), INTERVAL %s DAY)"
+                cursor.execute(sql, (ticker, days))
+            conn.commit()
+            return True
+    except Exception as e:
+        print(f"Error cleaning up old candles ({ticker}): {e}")
+        return False

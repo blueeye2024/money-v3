@@ -116,14 +116,22 @@ def fetch_data(tickers=None):
             new_30m = yf.download(tickers_str, period=fetch_period, interval="30m", prepost=True, group_by='ticker', threads=True, progress=False, timeout=20)
             new_5m = yf.download(tickers_str, period=fetch_period, interval="5m", prepost=True, group_by='ticker', threads=True, progress=False, timeout=20)
             
-            # Save to DB (Upsert)
+            # Save to DB (Upsert) - Only Core Tickers
+            CORE_TICKERS = ["SOXL", "SOXS", "UPRO"]
+            from db import cleanup_old_candles
+
             for ticker in target_list:
+                # Optimized: Only save history for core tickers to DB
+                if ticker not in CORE_TICKERS: continue
+
                 # 30m Save
                 try:
                     df = None
                     if isinstance(new_30m.columns, pd.MultiIndex) and ticker in new_30m.columns: df = new_30m[ticker]
                     elif not isinstance(new_30m.columns, pd.MultiIndex) and len(target_list) == 1: df = new_30m
-                    if df is not None and not df.empty: save_market_candles(ticker, '30m', df, 'yfinance')
+                    if df is not None and not df.empty: 
+                        save_market_candles(ticker, '30m', df, 'yfinance')
+                        cleanup_old_candles(ticker, days=60) # Auto cleanup
                 except Exception as e: print(f"Save 30m Error {ticker}: {e}")
 
                 # 5m Save
@@ -131,7 +139,9 @@ def fetch_data(tickers=None):
                     df = None
                     if isinstance(new_5m.columns, pd.MultiIndex) and ticker in new_5m.columns: df = new_5m[ticker]
                     elif not isinstance(new_5m.columns, pd.MultiIndex) and len(target_list) == 1: df = new_5m
-                    if df is not None and not df.empty: save_market_candles(ticker, '5m', df, 'yfinance')
+                    if df is not None and not df.empty: 
+                        save_market_candles(ticker, '5m', df, 'yfinance')
+                        cleanup_old_candles(ticker, days=30) # 5m data is heavy, keep 30 days
                 except Exception as e: print(f"Save 5m Error {ticker}: {e}")
             
             _DATA_CACHE["last_fetch_realtime"] = now
