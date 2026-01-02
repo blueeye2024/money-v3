@@ -12,13 +12,62 @@ const TripleFilterStatus = ({ title, status, isBear = false }) => {
 
     const conditionsMet = [status?.step1, status?.step2, status?.step3].filter(Boolean).length;
 
+    // Helper for US/KR Time
+    const formatDualTime = (timeStr) => {
+        if (!timeStr) return '-';
+
+        // Handle pre-formatted backend string (e.g. "2026-01-01 12:00 (US) / ...")
+        if (typeof timeStr === 'string' && timeStr.includes(' / ') && timeStr.includes('(KR)')) {
+            try {
+                const parts = timeStr.split(' / ');
+                if (parts.length === 2) {
+                    return (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '0.65rem', color: '#888' }}>
+                            <div>🇺🇸 {parts[0].replace('(US)', '').trim()} (NY)</div>
+                            <div>🇰🇷 {parts[1].replace('(KR)', '').trim()} (KR)</div>
+                        </div>
+                    );
+                }
+            } catch (e) { return timeStr; }
+        }
+
+        try {
+            // Assume input is KST or ISO. parsed correctly by new Date() if ISO. 
+            // If it's a simple string like 'YYYY-MM-DD HH:MM:SS', new Date() usually parses it in local time or UTC depending on browser.
+            // Given the server is KST, we should treat it carefully.
+            // Let's assume the string is parseable.
+            const date = new Date(timeStr);
+            if (isNaN(date.getTime())) return timeStr;
+
+            const format = (d, tz) => {
+                const parts = new Intl.DateTimeFormat('en-CA', {
+                    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+                    hour: '2-digit', minute: '2-digit', hour12: false
+                }).formatToParts(d);
+
+                // en-CA gives YYYY-MM-DD. standard
+                const get = (type) => parts.find(p => p.type === type).value;
+                return `${get('year')}.${get('month')}.${get('day')} ${get('hour')}:${get('minute')}`;
+            };
+
+            return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '0.65rem', color: '#888' }}>
+                    <div>🇺🇸 {format(date, 'America/New_York')} (NY)</div>
+                    <div>🇰🇷 {format(date, 'Asia/Seoul')} (KR)</div>
+                </div>
+            );
+        } catch (e) {
+            return timeStr;
+        }
+    };
+
     return (
         <div style={{ flex: 1, minWidth: '320px', background: 'rgba(0,0,0,0.4)', padding: '1.5rem', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)', position: 'relative', overflow: 'hidden' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
                 <div>
-                    <h4 style={{ margin: 0, fontSize: '1.1rem', color: status?.final ? (isBear ? '#60a5fa' : '#ef4444') : (isBear ? '#93c5fd' : '#fca5a5'), fontWeight: '800' }}>{title}</h4>
+                    <h4 style={{ margin: 0, fontSize: '1.1rem', color: status?.final ? (isBear ? '#60a5fa' : '#ef4444') : '#666', fontWeight: '800' }}>{title}</h4>
                     <div style={{ fontSize: '0.75rem', color: '#666', marginTop: '4px' }}>
-                        {status?.final ? `모든 조건 완성 (${status.signal_time})` : `${conditionsMet} / 3 조건 완료`}
+                        {status?.final ? `조건 충족 완료` : `${conditionsMet} / 3 조건 완료`}
                     </div>
                 </div>
                 {status?.final ? (
@@ -31,7 +80,7 @@ const TripleFilterStatus = ({ title, status, isBear = false }) => {
                         </span>
                     </div>
                 ) : (
-                    <div style={{ fontSize: '0.7rem', color: '#888', background: 'rgba(255,255,255,0.05)', padding: '4px 10px', borderRadius: '20px' }}>
+                    <div style={{ fontSize: '0.7rem', color: '#444', background: 'rgba(0,0,0,0.2)', padding: '4px 10px', borderRadius: '20px', border: '1px solid #333' }}>
                         조건 대기 중...
                     </div>
                 )}
@@ -39,45 +88,62 @@ const TripleFilterStatus = ({ title, status, isBear = false }) => {
 
             {/* Horizontal Condition Bar */}
             <div style={{ position: 'relative', height: '60px', marginTop: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 10px' }}>
-                <div style={{ position: 'absolute', top: '50%', left: '10%', right: '10%', height: '4px', background: 'rgba(255,255,255,0.1)', transform: 'translateY(-50%)', zIndex: 1, borderRadius: '2px' }} />
+                <div style={{ position: 'absolute', top: '50%', left: '10%', right: '10%', height: '4px', background: 'rgba(255,255,255,0.02)', transform: 'translateY(-50%)', zIndex: 1, borderRadius: '2px' }} />
 
                 {conditions.map((cond, idx) => {
                     const isMet = status ? status[cond.key] : false;
                     const backendColor = status ? status[`${cond.key}_color`] : null;
 
-                    let dotColor = '#1a1a1a';
+                    // Default OFF State
+                    let dotBg = '#0f0f0f'; // Very dark
+                    let dotBorder = 'rgba(255,255,255,0.1)';
+                    let dotColor = '#333';
                     let shadow = 'none';
+                    let scale = 1;
 
                     if (backendColor === 'red') {
-                        dotColor = '#ef4444';
+                        dotBg = '#ef4444';
+                        dotBorder = 'rgba(255,255,255,0.5)';
+                        dotColor = 'white';
                         shadow = '0 0 15px #ef4444';
+                        scale = 1.1;
                     } else if (backendColor === 'orange') {
-                        dotColor = '#f97316';
+                        dotBg = '#f97316';
+                        dotBorder = 'rgba(255,255,255,0.5)';
+                        dotColor = 'white';
                         shadow = '0 0 15px #f97316';
+                        scale = 1.1;
                     } else if (backendColor === 'yellow') {
-                        dotColor = '#eab308';
+                        dotBg = '#eab308';
+                        dotBorder = 'rgba(255,255,255,0.5)';
+                        dotColor = 'white';
                         shadow = '0 0 15px #eab308';
+                        scale = 1.1;
                     } else if (isMet) {
-                        dotColor = activeColor;
-                        shadow = `0 0 15px ${activeColor}`;
+                        dotBg = activeColor;
+                        dotBorder = 'white';
+                        dotColor = 'white';
+                        shadow = `0 0 20px ${activeColor}88`; // Slightly softer glow
+                        scale = 1.1;
                     }
 
                     return (
                         <div key={cond.key} style={{ zIndex: 3, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', position: 'relative' }}>
                             <div style={{
                                 width: '32px', height: '32px', borderRadius: '50%',
-                                background: dotColor,
-                                border: `3px solid ${isMet || backendColor ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.05)'}`,
+                                background: dotBg,
+                                border: `3px solid ${dotBorder}`,
                                 boxShadow: shadow,
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                color: (isMet || backendColor) ? 'white' : '#444', fontWeight: 'bold', fontSize: '1.2rem',
-                                transition: 'all 0.5s ease'
+                                color: dotColor, fontWeight: 'bold', fontSize: '1.2rem',
+                                transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+                                transform: `scale(${scale})`
                             }}>
                                 {isMet ? '✓' : idx + 1}
                             </div>
-                            <div style={{ textAlign: 'center' }}>
-                                <div style={{ fontSize: '0.75rem', fontWeight: '700', color: isMet ? '#fff' : '#555' }}>{cond.label}</div>
-                                <div style={{ fontSize: '0.65rem', color: isMet ? '#aaa' : '#444' }}>{cond.desc}</div>
+                            <div style={{ textAlign: 'center', opacity: isMet ? 1 : 0.5, transition: 'opacity 0.3s' }}>
+                                <div style={{ fontSize: '0.75rem', fontWeight: '700', color: isMet ? '#fff' : '#444' }}>{cond.label}</div>
+                                <div style={{ fontSize: '0.65rem', color: isMet ? '#aaa' : '#333' }}>{cond.desc}</div>
                             </div>
                         </div>
                     );
@@ -108,12 +174,12 @@ const TripleFilterStatus = ({ title, status, isBear = false }) => {
                     ))}
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed rgba(255,255,255,0.05)', paddingTop: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderTop: '1px dashed rgba(255,255,255,0.05)', paddingTop: '8px' }}>
                     <div style={{ fontSize: '0.7rem', color: '#555' }}>
-                        {status?.signal_time ? `신호 완성: ${status.signal_time}` : `체크: ${status?.timestamp ? String(status.timestamp).split(' ')[1] : '-'}`}
+                        {formatDualTime(status?.signal_time || status?.timestamp)}
                     </div>
                     {status?.target > 0 && (
-                        <div style={{ fontSize: '0.7rem', color: '#555' }}>
+                        <div style={{ fontSize: '0.7rem', color: '#555', alignSelf: 'center' }}>
                             2% 목표: <span style={{ color: status?.step3 ? activeColor : '#555', fontWeight: 'bold' }}>${status.target}</span>
                         </div>
                     )}
@@ -132,6 +198,50 @@ const MarketInsight = ({ market, stocks, signalHistory }) => {
     const activeStocks = stocks && Array.isArray(stocks)
         ? [...stocks].sort((a, b) => (b.current_ratio || 0) - (a.current_ratio || 0))
         : [];
+
+    // Helper function for dual time formatting
+    const formatDualTime = (timeStr) => {
+        if (!timeStr) return '-';
+
+        // Handle pre-formatted backend string (e.g. "2026-01-01 12:00 (US) / ...")
+        if (typeof timeStr === 'string' && timeStr.includes(' / ') && timeStr.includes('(KR)')) {
+            try {
+                const parts = timeStr.split(' / ');
+                if (parts.length === 2) {
+                    return (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '0.65rem', color: '#888' }}>
+                            <div>🇺🇸 {parts[0].replace('(US)', '').trim()} (NY)</div>
+                            <div>🇰🇷 {parts[1].replace('(KR)', '').trim()} (KR)</div>
+                        </div>
+                    );
+                }
+            } catch (e) { return timeStr; }
+        }
+
+        try {
+            const date = new Date(timeStr);
+            if (isNaN(date.getTime())) return timeStr;
+
+            const format = (d, tz) => {
+                const parts = new Intl.DateTimeFormat('en-CA', {
+                    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+                    hour: '2-digit', minute: '2-digit', hour12: false
+                }).formatToParts(d);
+
+                const get = (type) => parts.find(p => p.type === type).value;
+                return `${get('year')}.${get('month')}.${get('day')} ${get('hour')}:${get('minute')}`;
+            };
+
+            return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '0.65rem', color: '#888' }}>
+                    <div>🇺🇸 {format(date, 'America/New_York')} (NY)</div>
+                    <div>🇰🇷 {format(date, 'Asia/Seoul')} (KR)</div>
+                </div>
+            );
+        } catch (e) {
+            return timeStr;
+        }
+    };
 
     return (
         <div className="glass-panel" style={{ padding: '2rem', marginBottom: '3rem', display: 'flex', flexDirection: 'column', gap: '2.5rem' }}>
@@ -182,10 +292,12 @@ const MarketInsight = ({ market, stocks, signalHistory }) => {
                             <div style={{ color: '#d1d5db', fontSize: '0.9rem', lineHeight: '1.7', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                 {signalHistory && Array.isArray(signalHistory) && signalHistory.length > 0 ? (
                                     signalHistory.map(sig => (
-                                        <div key={sig.id} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed rgba(255,255,255,0.1)', paddingBottom: '4px' }}>
-                                            <span style={{ color: '#bbb' }}>{sig.created_at && sig.created_at.includes(' ') ? sig.created_at.split(' ')[1].substring(0, 5) : (sig.created_at || '-')}</span>
-                                            <span style={{ color: (sig.signal_type || '').includes('BUY') ? '#ef4444' : '#3b82f6', fontWeight: 'bold' }}>{sig.ticker || '-'} {(sig.signal_type || '').replace(' (MASTER)', '')}</span>
-                                            <span style={{ color: '#aaa' }}>${sig.price}</span>
+                                        <div key={sig.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px dashed rgba(255,255,255,0.1)', paddingBottom: '8px', gap: '12px' }}>
+                                            <div style={{ minWidth: '140px', fontSize: '0.7rem' }}>
+                                                {formatDualTime(sig.signal_time)}
+                                            </div>
+                                            <span style={{ color: (sig.signal_type || '').includes('BUY') ? '#ef4444' : '#3b82f6', fontWeight: 'bold', whiteSpace: 'nowrap' }}>{sig.ticker || '-'} {(sig.signal_type || '').replace(' (MASTER)', '')}</span>
+                                            <span style={{ color: '#aaa', whiteSpace: 'nowrap' }}>${sig.price}</span>
                                         </div>
                                     ))
                                 ) : (

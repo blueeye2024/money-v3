@@ -375,7 +375,7 @@ const JournalPage = () => {
                         <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '3rem', border: '1px solid rgba(56, 189, 248, 0.3)' }}>
                             <h3 style={{ marginBottom: '1.25rem' }}>{formData.id ? '✏️ 매매 기록 수정' : '✨ 새 매매 기록 추가'}</h3>
                             <form onSubmit={handleTxSubmit} className="journal-form-grid">
-                                <div className="form-group"><label>종목 선택</label><select value={formData.ticker} onChange={e => setFormData({ ...formData, ticker: e.target.value })} required className="input-field" style={{ background: '#e2e8f0', color: 'black', fontWeight: 'bold' }}><option value="">-- 선택 --</option>{stocks.map(s => <option key={s.code} value={s.code}>{s.name} ({s.code})</option>)}</select></div>
+                                <div className="form-group"><label>종목 선택</label><select value={formData.ticker} onChange={e => setFormData({ ...formData, ticker: e.target.value })} required className="input-field" style={{ fontWeight: 'bold' }}><option value="" style={{ color: 'black' }}>-- 선택 --</option>{stocks.map(s => <option key={s.code} value={s.code} style={{ color: 'black' }}>{s.name} ({s.code})</option>)}</select></div>
                                 <div className="form-group" style={{ gridColumn: 'span 2' }}>
                                     <label>매매 구분</label>
                                     <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -425,7 +425,7 @@ const JournalPage = () => {
             <style>{`
                 .container { max-width: 1200px; margin: 0 auto; padding: 0 1rem; font-family: 'Inter', sans-serif; }
                 .form-group { display: flex; flex-direction: column; gap: 0.5rem; }
-                .input-field { background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); color: white; padding: 0.8rem; border-radius: 8px; outline: none; transition: all 0.2; }
+                .input-field { background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); color: white; padding: 0.8rem; border-radius: 8px; outline: none; transition: all 0.2; min-height: 44px; }
                 .btn-submit { padding: 1rem; background: linear-gradient(90deg, var(--accent-blue), var(--accent-purple)); color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
                 .summary-grid { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 1.5rem; }
                 .table-container { overflow-x: auto; }

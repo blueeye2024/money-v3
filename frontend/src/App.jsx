@@ -175,6 +175,8 @@ function Dashboard() {
     );
 }
 
+import RequestPage from './RequestPage';
+
 function Layout() {
     const location = useLocation();
     const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -214,6 +216,10 @@ function Layout() {
                     color: location.pathname === '/backtest' ? 'var(--accent-blue)' : 'var(--text-primary)',
                     fontWeight: location.pathname === '/backtest' ? 'bold' : 'normal',
                 }}>백테스트</Link>
+                <Link to="/requests" className="nav-link" style={{
+                    color: location.pathname === '/requests' ? 'var(--accent-blue)' : 'var(--text-primary)',
+                    fontWeight: location.pathname === '/requests' ? 'bold' : 'normal',
+                }}>요청사항</Link>
             </nav>
 
             <Routes>
@@ -222,6 +228,7 @@ function Layout() {
                 <Route path="/journal" element={<JournalPage />} />
                 <Route path="/managed-stocks" element={<ManagedStocksPage />} />
                 <Route path="/backtest" element={<BacktestPage />} />
+                <Route path="/requests" element={<RequestPage />} />
             </Routes>
 
 
@@ -229,7 +236,7 @@ function Layout() {
                 textAlign: 'center', padding: '2rem', marginTop: '4rem',
                 borderTop: '1px solid var(--glass-border)', color: 'var(--text-secondary)'
             }}>
-                <p>&copy; 2024 Cheongan FinTech. All rights reserved. Ver 2.4.1 (Build: 2026-01-02 01:23)</p>
+                <p>&copy; 2024 Cheongan FinTech. All rights reserved. Ver 2.4.5 (Build: 2026-01-02 13:44)</p>
             </footer>
         </div>
     );

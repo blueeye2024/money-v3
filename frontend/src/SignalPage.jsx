@@ -163,6 +163,45 @@ const SignalPage = () => {
         }
     };
 
+    // Format dual time (US/KR) for signal history
+    const formatDualTime = (dateStr) => {
+        if (!dateStr) return '-';
+        try {
+            const date = new Date(dateStr);
+
+            // US Eastern Time
+            const usTime = date.toLocaleString('en-US', {
+                timeZone: 'America/New_York',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            }).replace(/(\d+)\/(\d+)\/(\d+),/, '$3.$1.$2');
+
+            // KR Time
+            const krTime = date.toLocaleString('ko-KR', {
+                timeZone: 'Asia/Seoul',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            }).replace(/\. /g, '.').replace(/\.$/, '');
+
+            return (
+                <div style={{ fontSize: '0.85rem', lineHeight: '1.4' }}>
+                    <div>🇺🇸 {usTime}</div>
+                    <div style={{ color: 'var(--text-secondary)' }}>🇰🇷 {krTime}</div>
+                </div>
+            );
+        } catch (e) {
+            return dateStr;
+        }
+    };
+
     const sendSampleSms = async () => {
         if (!confirm(`샘플 신호(SOXL 매수)로 테스트 문자를 발송하시겠습니까?`)) return;
 
@@ -257,10 +296,10 @@ const SignalPage = () => {
                     </div>
                     <div className="form-group">
                         <label>표시 개수</label>
-                        <select name="limit" value={filters.limit} onChange={handleFilterChange} className="input-field" style={{ background: '#e2e8f0', color: 'black', fontWeight: 'bold' }}>
-                            <option value="30">30개</option>
-                            <option value="50">50개</option>
-                            <option value="100">100개</option>
+                        <select name="limit" value={filters.limit} onChange={handleFilterChange} className="input-field" style={{ fontWeight: 'bold' }}>
+                            <option value="30" style={{ color: 'black' }}>30개</option>
+                            <option value="50" style={{ color: 'black' }}>50개</option>
+                            <option value="100" style={{ color: 'black' }}>100개</option>
                         </select>
                     </div>
                     <div style={{ display: 'flex', gap: '0.8rem', flexWrap: 'wrap' }}>
@@ -299,10 +338,7 @@ const SignalPage = () => {
                                 signals.map(sig => (
                                     <tr key={sig.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                                         <td style={{ padding: '1.2rem', fontSize: '0.9rem' }}>
-                                            {new Date(sig.signal_time).toLocaleString('ko-KR', {
-                                                month: '2-digit', day: '2-digit',
-                                                hour: '2-digit', minute: '2-digit', hour12: false
-                                            })}
+                                            {formatDualTime(sig.signal_time)}
                                         </td>
                                         <td style={{ padding: '1.2rem' }}>
                                             <div style={{ fontWeight: 'bold' }}>{sig.ticker}</div>

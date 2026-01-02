@@ -1,4 +1,6 @@
 import pymysql
+from pymysql.cursors import DictCursor
+from dbutils.pooled_db import PooledDB
 import os
 from datetime import datetime
 
@@ -10,11 +12,45 @@ DB_CONFIG = {
     "password": "blueeye0037!",
     "database": "mywork_01",
     "charset": "utf8mb4",
-    "cursorclass": pymysql.cursors.DictCursor
+    "cursorclass": DictCursor
 }
 
+# Connection Pool (prevents "Too many open files" error)
+_connection_pool = None
+
+def _get_pool():
+    global _connection_pool
+    if _connection_pool is None:
+        try:
+            _connection_pool = PooledDB(
+                creator=pymysql,
+                maxconnections=10,  # Maximum connections
+                mincached=2,        # Minimum idle connections in pool
+                maxcached=5,        # Maximum idle connections in pool
+                maxusage=None,      # Number of times a connection can be reused
+                blocking=True,      # Block if pool is full
+                ping=1,             # Check connection before using (0=never, 1=default, 2=when checked out, 4=when checked in, 7=always)
+                **DB_CONFIG
+            )
+        except Exception as e:
+            print(f"Connection Pool Creation Error: {e}")
+            # Fallback to direct connection
+            return None
+    return _connection_pool
+
 def get_connection():
-    return pymysql.connect(**DB_CONFIG)
+    """Get database connection from pool (with context manager support)"""
+    pool = _get_pool()
+    if pool:
+        try:
+            return pool.connection()
+        except Exception as e:
+            print(f"Pool Connection Error: {e}")
+            # Fallback to direct connection
+            return pymysql.connect(**DB_CONFIG)
+    else:
+        # Direct connection fallback
+        return pymysql.connect(**DB_CONFIG)
 
 def init_db():
     """Initialize tables if they don't exist"""
@@ -127,6 +163,51 @@ def init_db():
             """
             cursor.execute(sql_config)
 
+            # 9. User Requests Tracking
+            sql_requests = """
+            CREATE TABLE IF NOT EXISTS user_requests (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                request_text TEXT,
+                ai_interpretation TEXT,
+                implementation_details TEXT,
+                status VARCHAR(20) DEFAULT 'completed',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+            cursor.execute(sql_requests)
+
+            # 10. Price Cache (KIS API Data Storage)
+            sql_price_cache = """
+            CREATE TABLE IF NOT EXISTS price_cache (
+                ticker VARCHAR(10) PRIMARY KEY,
+                price DECIMAL(10,4),
+                diff DECIMAL(10,4),
+                rate DECIMAL(6,3),
+                exchange VARCHAR(10),
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )
+            """
+            cursor.execute(sql_price_cache)
+
+            # 11. Candle Data Cache (5m/30m Snapshots for Holiday/Fallback)
+            sql_candle = """
+            CREATE TABLE IF NOT EXISTS candle_data (
+                ticker VARCHAR(10),
+                timeframe VARCHAR(5), -- '5m' or '30m'
+                candle_time DATETIME,
+                open DECIMAL(10,4),
+                high DECIMAL(10,4),
+                low DECIMAL(10,4),
+                close DECIMAL(10,4),
+                volume BIGINT,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                PRIMARY KEY (ticker, timeframe, candle_time),
+                INDEX idx_ticker_timeframe (ticker, timeframe),
+                INDEX idx_candle_time (candle_time)
+            )
+            """
+            cursor.execute(sql_candle)
+
             # --- Seed Initial Data ---
             # Seed Managed Stocks
             initial_stocks = [
@@ -170,6 +251,27 @@ def init_db():
         conn.commit()
     except Exception as e:
         print(f"DB Initialization Error: {e}")
+    finally:
+        conn.close()
+
+
+def add_user_request(request_text, interpretation, details):
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            sql = "INSERT INTO user_requests (request_text, ai_interpretation, implementation_details) VALUES (%s, %s, %s)"
+            cursor.execute(sql, (request_text, interpretation, details))
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+def get_user_requests():
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT * FROM user_requests ORDER BY created_at DESC")
+            return cursor.fetchall()
     finally:
         conn.close()
 
@@ -306,12 +408,12 @@ def delete_all_sms_logs():
     finally:
         conn.close()
 
-def check_recent_sms_log(stock_name, signal_type, interval_minutes=30):
+def check_recent_sms_log(stock_name, signal_type, timeframe_minutes=30):
     """Check if a similar SMS was sent recently"""
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
-            # Check for messages containing the stock name AND signal type within interval
+            # Check for messages containing the stock name AND signal type within timeframe
             # Note: signal_type from logic ('매수 진입' etc) might differ slightly from message format, but usually consistent.
             # Message format: [...][stock_name][signal_type]...
             
@@ -330,7 +432,7 @@ def check_recent_sms_log(stock_name, signal_type, interval_minutes=30):
             # Let's use the exact string passed to the SMS function logic.
             like_type = f"%[{signal_type}]%"
             
-            cursor.execute(sql, (like_stock, like_type, int(interval_minutes)))
+            cursor.execute(sql, (like_stock, like_type, int(timeframe_minutes)))
             return cursor.fetchone()
     finally:
         conn.close()
@@ -698,3 +800,121 @@ def set_global_config(key_name, value):
         return False
     finally:
         conn.close()
+# Add to db.py at the end (after get_user_requests)
+
+def save_price_cache(ticker, price_data):
+    """Save KIS API price to cache"""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cursor:
+                sql = """
+                INSERT INTO price_cache (ticker, price, diff, rate, exchange)
+                VALUES (%s, %s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE
+                    price = VALUES(price),
+                    diff = VALUES(diff),
+                    rate = VALUES(rate),
+                    exchange = VALUES(exchange),
+                    updated_at = CURRENT_TIMESTAMP
+                """
+                cursor.execute(sql, (
+                    ticker,
+                    price_data.get('price', 0),
+                    price_data.get('diff', 0),
+                    price_data.get('rate', 0),
+                    price_data.get('exchange', 'UNKNOWN')
+                ))
+            conn.commit()
+    except Exception as e:
+        print(f"Save Price Cache Error: {e}")
+
+def get_price_cache(ticker):
+    """Retrieve latest cached price for ticker"""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "SELECT price, diff, rate, exchange, updated_at FROM price_cache WHERE ticker=%s",
+                    (ticker,)
+                )
+                result = cursor.fetchone()
+                if result:
+                    return {
+                        'price': float(result['price']),
+                        'diff': float(result['diff']),
+                        'rate': float(result['rate']),
+                        'exchange': result['exchange'],
+                        'cached_at': result['updated_at']
+                    }
+    except Exception as e:
+        print(f"Get Price Cache Error: {e}")
+    return None
+
+def save_candle_data(ticker, timeframe, candles_df):
+    """
+    Save candle dataframe to DB
+    candles_df: pandas DataFrame with DatetimeIndex and columns [Open, High, Low, Close, Volume]
+    timeframe: '5m' or '30m'
+    """
+    if candles_df is None or candles_df.empty:
+        return
+    
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cursor:
+                # Take last 100 candles to limit DB size
+                recent = candles_df.tail(100)
+                
+                for idx, row in recent.iterrows():
+                    sql = """
+                    INSERT INTO candle_data (ticker, timeframe, candle_time, open, high, low, close, volume)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    ON DUPLICATE KEY UPDATE
+                        open = VALUES(open),
+                        high = VALUES(high),
+                        low = VALUES(low),
+                        close = VALUES(close),
+                        volume = VALUES(volume),
+                        updated_at = CURRENT_TIMESTAMP
+                    """
+                    cursor.execute(sql, (
+                        ticker, timeframe,
+                        idx.to_pydatetime().replace(microsecond=0),
+                        float(row['Open']),
+                        float(row['High']),
+                        float(row['Low']),
+                        float(row['Close']),
+                        int(row['Volume']) if 'Volume' in row else 0
+                    ))
+            conn.commit()
+    except Exception as e:
+        print(f"Save Candle Data Error ({ticker}/{timeframe}): {e}")
+
+def get_candle_data(ticker, timeframe, limit=100):
+    """
+    Retrieve cached candle data from DB
+    Returns pandas DataFrame with DatetimeIndex
+    """
+    import pandas as pd
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cursor:
+                sql = """
+                SELECT candle_time, open, high, low, close, volume
+                FROM candle_data
+                WHERE ticker=%s AND timeframe=%s
+                ORDER BY candle_time DESC
+                LIMIT %s
+                """
+                cursor.execute(sql, (ticker, timeframe, limit))
+                rows = cursor.fetchall()
+                
+                if rows:
+                    df = pd.DataFrame(rows)
+                    df['candle_time'] = pd.to_datetime(df['candle_time'])
+                    df = df.set_index('candle_time').sort_index()
+                    df.columns = ['Open', 'High', 'Low', 'Close', 'Volume']
+                    return df
+    except Exception as e:
+        print(f"Get Candle Data Error ({ticker}/{timeframe}): {e}")
+    return None

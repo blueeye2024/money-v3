@@ -527,5 +527,32 @@ def api_get_txn_stats():
                 
     return results
 
+@app.get("/api/requests")
+async def get_requests():
+    """Get all tracked user requests"""
+    try:
+        from db import get_user_requests
+        reqs = get_user_requests()
+        return reqs
+    except Exception as e:
+        print(f"Get Requests Error: {e}")
+        return []
+
+class RequestItem(BaseModel):
+    request_text: str
+    ai_interpretation: str
+    implementation_details: str
+
+@app.post("/api/requests")
+async def create_request(item: RequestItem):
+    """Log a new user request"""
+    try:
+        from db import add_user_request
+        add_user_request(item.request_text, item.ai_interpretation, item.implementation_details)
+        return {"status": "success"}
+    except Exception as e:
+        print(f"Add Request Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=8080, reload=True)

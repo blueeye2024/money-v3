@@ -9,3 +9,4 @@ pymysql
 apscheduler
 requests
 cryptography
+DBUtils==3.1.2
