@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## [Ver 2.5.3] - 2026-01-02
+
+### 수정 (Fixed)
+- **UI 표시 오류 수정**: `current_price` 등 필수 데이터 키 누락으로 인한 렌더링 실패 해결
+- **데이터 안정성 강화**: 백엔드 API 응답 시 항상 필수 필드(current_price, daily_change, entry_price) 포함 보장
+- **환경설정 업데이트**: Frontend-Backend 데이터 계약 규칙 추가
+
 ## [Ver 2.5.2] - 2026-01-02
 
 ### 유지보수 (Maintenance)

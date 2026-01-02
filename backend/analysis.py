@@ -1301,6 +1301,7 @@ def get_us_reg_close(df):
         return None
 
 def check_triple_filter(ticker, data_30m, data_5m):
+    print("FUNCTION ENTERED check_triple_filter")
     """
     Cheongan V2.5 Master Filter Logic
     Order: Step 1 (5m Timing), Step 2 (30m Trend), Step 3 (2% Strength)
@@ -1316,8 +1317,14 @@ def check_triple_filter(ticker, data_30m, data_5m):
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "step_details": {
             "step1": "대기 중", "step2": "대기 중", "step3": "대기 중"
-        }
+        },
+        "current_price": 0.0,
+        "daily_change": 0.0,
+        "entry_price": 0.0
     }
+    
+    # Debug print
+    print(f"DEBUG: Checking {ticker}")
     
     try:
         # 1. Load Persisted State
@@ -1667,11 +1674,13 @@ def check_triple_filter(ticker, data_30m, data_5m):
         result["entry_price"] = float(state.get("step2_done_price") or 0)
         result["current_price"] = float(current_price)
 
+        print(f"DEBUG: {ticker} current_price={result.get('current_price')}, daily_change={result.get('daily_change')}")
+
     except Exception as e:
         print(f"Triple Filter Error ({ticker}): {e}")
         import traceback
         traceback.print_exc()
-        
+    
     return result
 
 def determine_market_regime_v2(daily_data, data_30m, data_5m=None):
