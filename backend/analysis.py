@@ -1555,59 +1555,46 @@ def check_triple_filter(ticker, data_30m, data_5m):
         # --- LOGIC & PERSISTENCE ---
         
         # 1. Check for Reset (30m Trend Break) -> Immediate Exit & Reset
+        # FLICKERING FIX: Only reset if NOT fully entered.
+        # If Step 2 (Breakout) is done, we HOLD until Stop Loss or Sell Signal.
+        should_reset = False
+        
         if not filter1_met:
-            # If we were in Final Met state OR Step1 was previously met
-            if state.get("final_met") or state.get("step1_done_time"):
-                
-                # Check if we need to send a SELL signal (Only if we were properly 'IN')
-                # If we were in Final Met, this is a Critical Exit
-                if state.get("final_met"):
-                    result["step1_color"] = "red"
-                    result["is_sell_signal"] = True
-                    
-                    # Reset State Immediately to "Waiting"
-                    # User asked to "Change to Red... and Record... and Reset". 
-                    # Providing "Red" for this single frame allows the UI to pulse red once, then next fetch it will be grey.
-                    
-                    state = {
-                        "final_met": False, "signal_time": None,
-                        "step1_done_time": None, "step2_done_time": None,
-                        "step3_done_time": None, "step2_done_price": None,
-                        "reset_start_time": None
-                    }
-                    
-                    # Send Exit Signal immediately (rate-limited)
-                    try:
-                        from db import save_signal, get_connection
-                        with get_connection() as conn:
-                            with conn.cursor() as cursor:
-                                cursor.execute("SELECT id FROM signal_history WHERE ticker=%s AND created_at >= NOW() - INTERVAL 10 MINUTE LIMIT 1", (ticker,))
-                                if not cursor.fetchone(): 
-                                    save_signal({
-                                        'ticker': ticker, 'name': f"Exit Signal ({ticker})",
-                                        'signal_type': "SELL (MASTER)", 
-                                        'position': f"30분봉 데드크로스 발생: 전량 매도 및 초기화\n시간: {dual_time_str}",
-                                        'current_price': current_price, 'signal_time_raw': now_utc,
-                                        'is_sent': True, 'score': -100, 'interpretation': "추세 이탈 매도"
-                                    })
-                    except Exception as e:
-                        print(f"Master Signal Exit Save Error: {e}")
-                
-                else:
-                    # Just Step 1 broke without being Final Met
-                    # Silent Reset
-                    state = {
-                        "final_met": False, "signal_time": None,
-                        "step1_done_time": None, "step2_done_time": None,
-                        "step3_done_time": None, "step2_done_price": None
-                    }
-                    
-                result["step1"] = False
-            
-            else:
-                 # Already waiting, explicitly ensure NO color
-                 result["step1_color"] = None
-                 pass
+             # Basic rule: If trend breaks, reset.
+             should_reset = True
+             
+             # EXCEPTION: If we already broke out (Step 2), DO NOT RESET on simple MA cross.
+             # We wait for explicit Sell Signal or Stop Loss.
+             if state.get("step2_done_time"):
+                 should_reset = False
+        
+        if should_reset:
+             # Reset Logic
+             if state.get("final_met") or state.get("step1_done_time"):
+                 is_final_exit = state.get("final_met")
+                 
+                 # Reset State
+                 state = {
+                     "final_met": False, "signal_time": None,
+                     "step1_done_time": None, "step2_done_time": None,
+                     "step3_done_time": None, "step2_done_price": None
+                 }
+                 result["step1"] = False
+                 
+                 if is_final_exit:
+                     result["step1_color"] = "red"
+                     result["is_sell_signal"] = True
+                     try:
+                         from db import save_signal
+                         save_signal({
+                             'ticker': ticker, 'signal_type': 'SELL (MASTER)',
+                             'position': f"추세 이탈 매도 ({now_time_str})", 
+                             'score': -100,
+                             'signal_time_raw': now_utc,
+                             'current_price': current_price,
+                             'interpretation': "30분봉 데드크로스 혹은 손절"
+                         })
+                     except: pass
         else:
             # Filter 1 (30m Trend) Met
             result["step1"] = True
