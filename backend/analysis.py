@@ -1750,6 +1750,16 @@ def check_triple_filter(ticker, data_30m, data_5m):
         result["step3"] = bool(result["step3"])
         result["final"] = bool(result["final"])
         result["target"] = float(result["target"])
+        
+        # Add Data Time for UI
+        last_time_str = "N/A"
+        try:
+             if df30 is not None and not df30.empty:
+                 # Convert to str if it's datetime
+                 last_time_str = str(df30.index[-1])
+        except: pass
+        result["data_time"] = last_time_str
+
         result["is_sell_signal"] = bool(result.get("is_sell_signal", False))
         
         # Add entry price and current price for Frontend display

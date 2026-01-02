@@ -126,7 +126,7 @@ function Dashboard() {
                     </div>
                     {data?.timestamp?.full_str && (
                         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                            {/* Market Regime Badge */}
+                            {/* Market Regime Badge (UPRO Status) */}
                             {data.market_regime && (
                                 <div style={{
                                     padding: '0.4rem 0.8rem',
@@ -139,8 +139,7 @@ function Dashboard() {
                                         data.market_regime.regime === 'Bear' ? '#f87171' : '#cbd5e1',
                                     border: '1px solid rgba(255,255,255,0.1)'
                                 }}>
-                                    {data.market_regime.regime === 'Bull' ? '🚀 상승장 (Bull)' :
-                                        data.market_regime.regime === 'Bear' ? '📉 하락장 (Bear)' : '🦀 보합장 (Sideways)'}
+                                    {data.market_regime.reason || '시장 분석 중'}
                                 </div>
                             )}
 
@@ -148,15 +147,13 @@ function Dashboard() {
                                 background: 'rgba(255, 255, 255, 0.03)',
                                 padding: '0.5rem 1rem',
                                 borderRadius: '12px',
-                                border: '1px solid rgba(255, 255, 255, 0.08)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '8px',
-                                fontSize: '0.8rem',
-                                color: 'var(--text-secondary)',
+                                display: 'flex', alignItems: 'center', gap: '8px',
+                                border: '1px solid rgba(255,255,255,0.05)'
                             }}>
-                                <span style={{ display: 'inline-block', width: '6px', height: '6px', background: '#10b981', borderRadius: '50%', boxShadow: '0 0 8px #10b981' }}></span>
-                                <strong>분석:</strong> {data.timestamp.full_str.split('KST')[0]}
+                                <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>Last Analysis:</span>
+                                <span style={{ fontSize: '0.9rem', fontWeight: 500, color: '#e2e8f0' }}>
+                                    {data.market_regime?.soxl?.data_time ? `${data.market_regime.soxl.data_time} (Data)` : data.timestamp.full_str}
+                                </span>
                             </div>
                         </div>
                     )}
@@ -236,7 +233,7 @@ function Layout() {
                 textAlign: 'center', padding: '2rem', marginTop: '4rem',
                 borderTop: '1px solid var(--glass-border)', color: 'var(--text-secondary)'
             }}>
-                <p>&copy; 2024 Cheongan FinTech. All rights reserved. Ver 2.6.8 (Build: {typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : 'Dev Mode'})</p>
+                <p>&copy; 2024 Cheongan FinTech. All rights reserved. Ver 2.7.0 (Build: {typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : 'Dev Mode'})</p>
             </footer>
         </div>
     );

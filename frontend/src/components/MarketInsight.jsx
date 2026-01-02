@@ -195,10 +195,9 @@ const TripleFilterStatus = ({ title, status, isBear = false }) => {
                     </div>
                 )}
 
-                {/* Detailed Logs for Each Step */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '4px 0' }}>
                     {conditions.map(c => (
-                        status?.step_details?.[c.key] && status?.step_details[c.key] !== '대기 중' && (
+                        status?.step_details?.[c.key] && (
                             <div key={c.key} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: '#888' }}>
                                 <span>• {c.label}</span>
                                 <span style={{ color: '#aaa', fontWeight: 'bold' }}>{status.step_details[c.key]}</span>
@@ -234,6 +233,15 @@ const TripleFilterStatus = ({ title, status, isBear = false }) => {
                         </div>
                     )}
                 </div>
+
+                {status?.data_time && (
+                    <div style={{
+                        fontSize: '0.6rem', color: '#555', textAlign: 'right',
+                        marginTop: '8px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '4px'
+                    }}>
+                        Data: {status.data_time} (NY)
+                    </div>
+                )}
             </div>
         </div>
     );
