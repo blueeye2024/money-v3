@@ -93,6 +93,7 @@ const TripleFilterStatus = ({ title, status, isBear = false }) => {
                 {conditions.map((cond, idx) => {
                     const isMet = status ? status[cond.key] : false;
                     const backendColor = status ? status[`${cond.key}_color`] : null;
+                    const isFinalEntry = status?.final; // 진입조건 완성 확인
 
                     // Default OFF State
                     let dotBg = '#0f0f0f'; // Very dark
@@ -101,6 +102,7 @@ const TripleFilterStatus = ({ title, status, isBear = false }) => {
                     let shadow = 'none';
                     let scale = 1;
 
+                    // Priority: Warning Colors > Final Entry (Green) > Normal Active
                     if (backendColor === 'red') {
                         dotBg = '#ef4444';
                         dotBorder = 'rgba(255,255,255,0.5)';
@@ -119,11 +121,19 @@ const TripleFilterStatus = ({ title, status, isBear = false }) => {
                         dotColor = 'white';
                         shadow = '0 0 15px #eab308';
                         scale = 1.1;
+                    } else if (isFinalEntry && isMet) {
+                        // 진입조건 완성: 녹색 계열
+                        dotBg = '#10b981'; // Emerald green
+                        dotBorder = 'rgba(16, 185, 129, 0.8)';
+                        dotColor = 'white';
+                        shadow = '0 0 20px #10b98188';
+                        scale = 1.15;
                     } else if (isMet) {
+                        // 일반 활성 상태
                         dotBg = activeColor;
                         dotBorder = 'white';
                         dotColor = 'white';
-                        shadow = `0 0 20px ${activeColor}88`; // Slightly softer glow
+                        shadow = `0 0 20px ${activeColor}88`;
                         scale = 1.1;
                     }
 
