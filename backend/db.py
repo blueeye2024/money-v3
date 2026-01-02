@@ -99,6 +99,24 @@ def init_db():
             """
             cursor.execute(sql_journal)
 
+            # 4. Market Candles Table (Historical Data)
+            sql_candles = """
+            CREATE TABLE IF NOT EXISTS market_candles (
+                ticker VARCHAR(10) NOT NULL,
+                timeframe VARCHAR(10) NOT NULL, -- 30m, 5m, 1d
+                candle_time DATETIME NOT NULL,
+                open_price DECIMAL(12, 4),
+                high_price DECIMAL(12, 4),
+                low_price DECIMAL(12, 4),
+                close_price DECIMAL(12, 4),
+                volume BIGINT,
+                source VARCHAR(20), -- yfinance, kis
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                PRIMARY KEY (ticker, timeframe, candle_time)
+            )
+            """
+            cursor.execute(sql_candles)
+
             # 4. SMS Logs Table
             sql_sms_logs = """
             CREATE TABLE IF NOT EXISTS sms_logs (
@@ -918,3 +936,92 @@ def get_candle_data(ticker, timeframe, limit=100):
     except Exception as e:
         print(f"Get Candle Data Error ({ticker}/{timeframe}): {e}")
     return None
+
+# --- New DB-Centric Data Management (market_candles) ---
+
+def get_last_candle_time(ticker, timeframe):
+    """Get the latest candle_time stored in DB for incremental update"""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cursor:
+                sql = "SELECT MAX(candle_time) as last_time FROM market_candles WHERE ticker=%s AND timeframe=%s"
+                cursor.execute(sql, (ticker, timeframe))
+                row = cursor.fetchone()
+                return row['last_time'] if row and row['last_time'] else None
+    except Exception as e:
+        print(f"Error getting last candle time: {e}")
+        return None
+
+def save_market_candles(ticker, timeframe, df, source='yfinance'):
+    """Save DataFrame to market_candles table (Upsert)"""
+    if df is None or df.empty: return False
+    
+    try:
+        with get_connection() as conn:
+            data = []
+            for idx, row in df.iterrows():
+                if 'Open' not in row: continue
+                # Handle potential timezone aware index
+                ts = idx.to_pydatetime() if hasattr(idx, 'to_pydatetime') else idx
+                if hasattr(ts, 'tzinfo') and ts.tzinfo:
+                   # Convert to naive or UTC? DB is usually naive datetime.
+                   # Assuming KST or UTC consistent. Let's strip tz or ensure it's correct.
+                   ts = ts.replace(tzinfo=None)
+
+                vol = row.get('Volume', 0)
+                if pd.isna(vol): vol = 0
+                
+                data.append((
+                    ticker, timeframe, ts,
+                    float(row['Open']), float(row['High']), float(row['Low']), float(row['Close']),
+                    int(vol), source
+                ))
+                
+            if not data: return False
+            
+            with conn.cursor() as cursor:
+                sql = """
+                    INSERT INTO market_candles (ticker, timeframe, candle_time, open_price, high_price, low_price, close_price, volume, source)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON DUPLICATE KEY UPDATE
+                        open_price=VALUES(open_price), high_price=VALUES(high_price),
+                        low_price=VALUES(low_price), close_price=VALUES(close_price),
+                        volume=VALUES(volume), source=VALUES(source)
+                """
+                cursor.executemany(sql, data)
+            conn.commit()
+            return True
+    except Exception as e:
+        print(f"Error saving market candles ({ticker}): {e}")
+        return False
+
+def load_market_candles(ticker, timeframe, limit=300):
+    """Load candles from DB as DataFrame"""
+    import pandas as pd
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cursor:
+                # Fetch limited DESC then sort ASC for latest N candles
+                sql = f"""
+                    SELECT * FROM (
+                        SELECT candle_time, open_price as Open, high_price as High, 
+                               low_price as Low, close_price as Close, volume as Volume
+                        FROM market_candles 
+                        WHERE ticker=%s AND timeframe=%s 
+                        ORDER BY candle_time DESC LIMIT {limit}
+                    ) sub ORDER BY candle_time ASC
+                """
+                
+                cursor.execute(sql, (ticker, timeframe))
+                rows = cursor.fetchall()
+                
+                if not rows: return None
+                
+                df = pd.DataFrame(rows)
+                df['candle_time'] = pd.to_datetime(df['candle_time'])
+                df.set_index('candle_time', inplace=True)
+                return df
+            
+    except Exception as e:
+        print(f"Error loading market candles: {e}")
+        return None

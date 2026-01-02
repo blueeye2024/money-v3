@@ -95,84 +95,83 @@ def fetch_data(tickers=None):
     if tickers is None and not needs_realtime and _DATA_CACHE["30m"] is not None:
         return _DATA_CACHE["30m"], _DATA_CACHE["5m"], _DATA_CACHE.get("1d"), _DATA_CACHE["market"], _DATA_CACHE.get("regime")
 
-    # 2. Real-time Data Fetch (30m, 5m) with DB Fallback
+    # 2. Incremental Data Fetch & DB Update
     if needs_realtime or tickers is not None:
-        yf_success = False
         try:
-            tickers_str = " ".join(target_list)
-            print(f"Fetching Real-time (30m, 5m) for {len(target_list)} Stocks...")
-            new_30m = yf.download(tickers_str, period="1mo", interval="30m", prepost=True, group_by='ticker', threads=True, progress=False, timeout=15)
-            new_5m = yf.download(tickers_str, period="1mo", interval="5m", prepost=True, group_by='ticker', threads=True, progress=False, timeout=15)
+            from db import save_market_candles, load_market_candles
             
-            if not new_30m.empty and not new_5m.empty:
-                _DATA_CACHE["30m"] = new_30m
-                _DATA_CACHE["5m"] = new_5m
-                _DATA_CACHE["last_fetch_realtime"] = now
-                yf_success = True
-                
-                # Save to DB cache for future fallback
+            # Decide fetch period (Incremental or Init)
+            fetch_period = "5d" # Default small window for incremental update
+            
+            # Check if we need initialization (check SOXL)
+            chk_df = load_market_candles("SOXL", "30m", limit=1)
+            if chk_df is None or chk_df.empty:
+                print("🚀 Initializing DB: Fetching 1 month of history...")
+                fetch_period = "1mo"
+            
+            tickers_str = " ".join(target_list)
+            print(f"Fetching Real-time (30m, 5m) Period={fetch_period}...")
+            
+            # Fetch from yfinance
+            new_30m = yf.download(tickers_str, period=fetch_period, interval="30m", prepost=True, group_by='ticker', threads=True, progress=False, timeout=20)
+            new_5m = yf.download(tickers_str, period=fetch_period, interval="5m", prepost=True, group_by='ticker', threads=True, progress=False, timeout=20)
+            
+            # Save to DB (Upsert)
+            for ticker in target_list:
+                # 30m Save
                 try:
-                    from db import save_candle_data
-                    for ticker in target_list:
-                        try:
-                            if isinstance(new_30m, pd.DataFrame) and ticker in new_30m.columns:
-                                save_candle_data(ticker, '30m', new_30m[ticker])
-                            if isinstance(new_5m, pd.DataFrame) and ticker in new_5m.columns:
-                                save_candle_data(ticker, '5m', new_5m[ticker])
-                        except:
-                            pass
-                except Exception as e:
-                    print(f"DB Cache Save Error: {e}")
-                    
+                    df = None
+                    if isinstance(new_30m.columns, pd.MultiIndex) and ticker in new_30m.columns: df = new_30m[ticker]
+                    elif not isinstance(new_30m.columns, pd.MultiIndex) and len(target_list) == 1: df = new_30m
+                    if df is not None and not df.empty: save_market_candles(ticker, '30m', df, 'yfinance')
+                except Exception as e: print(f"Save 30m Error {ticker}: {e}")
+
+                # 5m Save
+                try:
+                    df = None
+                    if isinstance(new_5m.columns, pd.MultiIndex) and ticker in new_5m.columns: df = new_5m[ticker]
+                    elif not isinstance(new_5m.columns, pd.MultiIndex) and len(target_list) == 1: df = new_5m
+                    if df is not None and not df.empty: save_market_candles(ticker, '5m', df, 'yfinance')
+                except Exception as e: print(f"Save 5m Error {ticker}: {e}")
+            
+            _DATA_CACHE["last_fetch_realtime"] = now
+            
         except Exception as e:
-            print(f"Real-time Fetch Error: {e}")
+            print(f"Incremental Fetch Error: {e}")
+            
+    # Always Load from DB (Single Source of Truth)
+    # This acts as both Cache Hit and Fallback
+    try:
+        from db import load_market_candles
+        cache_30m = {}
+        cache_5m = {}
         
-        # Fallback to DB cache if yfinance failed
-        if not yf_success:
-            print("📦 Using DB cache fallback...")
-            try:
-                from db import get_candle_data
-                import pandas as pd
-                
-                cache_30m = {}
-                cache_5m = {}
-                
-                for ticker in target_list:
-                    df30 = get_candle_data(ticker, '30m', limit=100)
-                    df5 = get_candle_data(ticker, '5m', limit=100)
-                    
-                    if df30 is not None and not df30.empty:
-                        cache_30m[ticker] = df30
-                    if df5 is not None and not df5.empty:
-                        cache_5m[ticker] = df5
-                
-                # Update cache with DB data
-                if cache_30m:
-                    _DATA_CACHE["30m"] = cache_30m
-                if cache_5m:
-                    _DATA_CACHE["5m"] = cache_5m
-                    
-                print(f"✅ Loaded from DB: {len(cache_30m)} tickers (30m), {len(cache_5m)} tickers (5m)")
-                
-                # Update with KIS real-time prices
-                try:
-                    from kis_api import kis_client
-                    EXCHANGE_MAP = {"SOXL": "NYS", "SOXS": "NYS", "UPRO": "NYS", "IONQ": "NYS"}
-                    
-                    for ticker in ["SOXL", "SOXS", "UPRO"]:  # Priority tickers
-                        kis_price = kis_client.get_price(ticker, exchange=EXCHANGE_MAP.get(ticker))
-                        if kis_price and kis_price['price'] > 0:
-                            # Update last candle price with KIS real-time
-                            if ticker in cache_30m:
-                                cache_30m[ticker].iloc[-1, cache_30m[ticker].columns.get_loc('Close')] = kis_price['price']
-                            if ticker in cache_5m:
-                                cache_5m[ticker].iloc[-1, cache_5m[ticker].columns.get_loc('Close')] = kis_price['price']
-                            print(f"  💹 {ticker}: ${kis_price['price']:.2f} (KIS)")
-                except Exception as e:
-                    print(f"KIS Price Update Error: {e}")
-                    
-            except Exception as e:
-                print(f"DB Fallback Error: {e}")
+        for ticker in target_list:
+            df30 = load_market_candles(ticker, "30m", limit=300)
+            df5 = load_market_candles(ticker, "5m", limit=300)
+            if df30 is not None: cache_30m[ticker] = df30
+            if df5 is not None: cache_5m[ticker] = df5
+            
+        if cache_30m: _DATA_CACHE["30m"] = cache_30m
+        if cache_5m: _DATA_CACHE["5m"] = cache_5m
+        
+        print(f"✅ Loaded {len(cache_30m)} tickers from DB Cache")
+        
+        # KIS Live Patching
+        try:
+            from kis_api import kis_client
+            EXCHANGE_MAP = {"SOXL": "NYS", "SOXS": "NYS", "UPRO": "NYS", "IONQ": "NYS"}
+            for ticker in ["SOXL", "SOXS", "UPRO"]:
+                if ticker in cache_30m or ticker in cache_5m:
+                    kis = kis_client.get_price(ticker, exchange=EXCHANGE_MAP.get(ticker))
+                    if kis and kis['price'] > 0:
+                        if ticker in cache_30m: cache_30m[ticker].iloc[-1, cache_30m[ticker].columns.get_loc('Close')] = kis['price']
+                        if ticker in cache_5m: cache_5m[ticker].iloc[-1, cache_5m[ticker].columns.get_loc('Close')] = kis['price']
+                        print(f"  💹 {ticker} KIS UPDATE: {kis['price']}")
+        except Exception as e: print(f"KIS Patch Error: {e}")
+        
+    except Exception as e:
+        print(f"DB Load Error: {e}")
 
     # 3. Long-term Data Fetch (1d, Market, Regime)
     if needs_longterm or _DATA_CACHE.get("1d") is None:
