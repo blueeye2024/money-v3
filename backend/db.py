@@ -1026,6 +1026,19 @@ def load_market_candles(ticker, timeframe, limit=300):
                 df = pd.DataFrame(rows)
                 df['candle_time'] = pd.to_datetime(df['candle_time'])
                 df.set_index('candle_time', inplace=True)
+                
+                # IMPORTANT: Data Integrity Fix
+                # Fill missing values (None from DB) with interpolation
+                # This prevents analysis logic from failing due to empty cells
+                cols = ['Open', 'High', 'Low', 'Close', 'Volume']
+                for c in cols:
+                    if c in df.columns:
+                        df[c] = pd.to_numeric(df[c], errors='coerce')
+                
+                df = df.interpolate(method='time', limit_direction='both')
+                if df.isnull().values.any():
+                    df = df.ffill().bfill() # Fallback for edge cases
+                
                 return df
             
     except Exception as e:

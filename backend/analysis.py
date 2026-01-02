@@ -1361,9 +1361,12 @@ def check_triple_filter(ticker, data_30m, data_5m):
         df30 = None
         if isinstance(data_30m, dict): df30 = data_30m.get(ticker)
         elif hasattr(data_30m, 'columns') and ticker in data_30m.columns: df30 = data_30m[ticker]
+        elif hasattr(data_30m, 'columns'): df30 = data_30m # Support Single DF input
+        
         df5 = None
         if isinstance(data_5m, dict): df5 = data_5m.get(ticker)
         elif hasattr(data_5m, 'columns') and ticker in data_5m.columns: df5 = data_5m[ticker]
+        elif hasattr(data_5m, 'columns'): df5 = data_5m # Support Single DF input
 
         # Check for missing OR stale data (휴장일 대응)
         data_is_stale = False
@@ -1374,12 +1377,16 @@ def check_triple_filter(ticker, data_30m, data_5m):
                     latest_candle_time = latest_candle_time.replace(tzinfo=timezone.utc)
                 time_since_last_candle = datetime.now(timezone.utc) - latest_candle_time
                 # If last candle is older than 12 hours, consider it stale
-                if time_since_last_candle.total_seconds() > 43200:  # 12 hours
+                if time_since_last_candle.total_seconds() > 172800:  # 48 hours (Include Weekend)
                     data_is_stale = True
             except:
                 pass
         
         if df30 is None or df30.empty or df5 is None or df5.empty or data_is_stale:
+            # Even if stale, update price from DF if available (Better than fallback)
+            if df30 is not None and not df30.empty:
+                 result["current_price"] = float(df30['Close'].iloc[-1])
+                 
             # Preserve state even if data fetch fails OR is stale (Holiday or Rate Limit)
             if state.get("final_met"):
                 result["final"] = True
@@ -1405,7 +1412,10 @@ def check_triple_filter(ticker, data_30m, data_5m):
             if kis_price:
                 df30.iloc[-1, df30.columns.get_loc('Close')] = kis_price
                 df5.iloc[-1, df5.columns.get_loc('Close')] = kis_price
-        except: return result
+                df5.iloc[-1, df5.columns.get_loc('Close')] = kis_price
+        except Exception as e:
+            print(f"TRIPLE FILTER ERROR ({ticker}): {e}")
+            return result
 
         current_price = float(df30['Close'].iloc[-1])
         kst = pytz.timezone('Asia/Seoul')
@@ -1446,6 +1456,9 @@ def check_triple_filter(ticker, data_30m, data_5m):
         # Filter 2: Daily Change (전일종가 대비 ±2%)
         # Get previous day close (1d data)
         try:
+            # Step 2: 30m Trend & Momentum
+            # Check Daily Context first (Optional)
+            data_1d = None
             if data_1d is None:
                 from analysis import _DATA_CACHE
                 data_1d = _DATA_CACHE.get("1d")
@@ -1456,12 +1469,32 @@ def check_triple_filter(ticker, data_30m, data_5m):
                     df_1d = data_1d[ticker]
                 elif hasattr(data_1d, 'columns') and ticker in data_1d.columns:
                     df_1d = data_1d[ticker]
+                elif hasattr(data_1d, 'columns'):
+                    df_1d = data_1d # Single DF support
                 else:
                     df_1d = None
                     
-                if df_1d is not None and len(df_1d) >= 2:
-                    # Get previous day's close (second to last)
-                    prev_close = float(df_1d['Close'].iloc[-2])
+                if df_1d is not None and not df_1d.empty:
+                    # Determine Prev Close (Handle Today's candle if present)
+                    last_date = df_1d.index[-1]
+                    if last_date.date() == datetime.now().date():
+                         if len(df_1d) >= 2: prev_close = float(df_1d['Close'].iloc[-2])
+                    else:
+                         prev_close = float(df_1d['Close'].iloc[-1])
+            
+            # Apply 2% Breakout Rule (User Priority)
+            is_breakout = False
+            target_v = 0
+            
+            if prev_close and prev_close > 0:
+                target_v = prev_close * 1.02
+                if current_price >= target_v:
+                    is_breakout = True
+                    state["step2_color"] = "red" # Strong Bullish
+            
+            if is_breakout and not state.get("step2_done_time"):
+                 state["step2_done_time"] = now_utc
+                 state["step2_done_price"] = current_price
             
             # If can't get prev close, use yesterday's last 30m candle
             if prev_close is None or pd.isna(prev_close):
