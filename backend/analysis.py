@@ -1545,20 +1545,17 @@ def check_triple_filter(ticker, data_30m, data_5m):
             result["target"] = 0
             filter2_met = False
 
-        # Filter 3: 5m Timing (Golden Cross or MA Alignment)
-        # Simplified: SMA 5 > 20 on 5m chart
-        # We use this as Step 1 Trigger
+        # Filter 3: 5m Timing (Golden Cross SMA10 > SMA30)
+        # Per Guidelines: 5분봉 10선이 30선을 골든크로스
         filter3_met = False
-        if df5 is not None and not df5.empty and len(df5) > 20:
-             sma5_5 = float(df5['Close'].rolling(window=5).mean().iloc[-1])
-             sma20_5 = float(df5['Close'].rolling(window=20).mean().iloc[-1])
-             if sma5_5 > sma20_5:
+        if df5 is not None and not df5.empty and len(df5) > 30:
+             sma10_5 = float(df5['Close'].rolling(window=10).mean().iloc[-1])
+             sma30_5 = float(df5['Close'].rolling(window=30).mean().iloc[-1])
+             if sma10_5 > sma30_5:
                  filter3_met = True
         
-        if filter3_met:
-             # Only record timestamp if not already recorded (Preserve Signal Time)
-             if not state.get("step1_done_time"):
-                 state["step1_done_time"] = now_time_str
+        # Note: filter3_met is used for Step 3 (Final Entry Timing)
+        # Step 1 is filter1_met (30m trend), handled below
 
         # --- LOGIC & PERSISTENCE ---
         
@@ -1618,18 +1615,20 @@ def check_triple_filter(ticker, data_30m, data_5m):
             else:
                 result["step2"] = False 
 
-            # Filter 3 (5m) Check - Live
-            result["step3"] = filter3_met
-            if filter3_met and result["step2"]: 
-                 if not state.get("step3_done_time"):
-                     state["step3_done_time"] = now_time_str
+            # Filter 3 (5m) Check - Sticky if previously met (like Step 2)
+            if filter3_met or state.get("step3_done_time"):
+                result["step3"] = True
+                if filter3_met and not state.get("step3_done_time"):
+                    state["step3_done_time"] = now_time_str
+            else:
+                result["step3"] = False
 
             # FINAL ENTRY SIGNAL
             if result["step1"] and result["step2"] and result["step3"]:
                 result["final"] = True  # CRITICAL: Set result immediately for UI
                 if not state.get("final_met"):
                     state["final_met"] = True
-                    state["signal_time"] = dual_time_str 
+                    state["signal_time"] = now_time_str 
                     
                     try:
                         from db import save_signal, get_connection
@@ -1641,7 +1640,7 @@ def check_triple_filter(ticker, data_30m, data_5m):
                                     save_signal({
                                         'ticker': ticker, 'name': f"Master Signal ({ticker})",
                                         'signal_type': "BUY (MASTER)", 
-                                        'position': f"진입조건완성: 1.30분추세 2.박스돌파 3.5분타이밍\n시간: {dual_time_str}\n가격: ${current_price}",
+                                        'position': f"진입조건완성: 1.30분추세 2.박스돌파 3.5분타이밍\n시간: {now_time_str}\n가격: ${current_price}",
                                         'current_price': current_price, 'signal_time_raw': now_utc,
                                         'is_sent': True, 'score': 100, 'interpretation': "마스터 트리플 필터 진입"
                                     })
@@ -1653,7 +1652,7 @@ def check_triple_filter(ticker, data_30m, data_5m):
         # --- POST-ENTRY WARNINGS (Only if final_met is True) ---
         if state.get("final_met"):
             result["final"] = True
-            result["signal_time"] = state.get("signal_time", dual_time_str)
+            result["signal_time"] = state.get("signal_time", now_time_str)
             
             # Warning 1: 5m Dead Cross (filter3_met is False) -> Yellow
             if not filter3_met:
@@ -1671,7 +1670,7 @@ def check_triple_filter(ticker, data_30m, data_5m):
                                 save_signal({
                                     'ticker': ticker, 'name': f"Warning ({ticker})",
                                     'signal_type': "WARNING (5M)", 
-                                    'position': f"5분봉 데드크로스: 긴급 익절(50%) 권장\n현재가: ${current_price}\n시간: {dual_time_str}",
+                                    'position': f"5분봉 데드크로스: 긴급 익절(50%) 권장\n현재가: ${current_price}\n시간: {now_time_str}",
                                     'current_price': current_price, 'signal_time_raw': now_utc,
                                     'is_sent': True, 'score': -50, 'interpretation': "단기 조정 경고"
                                 })
@@ -1695,7 +1694,7 @@ def check_triple_filter(ticker, data_30m, data_5m):
                                 save_signal({
                                     'ticker': ticker, 'name': f"Warning ({ticker})",
                                     'signal_type': "WARNING (BOX)", 
-                                    'position': f"진입가 하회: 강도 약화 주의\n진입: ${entry_price:.2f}, 현재: ${current_price:.2f} ({price_drop_pct:+.1f}%)\n시간: {dual_time_str}",
+                                    'position': f"진입가 하회: 강도 약화 주의\n진입: ${entry_price:.2f}, 현재: ${current_price:.2f} ({price_drop_pct:+.1f}%)\n시간: {now_time_str}",
                                     'current_price': current_price, 'signal_time_raw': now_utc,
                                     'is_sent': True, 'score': -30, 'interpretation': "모멘텀 약화 경고"
                                 })
