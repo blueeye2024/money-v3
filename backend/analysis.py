@@ -1463,6 +1463,8 @@ def check_triple_filter(ticker, data_30m, data_5m):
             sma10_30 = 0
             sma30_30 = 0
             
+        filter1_met = bool(sma10_30 > sma30_30) # Define filter1_met
+            
         # Filter 2: Daily Change (Breakout)
         try:
             data_1d = None
