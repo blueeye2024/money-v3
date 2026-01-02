@@ -185,13 +185,30 @@ const TripleFilterStatus = ({ title, status, isBear = false }) => {
                     ))}
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderTop: '1px dashed rgba(255,255,255,0.05)', paddingTop: '8px' }}>
-                    <div style={{ fontSize: '0.7rem', color: '#555' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderTop: '1px dashed rgba(255,255,255,0.05)', paddingTop: '8px', gap: '12px' }}>
+                    <div style={{ fontSize: '0.7rem', color: '#555', flex: 1 }}>
                         {formatDualTime(status?.signal_time || status?.timestamp)}
                     </div>
-                    {status?.target > 0 && (
-                        <div style={{ fontSize: '0.7rem', color: '#555', alignSelf: 'center' }}>
-                            2% 목표: <span style={{ color: status?.step3 ? activeColor : '#555', fontWeight: 'bold' }}>${status.target}</span>
+
+                    {/* Entry Price and Current Price Display */}
+                    {status?.final && status?.entry_price && (
+                        <div style={{ fontSize: '0.7rem', textAlign: 'right', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <div style={{ color: '#777' }}>
+                                진입: <span style={{ color: '#aaa', fontWeight: 'bold' }}>${status.entry_price?.toFixed(2) || '-'}</span>
+                            </div>
+                            <div style={{ color: '#777' }}>
+                                현재: <span style={{ color: activeColor, fontWeight: 'bold' }}>${status.current_price?.toFixed(2) || '-'}</span>
+                                {status.entry_price && status.current_price && (
+                                    <span style={{
+                                        marginLeft: '6px',
+                                        color: status.current_price >= status.entry_price ? '#10b981' : '#ef4444',
+                                        fontWeight: 'bold',
+                                        fontSize: '0.65rem'
+                                    }}>
+                                        ({(((status.current_price - status.entry_price) / status.entry_price) * 100).toFixed(1)}%)
+                                    </span>
+                                )}
+                            </div>
                         </div>
                     )}
                 </div>

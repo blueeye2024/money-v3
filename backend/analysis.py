@@ -1661,6 +1661,10 @@ def check_triple_filter(ticker, data_30m, data_5m):
         result["final"] = bool(result["final"])
         result["target"] = float(result["target"])
         result["is_sell_signal"] = bool(result.get("is_sell_signal", False))
+        
+        # Add entry price and current price for Frontend display
+        result["entry_price"] = float(state.get("step2_done_price") or 0)
+        result["current_price"] = float(current_price)
 
     except Exception as e:
         print(f"Triple Filter Error ({ticker}): {e}")
