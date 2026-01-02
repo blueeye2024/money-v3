@@ -1418,16 +1418,61 @@ def check_triple_filter(ticker, data_30m, data_5m):
         sma30_30 = float(df30['Close'].rolling(window=30).mean().iloc[-1])
         filter1_met = bool(sma10_30 > sma30_30)
 
-        # Filter 2: Strength (Box Breakout > 2%)
-        recent_20 = df30['High'].tail(21).iloc[:-1] # Last 20 completed bars
-        if len(recent_20) < 20: recent_20 = df30['High'].tail(20) # Fallback
-        
-        box_high_val = float(recent_20.max())
-        target_v = round(box_high_val * 1.02, 2)
-        result["target"] = target_v
-        
-        # Check breakout: Current Price >= Target
-        filter2_met = bool(current_price >= target_v)
+        # Filter 2: Daily Change (전일종가 대비 ±2%)
+        # Get previous day close (1d data)
+        try:
+            if data_1d is None:
+                from analysis import _DATA_CACHE
+                data_1d = _DATA_CACHE.get("1d")
+            
+            prev_close = None
+            if data_1d is not None:
+                if isinstance(data_1d, dict) and ticker in data_1d:
+                    df_1d = data_1d[ticker]
+                elif hasattr(data_1d, 'columns') and ticker in data_1d.columns:
+                    df_1d = data_1d[ticker]
+                else:
+                    df_1d = None
+                    
+                if df_1d is not None and len(df_1d) >= 2:
+                    # Get previous day's close (second to last)
+                    prev_close = float(df_1d['Close'].iloc[-2])
+            
+            # If can't get prev close, use yesterday's last 30m candle
+            if prev_close is None or pd.isna(prev_close):
+                # Fallback: Use close from 24 hours ago in 30m data
+                if len(df30) >= 48:  # 24h = 48 x 30min
+                    prev_close = float(df30['Close'].iloc[-48])
+                else:
+                    # Last fallback: use 20-period box high for compatibility
+                    recent_20 = df30['High'].tail(21).iloc[:-1]
+                    if len(recent_20) < 20: recent_20 = df30['High'].tail(20)
+                    prev_close = float(recent_20.max()) / 1.02  # Reverse calculation
+            
+            # Calculate change percentage
+            change_pct = ((current_price - prev_close) / prev_close) * 100
+            
+            # SOXL: Need +2% or more (Bull)
+            # SOXS: Need -2% or less (Bear)
+            is_bear_ticker = ticker == "SOXS"
+            
+            if is_bear_ticker:
+                filter2_met = bool(change_pct <= -2.0)  # 2% 이상 하락
+                target_v = round(prev_close * 0.98, 2)  # 목표: 전일종가의 -2%
+            else:
+                filter2_met = bool(change_pct >= 2.0)   # 2% 이상 상승
+                target_v = round(prev_close * 1.02, 2)  # 목표: 전일종가의 +2%
+            
+            result["target"] = target_v
+            
+        except Exception as e:
+            print(f"Filter 2 Calculation Error ({ticker}): {e}")
+            # Fallback to old box logic if error
+            recent_20 = df30['High'].tail(20)
+            box_high_val = float(recent_20.max())
+            target_v = round(box_high_val * 1.02, 2)
+            result["target"] = target_v
+            filter2_met = bool(current_price >= target_v)
 
         # Filter 3: Timing (5m SMA 10 > 30)
         sma10_5 = float(df5['Close'].rolling(window=10).mean().iloc[-1])
