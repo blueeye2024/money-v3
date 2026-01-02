@@ -1435,9 +1435,15 @@ def check_triple_filter(ticker, data_30m, data_5m):
             if chart_time.tzinfo is None:
                 chart_time = chart_time.replace(tzinfo=timezone.utc)
             
-            now_utc = chart_time
+            # Convert to KST for display consistency
+            chart_time_kst = chart_time.astimezone(kst)
+            signal_timestamp = chart_time_kst.strftime("%Y-%m-%d %H:%M:%S")
+            
+            # Use this timestamp for all signal records
+            now_utc = chart_time # Keep now_utc as datetime object for raw signal time
         except:
-             now_utc = datetime.now(timezone.utc)
+             now_utc = datetime.now(timezone.utc) # Fallback to current UTC datetime
+             signal_timestamp = now_utc.astimezone(kst).strftime("%Y-%m-%d %H:%M:%S")
 
         # User requested: yyyy.MM.dd HH:mm (Corrected format with dots)
         us_time_formatted = now_utc.astimezone(us_et).strftime("%Y.%m.%d %H:%M")
@@ -1445,7 +1451,7 @@ def check_triple_filter(ticker, data_30m, data_5m):
         dual_time_str = f"{us_time_formatted} (US) / {kr_time_formatted} (KR)"
         
         # For internal step tracking, use KST full string
-        now_time_str = kr_time_formatted
+        now_time_str = signal_timestamp # Use the precise KST formatted chart time for internal tracking
 
     # --- CALCULATIONS (Updated V2.4 Guidelines) ---
         # Filter 1: 30m Trend (SMA 10 > 30)
@@ -1493,7 +1499,7 @@ def check_triple_filter(ticker, data_30m, data_5m):
                     state["step2_color"] = "red" # Strong Bullish
             
             if is_breakout and not state.get("step2_done_time"):
-                 state["step2_done_time"] = now_utc
+                 state["step2_done_time"] = now_time_str
                  state["step2_done_price"] = current_price
             
             # If can't get prev close, use yesterday's last 30m candle

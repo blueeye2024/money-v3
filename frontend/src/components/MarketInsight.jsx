@@ -2,9 +2,9 @@ import React from 'react';
 
 const TripleFilterStatus = ({ title, status, isBear = false }) => {
     const conditions = [
-        { key: 'step1', label: '30분봉 기준', desc: status?.step_details?.step1 || 'SMA 10 > 30' },
-        { key: 'step2', label: '박스권 돌파', desc: status?.step_details?.step2 || '돌파 조건' },
-        { key: 'step3', label: '5분봉 기준', desc: status?.step_details?.step3 || 'SMA 10 > 30' }
+        { key: 'step1', label: '5분봉 진입 신호', desc: status?.step_details?.step1 || '타이밍 포착' },
+        { key: 'step2', label: '박스권 돌파 (+2%)', desc: status?.step_details?.step2 || '상승 돌파' },
+        { key: 'step3', label: '추세 확정 (30분)', desc: status?.step_details?.step3 || '추세 지속' }
     ];
 
     // Blue tones for entry complete (not warning)
