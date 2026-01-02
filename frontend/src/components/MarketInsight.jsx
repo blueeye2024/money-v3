@@ -3,12 +3,13 @@ import React from 'react';
 const TripleFilterStatus = ({ title, status, isBear = false }) => {
     const conditions = [
         { key: 'step1', label: '30분봉 기준', desc: status?.step_details?.step1 || 'SMA 10 > 30' },
-        { key: 'step2', label: '박스권 돌파 조건', desc: status?.step_details?.step2 || '상단 2% 돌파' },
+        { key: 'step2', label: '전일종가 변동', desc: status?.step_details?.step2 || '±2% 변동' },
         { key: 'step3', label: '5분봉 기준', desc: status?.step_details?.step3 || 'SMA 10 > 30' }
     ];
 
-    const activeColor = isBear ? '#3b82f6' : '#ef4444';
-    const finalColor = isBear ? '#2563eb' : '#dc2626';
+    // Blue tones for entry complete (not warning)
+    const activeColor = isBear ? '#8b5cf6' : '#3b82f6';  // Purple : Blue
+    const finalColor = isBear ? '#7c3aed' : '#2563eb';   // Violet : Blue
 
     const conditionsMet = [status?.step1, status?.step2, status?.step3].filter(Boolean).length;
 
@@ -65,7 +66,7 @@ const TripleFilterStatus = ({ title, status, isBear = false }) => {
         <div style={{ flex: 1, minWidth: '320px', background: 'rgba(0,0,0,0.4)', padding: '1.5rem', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)', position: 'relative', overflow: 'hidden' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
                 <div>
-                    <h4 style={{ margin: 0, fontSize: '1.1rem', color: status?.final ? (isBear ? '#60a5fa' : '#ef4444') : '#666', fontWeight: '800' }}>{title}</h4>
+                    <h4 style={{ margin: 0, fontSize: '1.1rem', color: status?.final ? (isBear ? '#a78bfa' : '#60a5fa') : '#666', fontWeight: '800' }}>{title}</h4>
                     <div style={{ fontSize: '0.75rem', color: '#666', marginTop: '4px' }}>
                         {status?.final ? `조건 충족 완료` : `${conditionsMet} / 3 조건 완료`}
                     </div>
