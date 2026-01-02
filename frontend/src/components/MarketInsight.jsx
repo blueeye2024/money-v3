@@ -8,10 +8,10 @@ const TripleFilterStatus = ({ title, status, isBear = false }) => {
     ];
 
     // Blue tones for entry complete (not warning)
-    // Unified Style Fix
-    // SOXS (Bear) = Purple, SOXL (Bull) = Red (High Visibility)
-    const activeColor = isBear ? '#8b5cf6' : '#ef4444';  // Purple : Red
-    const finalColor = isBear ? '#7c3aed' : '#dc2626';   // Violet : Dark Red
+    // Unified Style (Strict Request: SOXL Style == SOXS Style)
+    // Both Purple/Violet regardless of Bull/Bear
+    const activeColor = '#8b5cf6';
+    const finalColor = '#7c3aed';
 
     const conditionsMet = [status?.step1, status?.step2, status?.step3].filter(Boolean).length;
 

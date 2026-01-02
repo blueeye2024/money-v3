@@ -1495,15 +1495,19 @@ def check_triple_filter(ticker, data_30m, data_5m):
             is_breakout = False
             target_v = 0
             
+            # Apply 2% Breakout Rule
+            is_breakout = False
+            target_v = 0
+            
             if prev_close and prev_close > 0:
-                if ticker == "SOXS":
-                    target_v = round(prev_close * 0.98, 2)
-                    if current_price <= target_v: is_breakout = True
-                else:
-                    target_v = round(prev_close * 1.02, 2)
-                    if current_price >= target_v:
-                         is_breakout = True
-                         state["step2_color"] = "red" 
+                # UNIFIED LOGIC: Buy when the ETF price BREAKS OUT upwards
+                # SOXL UP (+2%) -> Buy SOXL (Market Bullish)
+                # SOXS UP (+2%) -> Buy SOXS (Market Bearish)
+                
+                target_v = round(prev_close * 1.02, 2)
+                if current_price >= target_v:
+                     is_breakout = True
+                     state["step2_color"] = "red" 
             
             if is_breakout:
                  filter2_met = True
