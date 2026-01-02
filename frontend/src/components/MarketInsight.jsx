@@ -155,11 +155,11 @@ const TripleFilterStatus = ({ title, status, isBear = false }) => {
                         shadow = '0 0 15px #eab308';
                         scale = 1.1;
                     } else if (isFinalEntry && isMet) {
-                        // 진입조건 완성: 녹색 계열
-                        dotBg = '#10b981'; // Emerald green
-                        dotBorder = 'rgba(16, 185, 129, 0.8)';
+                        // 진입조건 완성: 보라색 계열 (SOXS 스타일 통일)
+                        dotBg = activeColor; // Purple
+                        dotBorder = 'white';
                         dotColor = 'white';
-                        shadow = '0 0 20px #10b98188';
+                        shadow = `0 0 20px ${activeColor}88`;
                         scale = 1.15;
                     } else if (isMet) {
                         // 일반 활성 상태
