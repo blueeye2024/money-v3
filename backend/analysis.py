@@ -1539,10 +1539,20 @@ def check_triple_filter(ticker, data_30m, data_5m):
             result["target"] = target_v
             filter2_met = bool(current_price >= target_v)
 
-        # Filter 3: Timing (5m SMA 10 > 30)
-        sma10_5 = float(df5['Close'].rolling(window=10).mean().iloc[-1])
-        sma30_5 = float(df5['Close'].rolling(window=30).mean().iloc[-1])
-        filter3_met = bool(sma10_5 > sma30_5)
+        # Filter 3: 5m Timing (Golden Cross or MA Alignment)
+        # Simplified: SMA 5 > 20 on 5m chart
+        # We use this as Step 1 Trigger
+        filter3_met = False
+        if df5 is not None and not df5.empty and len(df5) > 20:
+             sma5_5 = float(df5['Close'].rolling(window=5).mean().iloc[-1])
+             sma20_5 = float(df5['Close'].rolling(window=20).mean().iloc[-1])
+             if sma5_5 > sma20_5:
+                 filter3_met = True
+        
+        if filter3_met:
+             # Only record timestamp if not already recorded (Preserve Signal Time)
+             if not state.get("step1_done_time"):
+                 state["step1_done_time"] = now_time_str
 
         # --- LOGIC & PERSISTENCE ---
         
