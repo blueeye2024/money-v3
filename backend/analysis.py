@@ -1723,6 +1723,26 @@ def check_triple_filter(ticker, data_30m, data_5m):
         all_states[ticker] = state
         set_global_config("triple_filter_states", all_states)
 
+        # --- SAFETY NET: Restore State if Logic Failed but State Exists ---
+        # This prevents flickering signals when data is unstable (API errors, etc.)
+        if state.get("step1_done_time") and not result.get("step1"):
+             result["step1"] = True
+             result["step_details"]["step1"] = f"진입: {state['step1_done_time']}"
+        
+        if state.get("step2_done_time") and not result.get("step2"):
+             result["step2"] = True
+             if state.get("step2_done_price"):
+                 result["step_details"]["step2"] = f"돌파: {state['step2_done_price']}$"
+        
+        if state.get("step3_done_time") and not result.get("step3"):
+             result["step3"] = True
+             result["step_details"]["step3"] = f"진입: {state['step3_done_time']}"
+             
+        if state.get("final_met"):
+             result["final"] = True
+             if state.get("signal_time"):
+                 result["signal_time"] = state["signal_time"]
+
         # JSON Safe
         result["step1"] = bool(result["step1"])
         result["step2"] = bool(result["step2"])
