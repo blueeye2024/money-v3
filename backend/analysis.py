@@ -1626,6 +1626,7 @@ def check_triple_filter(ticker, data_30m, data_5m):
 
             # FINAL ENTRY SIGNAL
             if result["step1"] and result["step2"] and result["step3"]:
+                result["final"] = True  # CRITICAL: Set result immediately for UI
                 if not state.get("final_met"):
                     state["final_met"] = True
                     state["signal_time"] = dual_time_str 
@@ -1646,6 +1647,8 @@ def check_triple_filter(ticker, data_30m, data_5m):
                                     })
                     except Exception as e:
                         print(f"Master Signal Save Error: {e}")
+            else:
+                result["final"] = False  # Explicitly set to False when conditions not met
 
         # --- POST-ENTRY WARNINGS (Only if final_met is True) ---
         if state.get("final_met"):

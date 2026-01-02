@@ -90,7 +90,17 @@ const TripleFilterStatus = ({ title, status, isBear = false }) => {
                         )}
                     </div>
                     <div style={{ fontSize: '0.75rem', color: '#666', marginTop: '4px' }}>
-                        {status?.final ? `조건 충족 완료` : `${conditionsMet} / 3 조건 완료`}
+                        {status?.final ? (
+                            <span style={{
+                                color: finalColor, fontWeight: '900', fontSize: '0.9rem',
+                                textShadow: `0 0 10px ${finalColor}44`,
+                                animation: 'pulse 1.5s infinite'
+                            }}>
+                                🚀 강력 매수 진입 (ENTRY)
+                            </span>
+                        ) : (
+                            `${conditionsMet} / 3 조건 완료`
+                        )}
                     </div>
                 </div>
                 {status?.final ? (

@@ -233,7 +233,7 @@ function Layout() {
                 textAlign: 'center', padding: '2rem', marginTop: '4rem',
                 borderTop: '1px solid var(--glass-border)', color: 'var(--text-secondary)'
             }}>
-                <p>&copy; 2024 Cheongan FinTech. All rights reserved. Ver 2.7.0 (Build: {typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : 'Dev Mode'})</p>
+                <p>&copy; 2024 Cheongan FinTech. All rights reserved. Ver 2.7.2 (Build: {typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : 'Dev Mode'})</p>
             </footer>
         </div>
     );
