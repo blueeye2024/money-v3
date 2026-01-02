@@ -3,7 +3,7 @@ import React from 'react';
 const TripleFilterStatus = ({ title, status, isBear = false }) => {
     const conditions = [
         { key: 'step1', label: '30분봉 기준', desc: status?.step_details?.step1 || 'SMA 10 > 30' },
-        { key: 'step2', label: '전일종가 변동', desc: status?.step_details?.step2 || '±2% 변동' },
+        { key: 'step2', label: '박스권 돌파', desc: status?.step_details?.step2 || '돌파 조건' },
         { key: 'step3', label: '5분봉 기준', desc: status?.step_details?.step3 || 'SMA 10 > 30' }
     ];
 

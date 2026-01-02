@@ -1609,8 +1609,9 @@ def check_triple_filter(ticker, data_30m, data_5m):
             else:
                 state["step3_color"] = None
 
-            # Warning 2: Strength Weakened (Box Fail) -> Orange
-            if state.get("step2_done_time") and not filter2_met:
+            # Warning 2: Price dropped below entry price -> Orange
+            entry_price = state.get("step2_done_price")
+            if entry_price and current_price < entry_price:
                 result["step2_color"] = "orange"
                 state["step2_color"] = "orange"
                 try:
@@ -1619,10 +1620,11 @@ def check_triple_filter(ticker, data_30m, data_5m):
                         with conn.cursor() as cursor:
                             cursor.execute("SELECT id FROM signal_history WHERE ticker=%s AND signal_type='WARNING (BOX)' AND created_at >= NOW() - INTERVAL 30 MINUTE LIMIT 1", (ticker,))
                             if not cursor.fetchone():
+                                price_drop_pct = ((current_price - entry_price) / entry_price) * 100
                                 save_signal({
                                     'ticker': ticker, 'name': f"Warning ({ticker})",
                                     'signal_type': "WARNING (BOX)", 
-                                    'position': f"박스권 하향 이탈: 강도 약화 주의\n목표: ${target_v}, 현재: ${current_price}\n시간: {dual_time_str}",
+                                    'position': f"진입가 하회: 강도 약화 주의\n진입: ${entry_price:.2f}, 현재: ${current_price:.2f} ({price_drop_pct:+.1f}%)\n시간: {dual_time_str}",
                                     'current_price': current_price, 'signal_time_raw': now_utc,
                                     'is_sent': True, 'score': -30, 'interpretation': "모멘텀 약화 경고"
                                 })
