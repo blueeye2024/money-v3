@@ -1464,6 +1464,7 @@ def check_triple_filter(ticker, data_30m, data_5m):
                 target_v = round(prev_close * 1.02, 2)  # 목표: 전일종가의 +2%
             
             result["target"] = target_v
+            result["daily_change"] = round(change_pct, 2)  # Store for Frontend
             
         except Exception as e:
             print(f"Filter 2 Calculation Error ({ticker}): {e}")

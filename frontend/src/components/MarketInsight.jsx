@@ -65,8 +65,28 @@ const TripleFilterStatus = ({ title, status, isBear = false }) => {
     return (
         <div style={{ flex: 1, minWidth: '320px', background: 'rgba(0,0,0,0.4)', padding: '1.5rem', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)', position: 'relative', overflow: 'hidden' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                <div>
-                    <h4 style={{ margin: 0, fontSize: '1.1rem', color: status?.final ? (isBear ? '#a78bfa' : '#60a5fa') : '#666', fontWeight: '800' }}>{title}</h4>
+                <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px', flexWrap: 'wrap' }}>
+                        <h4 style={{ margin: 0, fontSize: '1.1rem', color: status?.final ? (isBear ? '#a78bfa' : '#60a5fa') : '#666', fontWeight: '800' }}>{title}</h4>
+
+                        {/* Current Price & Daily Change */}
+                        {status?.current_price > 0 && (
+                            <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', fontSize: '0.85rem' }}>
+                                <span style={{ color: '#aaa', fontWeight: 'bold' }}>
+                                    ${status.current_price.toFixed(2)}
+                                </span>
+                                {status?.daily_change != null && (
+                                    <span style={{
+                                        color: status.daily_change >= 0 ? '#10b981' : '#ef4444',
+                                        fontWeight: 'bold',
+                                        fontSize: '0.75rem'
+                                    }}>
+                                        ({status.daily_change >= 0 ? '+' : ''}{status.daily_change.toFixed(2)}%)
+                                    </span>
+                                )}
+                            </div>
+                        )}
+                    </div>
                     <div style={{ fontSize: '0.75rem', color: '#666', marginTop: '4px' }}>
                         {status?.final ? `조건 충족 완료` : `${conditionsMet} / 3 조건 완료`}
                     </div>
