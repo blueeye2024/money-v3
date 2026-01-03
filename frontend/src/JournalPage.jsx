@@ -55,7 +55,7 @@ const JournalPage = () => {
                 stocksRes.data.forEach(stock => {
                     // current_price가 null이 아니면 사용 (0도 유효한 값)
                     if (stock.current_price !== null && stock.current_price !== undefined) {
-                        priceMap[stock.ticker] = stock.current_price;
+                        priceMap[stock.code] = stock.current_price;
                     }
                 });
             }

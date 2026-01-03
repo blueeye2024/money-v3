@@ -465,11 +465,21 @@ def check_recent_sms_log(stock_name, signal_type, timeframe_minutes=30):
 
 # --- Stock Management ---
 def get_stocks():
+    """종목 목록 조회 (현재가 포함)"""
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
-            cursor.execute("SELECT * FROM stocks ORDER BY name ASC")
-            return cursor.fetchall()
+            cursor.execute("""
+                SELECT ticker as code, name, current_price, price_updated_at, is_market_open 
+                FROM managed_stocks 
+                WHERE is_active = TRUE
+                ORDER BY ticker ASC
+            """)
+            rows = cursor.fetchall()
+            
+            # DictCursor이므로 딕셔너리 리스트 반환
+            # ticker를 code로 alias하여 기존 프론트엔드 호환성 유지
+            return rows
     finally:
         conn.close()
 
