@@ -1079,7 +1079,7 @@ def update_stock_prices():
     
     try:
         with get_connection() as conn:
-            with conn.cursor(dictionary=True) as cursor:
+            with conn.cursor() as cursor:
                 # 모든 활성 종목 조회 (5분 조건 제거 - 사용자 요청 시 즉시 업데이트)
                 sql = """
                     SELECT code, name 
@@ -1087,7 +1087,15 @@ def update_stock_prices():
                     WHERE is_active = TRUE
                 """
                 cursor.execute(sql)
-                stocks = cursor.fetchall()
+                rows = cursor.fetchall()
+                
+                # 수동으로 딕셔너리 변환
+                stocks = []
+                for row in rows:
+                    stocks.append({
+                        'code': row[0],
+                        'name': row[1]
+                    })
                 
                 if not stocks:
                     print("⚠️ 등록된 종목이 없습니다")
@@ -1154,20 +1162,20 @@ def get_stock_current_price(ticker):
     """특정 종목의 현재가 조회 (캐시된 값)"""
     try:
         with get_connection() as conn:
-            with conn.cursor(dictionary=True) as cursor:
+            with conn.cursor() as cursor:
                 sql = """
                     SELECT current_price, price_updated_at, is_market_open 
                     FROM managed_stocks 
-                    WHERE (ticker = %s OR code = %s) AND is_active = TRUE
+                    WHERE code = %s AND is_active = TRUE
                 """
-                cursor.execute(sql, (ticker, ticker))
-                result = cursor.fetchone()
+                cursor.execute(sql, (ticker,))
+                row = cursor.fetchone()
                 
-                if result:
+                if row:
                     return {
-                        'price': result['current_price'],
-                        'updated_at': result['price_updated_at'],
-                        'is_market_open': result['is_market_open']
+                        'price': row[0],
+                        'updated_at': row[1],
+                        'is_market_open': row[2]
                     }
                 return None
     except Exception as e:
