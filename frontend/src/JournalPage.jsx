@@ -16,6 +16,7 @@ const JournalPage = () => {
     const [stockForm, setStockForm] = useState({ code: '', name: '' });
     const [form, setForm] = useState({ ticker: '', qty: 1, price: '', memo: '' });
     const [editingId, setEditingId] = useState(null);
+    const [updatingPrices, setUpdatingPrices] = useState(false);
 
     useEffect(() => { fetchAll(); }, []);
 
@@ -153,6 +154,25 @@ const JournalPage = () => {
             await axios.delete(`/api/transactions/${id}`);
             fetchTransactions();
         } catch (e) { alert('삭제 실패'); }
+    };
+
+    const handleUpdatePrices = async () => {
+        setUpdatingPrices(true);
+        try {
+            const res = await axios.post('/api/stocks/update-prices');
+            if (res.data.status === 'success') {
+                alert('✅ 현재가 업데이트 완료!');
+                await fetchCurrentPrices();
+                await fetchTransactions(); // 보유현황 재계산
+            } else {
+                alert('⚠️ 현재가 업데이트 실패: ' + (res.data.message || '알 수 없는 오류'));
+            }
+        } catch (e) {
+            console.error('현재가 업데이트 오류:', e);
+            alert('❌ 현재가 업데이트 실패: ' + e.message);
+        } finally {
+            setUpdatingPrices(false);
+        }
     };
 
     const handleAddStock = async (e) => {
@@ -348,8 +368,31 @@ const JournalPage = () => {
 
             {/* Holdings Table */}
             <div style={{ background: 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 50%, #93c5fd 100%)', borderRadius: '20px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(59,130,246,0.2)', border: '1px solid rgba(147,197,253,0.3)' }}>
-                <div style={{ padding: '1.5rem 2rem', borderBottom: '1px solid rgba(59,130,246,0.2)' }}>
+                <div style={{ padding: '1.5rem 2rem', borderBottom: '1px solid rgba(59,130,246,0.2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <h2 style={{ fontSize: '1.5rem', fontWeight: '700', margin: 0, color: '#1e3a8a' }}>보유 현황</h2>
+                    <button
+                        onClick={handleUpdatePrices}
+                        disabled={updatingPrices}
+                        style={{
+                            padding: '0.75rem 1.5rem',
+                            background: updatingPrices ? '#9ca3af' : 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '12px',
+                            cursor: updatingPrices ? 'not-allowed' : 'pointer',
+                            fontWeight: '600',
+                            fontSize: '0.95rem',
+                            boxShadow: '0 4px 12px rgba(59,130,246,0.3)',
+                            transition: 'all 0.2s',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem'
+                        }}
+                        onMouseEnter={(e) => !updatingPrices && (e.currentTarget.style.transform = 'translateY(-2px)')}
+                        onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+                    >
+                        {updatingPrices ? '⏳ 업데이트 중...' : '🔄 시세 업데이트'}
+                    </button>
                 </div>
                 <div style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>

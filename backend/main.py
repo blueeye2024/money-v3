@@ -450,6 +450,21 @@ def api_delete_stock(code: str):
         return {"status": "success"}
     return {"status": "error"}
 
+@app.post("/api/stocks/update-prices")
+def api_update_stock_prices():
+    """종목 현재가 즉시 업데이트 (사용자 요청)"""
+    from db import update_stock_prices
+    try:
+        print(f"[{datetime.now()}] 사용자 요청: 종목 현재가 즉시 업데이트")
+        result = update_stock_prices()
+        if result:
+            return {"status": "success", "message": "현재가 업데이트 완료"}
+        return {"status": "error", "message": "현재가 업데이트 실패"}
+    except Exception as e:
+        print(f"현재가 즉시 업데이트 오류: {e}")
+        return {"status": "error", "message": str(e)}
+
+
 # --- Transaction APIs ---
 class TransactionModel(BaseModel):
     id: int = None 
