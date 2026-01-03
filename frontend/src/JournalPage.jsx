@@ -17,6 +17,8 @@ const JournalPage = () => {
     const [form, setForm] = useState({ ticker: '', qty: 1, price: '', memo: '' });
     const [editingId, setEditingId] = useState(null);
     const [updatingPrices, setUpdatingPrices] = useState(false);
+    const [editingPrice, setEditingPrice] = useState(null); // 수동 가격 입력 중인 종목
+    const [manualPrice, setManualPrice] = useState(''); // 수동 입력 가격
 
     useEffect(() => { fetchAll(); }, []);
 
@@ -55,19 +57,32 @@ const JournalPage = () => {
                 stocksRes.data.forEach(stock => {
                     // current_price가 null이 아니면 사용 (0도 유효한 값)
                     if (stock.current_price !== null && stock.current_price !== undefined) {
-                        priceMap[stock.code] = stock.current_price;
+                        priceMap[stock.code] = {
+                            price: stock.current_price,
+                            isManual: stock.is_manual_price || false,
+                            stockId: stock.id
+                        };
                     }
                 });
             }
+
 
             // 2. MASTER CONTROL TOWER에서 SOXL, SOXS, UPRO 현재가 가져오기 (보조)
             const res = await axios.get('/api/report');
             if (res.data.market_regime?.details) {
                 const d = res.data.market_regime.details;
-                if (d.soxl?.current_price) priceMap['SOXL'] = d.soxl.current_price;
-                if (d.soxs?.current_price) priceMap['SOXS'] = d.soxs.current_price;
-                if (d.upro?.current_price) priceMap['UPRO'] = d.upro.current_price;
+                // 이미 managed_stocks에서 가져온 경우 덮어쓰지 않음
+                if (d.soxl?.current_price && !priceMap['SOXL']) {
+                    priceMap['SOXL'] = { price: d.soxl.current_price, isManual: false, stockId: null };
+                }
+                if (d.soxs?.current_price && !priceMap['SOXS']) {
+                    priceMap['SOXS'] = { price: d.soxs.current_price, isManual: false, stockId: null };
+                }
+                if (d.upro?.current_price && !priceMap['UPRO']) {
+                    priceMap['UPRO'] = { price: d.upro.current_price, isManual: false, stockId: null };
+                }
             }
+
 
             // 3. 환율 가져오기
             if (res.data.market?.KRW) setExchangeRate(res.data.market.KRW.value || 1444.5);
@@ -176,6 +191,44 @@ const JournalPage = () => {
         }
     };
 
+    const handlePriceEdit = (ticker, stockId, currentPrice) => {
+        setEditingPrice(ticker);
+        setManualPrice(currentPrice || '');
+    };
+
+    const handlePriceSave = async (ticker) => {
+        const price = parseFloat(manualPrice);
+        if (isNaN(price) || price <= 0) {
+            alert('유효한 가격을 입력하세요');
+            return;
+        }
+
+        // managed_stocks에서 해당 ticker의 id 찾기
+        const stock = stocks.find(s => s.code === ticker);
+        if (!stock || !stock.id) {
+            alert('종목 정보를 찾을 수 없습니다');
+            return;
+        }
+
+        try {
+            const res = await axios.put(`/api/managed-stocks/${stock.id}/manual-price`, { price });
+            if (res.data.status === 'success') {
+                setEditingPrice(null);
+                setManualPrice('');
+                await fetchCurrentPrices();
+                await fetchTransactions(); // 보유현황 재계산
+            }
+        } catch (e) {
+            console.error('Price update failed', e);
+            alert('가격 업데이트 실패');
+        }
+    };
+
+    const handlePriceCancel = () => {
+        setEditingPrice(null);
+        setManualPrice('');
+    };
+
     const handleAddStock = async (e) => {
         e.preventDefault();
         try {
@@ -211,7 +264,23 @@ const JournalPage = () => {
         Object.keys(holdings).forEach(ticker => {
             const h = holdings[ticker];
             if (h.qty > 0) {
-                h.currentPrice = (ticker in currentPrices) ? currentPrices[ticker] : h.avgPrice; // API 현재가 우선, 없으면 평균가
+                // currentPrices가 객체 형태인지 확인
+                const priceData = currentPrices[ticker];
+                if (priceData && typeof priceData === 'object') {
+                    h.currentPrice = priceData.price;
+                    h.isManualPrice = priceData.isManual;
+                    h.stockId = priceData.stockId;
+                } else if (typeof priceData === 'number') {
+                    // 하위 호환성 (MASTER CONTROL TOWER에서 오는 데이터)
+                    h.currentPrice = priceData;
+                    h.isManualPrice = false;
+                    h.stockId = null;
+                } else {
+                    h.currentPrice = h.avgPrice;
+                    h.isManualPrice = false;
+                    h.stockId = null;
+                }
+
                 h.currentValue = h.qty * h.currentPrice;
                 h.currentValueKRW = h.currentValue * exchangeRate;
                 h.profit = h.currentValue - h.totalCost;
@@ -427,7 +496,85 @@ const JournalPage = () => {
                                             <div style={{ fontSize: '1rem', fontWeight: '700', color: '#1e40af', marginBottom: '0.25rem' }}>${h.currentValue.toFixed(2)}</div>
                                             <div style={{ fontSize: '0.8rem', color: '#64748b' }}>{h.currentValueKRW.toLocaleString(undefined, { maximumFractionDigits: 0 })}원</div>
                                         </td>
-                                        <td style={{ padding: '1.25rem 1.5rem', textAlign: 'right', fontSize: '0.95rem', color: '#1e3a8a', fontWeight: '500' }}>${h.currentPrice.toFixed(2)}</td>
+                                        <td style={{ padding: '1.25rem 1.5rem', textAlign: 'right' }}>
+                                            {editingPrice === ticker ? (
+                                                <div style={{ display: 'flex', gap: '5px', justifyContent: 'flex-end', alignItems: 'center' }}>
+                                                    <input
+                                                        type="number"
+                                                        step="0.01"
+                                                        value={manualPrice}
+                                                        onChange={(e) => setManualPrice(e.target.value)}
+                                                        style={{
+                                                            width: '80px',
+                                                            padding: '4px 8px',
+                                                            background: 'rgba(255,255,255,0.9)',
+                                                            border: '2px solid #3b82f6',
+                                                            color: '#1e3a8a',
+                                                            borderRadius: '8px',
+                                                            fontSize: '0.9rem',
+                                                            fontWeight: '600'
+                                                        }}
+                                                        autoFocus
+                                                    />
+                                                    <button
+                                                        onClick={() => handlePriceSave(ticker)}
+                                                        style={{
+                                                            padding: '4px 8px',
+                                                            fontSize: '0.75rem',
+                                                            background: '#3b82f6',
+                                                            border: 'none',
+                                                            color: 'white',
+                                                            borderRadius: '6px',
+                                                            cursor: 'pointer',
+                                                            fontWeight: '600'
+                                                        }}
+                                                    >
+                                                        ✓
+                                                    </button>
+                                                    <button
+                                                        onClick={handlePriceCancel}
+                                                        style={{
+                                                            padding: '4px 8px',
+                                                            fontSize: '0.75rem',
+                                                            background: 'rgba(255,255,255,0.5)',
+                                                            border: '1px solid rgba(0,0,0,0.1)',
+                                                            color: '#64748b',
+                                                            borderRadius: '6px',
+                                                            cursor: 'pointer'
+                                                        }}
+                                                    >
+                                                        ✕
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <div style={{ display: 'flex', gap: '5px', justifyContent: 'flex-end', alignItems: 'center' }}>
+                                                    <div style={{
+                                                        fontSize: '0.95rem',
+                                                        fontWeight: '600',
+                                                        color: h.isManualPrice ? '#f59e0b' : '#1e3a8a'
+                                                    }}>
+                                                        ${h.currentPrice.toFixed(2)}
+                                                    </div>
+                                                    {h.isManualPrice && (
+                                                        <span style={{ fontSize: '0.7rem', color: '#f59e0b' }} title="수동 입력값">✋</span>
+                                                    )}
+                                                    <button
+                                                        onClick={() => handlePriceEdit(ticker, h.stockId, h.currentPrice)}
+                                                        style={{
+                                                            padding: '2px 6px',
+                                                            fontSize: '0.7rem',
+                                                            background: 'rgba(59,130,246,0.1)',
+                                                            border: '1px solid rgba(59,130,246,0.3)',
+                                                            color: '#3b82f6',
+                                                            borderRadius: '4px',
+                                                            cursor: 'pointer'
+                                                        }}
+                                                    >
+                                                        ✏️
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </td>
                                         <td style={{ padding: '1.25rem 1.5rem', textAlign: 'right' }}>
                                             <div style={{ fontSize: '1rem', fontWeight: '700', color: h.profit >= 0 ? '#10b981' : '#ef4444', marginBottom: '0.25rem' }}>
                                                 {h.profit >= 0 ? '+' : ''}${h.profit.toFixed(2)}
