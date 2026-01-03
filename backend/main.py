@@ -35,7 +35,8 @@ def on_startup():
 
     # Start Scheduler
     scheduler = BackgroundScheduler()
-    scheduler.add_job(monitor_signals, 'interval', minutes=1)
+    scheduler.add_job(monitor_signals, 'interval', minutes=1)  # 신호 모니터링 (1분)
+    scheduler.add_job(update_prices_job, 'interval', minutes=5)  # 종목 현재가 업데이트 (5분)
     scheduler.start()
 
 # Global SMS Control (Now persistent via DB)
@@ -89,6 +90,15 @@ def set_capital_api(data: CapitalModel):
         return {"error": str(e)}
 
 # 2. Monitor Logic (Runs every 1 min)
+def update_prices_job():
+    """5분마다 종목 현재가 업데이트"""
+    from db import update_stock_prices
+    try:
+        print(f"[{datetime.now()}] 종목 현재가 업데이트 시작...")
+        update_stock_prices()
+    except Exception as e:
+        print(f"현재가 업데이트 작업 오류: {e}")
+
 def monitor_signals():
     global SMS_ENABLED
     print(f"[{datetime.now()}] Monitoring Signals... SMS Enabled: {SMS_ENABLED}")

@@ -46,20 +46,31 @@ const JournalPage = () => {
 
     const fetchCurrentPrices = async () => {
         try {
-            const res = await axios.get('/api/report');
             const priceMap = {};
+
+            // 1. 종목관리 테이블에서 모든 종목의 현재가 가져오기
+            const stocksRes = await axios.get('/api/stocks');
+            if (stocksRes.data) {
+                stocksRes.data.forEach(stock => {
+                    if (stock.current_price && stock.current_price > 0) {
+                        priceMap[stock.code] = stock.current_price;
+                    }
+                });
+            }
+
+            // 2. MASTER CONTROL TOWER에서 SOXL, SOXS, UPRO 현재가 가져오기 (보조)
+            const res = await axios.get('/api/report');
             if (res.data.market_regime?.details) {
                 const d = res.data.market_regime.details;
                 if (d.soxl?.current_price) priceMap['SOXL'] = d.soxl.current_price;
                 if (d.soxs?.current_price) priceMap['SOXS'] = d.soxs.current_price;
                 if (d.upro?.current_price) priceMap['UPRO'] = d.upro.current_price;
-
-                console.log('API 응답 details:', d); // 디버깅
-                console.log('현재가 데이터:', priceMap); // 디버깅
-            } else {
-                console.log('market_regime.details가 없습니다:', res.data);
             }
+
+            // 3. 환율 가져오기
             if (res.data.market?.KRW) setExchangeRate(res.data.market.KRW.value || 1444.5);
+
+            console.log('현재가 데이터 (종목관리 + MASTER):', priceMap);
             setCurrentPrices(priceMap);
         } catch (e) {
             console.error('현재가 가져오기 실패:', e);

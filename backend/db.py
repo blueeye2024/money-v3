@@ -166,6 +166,9 @@ def init_db():
                 memo TEXT,
                 version VARCHAR(20) DEFAULT '2.0',
                 is_active BOOLEAN DEFAULT TRUE,
+                current_price DECIMAL(10,2) DEFAULT 0.0,
+                price_updated_at DATETIME DEFAULT NULL,
+                is_market_open BOOLEAN DEFAULT TRUE,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
             )
             """
@@ -1064,3 +1067,102 @@ def cleanup_old_candles(ticker, days=90):
     except Exception as e:
         print(f"Error cleaning up old candles ({ticker}): {e}")
         return False
+
+def update_stock_prices():
+    """
+    종목관리에 등록된 모든 종목의 현재가를 업데이트
+    - 5분 이상 지난 종목만 업데이트
+    - 휴장일 감지 및 is_market_open 플래그 설정
+    """
+    from datetime import datetime, timedelta
+    from kis_api import kis_client
+    
+    try:
+        with get_connection() as conn:
+            with conn.cursor(dictionary=True) as cursor:
+                # 5분 이상 지난 종목 또는 한 번도 업데이트 안 된 종목 조회
+                sql = """
+                    SELECT ticker, code, name, price_updated_at 
+                    FROM managed_stocks 
+                    WHERE is_active = TRUE 
+                    AND (price_updated_at IS NULL 
+                         OR price_updated_at < DATE_SUB(NOW(), INTERVAL 5 MINUTE))
+                """
+                cursor.execute(sql)
+                stocks = cursor.fetchall()
+                
+                if not stocks:
+                    print("✅ 모든 종목 현재가가 최신 상태입니다 (5분 이내)")
+                    return True
+                
+                print(f"📊 {len(stocks)}개 종목 현재가 업데이트 시작...")
+                
+                updated_count = 0
+                for stock in stocks:
+                    ticker = stock['ticker'] or stock['code']
+                    
+                    try:
+                        # KIS API로 현재가 조회
+                        price_data = kis_client.get_price(ticker)
+                        
+                        if price_data and price_data.get('price'):
+                            current_price = float(price_data['price'])
+                            is_market_open = True
+                            
+                            # 현재가 업데이트
+                            update_sql = """
+                                UPDATE managed_stocks 
+                                SET current_price = %s, 
+                                    price_updated_at = NOW(), 
+                                    is_market_open = %s 
+                                WHERE ticker = %s OR code = %s
+                            """
+                            cursor.execute(update_sql, (current_price, is_market_open, ticker, ticker))
+                            updated_count += 1
+                            print(f"  ✅ {ticker}: ${current_price:.2f}")
+                        else:
+                            # 가격 데이터 없음 (휴장일 가능성)
+                            update_sql = """
+                                UPDATE managed_stocks 
+                                SET is_market_open = FALSE, 
+                                    price_updated_at = NOW() 
+                                WHERE ticker = %s OR code = %s
+                            """
+                            cursor.execute(update_sql, (ticker, ticker))
+                            print(f"  ⚠️ {ticker}: 가격 데이터 없음 (휴장일 가능)")
+                            
+                    except Exception as e:
+                        print(f"  ❌ {ticker} 가격 조회 실패: {e}")
+                        continue
+                
+                conn.commit()
+                print(f"✅ 현재가 업데이트 완료: {updated_count}/{len(stocks)}개 성공")
+                return True
+                
+    except Exception as e:
+        print(f"❌ 현재가 업데이트 오류: {e}")
+        return False
+
+def get_stock_current_price(ticker):
+    """특정 종목의 현재가 조회 (캐시된 값)"""
+    try:
+        with get_connection() as conn:
+            with conn.cursor(dictionary=True) as cursor:
+                sql = """
+                    SELECT current_price, price_updated_at, is_market_open 
+                    FROM managed_stocks 
+                    WHERE (ticker = %s OR code = %s) AND is_active = TRUE
+                """
+                cursor.execute(sql, (ticker, ticker))
+                result = cursor.fetchone()
+                
+                if result:
+                    return {
+                        'price': result['current_price'],
+                        'updated_at': result['price_updated_at'],
+                        'is_market_open': result['is_market_open']
+                    }
+                return None
+    except Exception as e:
+        print(f"현재가 조회 오류 ({ticker}): {e}")
+        return None
