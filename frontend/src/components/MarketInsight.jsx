@@ -2,9 +2,9 @@ import React from 'react';
 
 const TripleFilterStatus = ({ title, status, isBear = false }) => {
     const conditions = [
-        { key: 'step1', label: '5분봉 진입 신호', desc: status?.step_details?.step1 || '타이밍 포착' },
+        { key: 'step1', label: '30분봉 추세 전환', desc: status?.step_details?.step1 || '추세 확인' },
         { key: 'step2', label: '박스권 돌파 (+2%)', desc: status?.step_details?.step2 || '상승 돌파' },
-        { key: 'step3', label: '추세 확정 (30분)', desc: status?.step_details?.step3 || '추세 지속' }
+        { key: 'step3', label: '5분봉 진입 신호', desc: status?.step_details?.step3 || '타이밍 포착' }
     ];
 
     // Blue tones for entry complete (not warning)
@@ -136,24 +136,13 @@ const TripleFilterStatus = ({ title, status, isBear = false }) => {
                     let scale = 1;
 
                     // Priority: Warning Colors > Final Entry (Green) > Normal Active
-                    if (backendColor === 'red') {
-                        dotBg = '#ef4444';
+                    // 모든 경보는 붉은색 + 불빛
+                    if (backendColor === 'red' || backendColor === 'orange' || backendColor === 'yellow') {
+                        dotBg = '#ef4444';  // 모든 경보 붉은색 통일
                         dotBorder = 'rgba(255,255,255,0.5)';
                         dotColor = 'white';
-                        shadow = '0 0 15px #ef4444';
-                        scale = 1.1;
-                    } else if (backendColor === 'orange') {
-                        dotBg = '#f97316';
-                        dotBorder = 'rgba(255,255,255,0.5)';
-                        dotColor = 'white';
-                        shadow = '0 0 15px #f97316';
-                        scale = 1.1;
-                    } else if (backendColor === 'yellow') {
-                        dotBg = '#eab308';
-                        dotBorder = 'rgba(255,255,255,0.5)';
-                        dotColor = 'white';
-                        shadow = '0 0 15px #eab308';
-                        scale = 1.1;
+                        shadow = '0 0 20px #ef4444';  // 불빛 켜기
+                        scale = 1.15;  // 크기 강조
                     } else if (isFinalEntry && isMet) {
                         // 진입조건 완성: 보라색 계열 (SOXS 스타일 통일)
                         dotBg = activeColor; // Purple
@@ -162,31 +151,39 @@ const TripleFilterStatus = ({ title, status, isBear = false }) => {
                         shadow = `0 0 20px ${activeColor}88`;
                         scale = 1.15;
                     } else if (isMet) {
-                        // 일반 활성 상태
                         dotBg = activeColor;
                         dotBorder = 'white';
                         dotColor = 'white';
-                        shadow = `0 0 20px ${activeColor}88`;
-                        scale = 1.1;
+                        shadow = `0 0 12px ${activeColor}66`;
+                        scale = 1.05;
+                    } else {
+                        dotBg = 'rgba(255,255,255,0.05)';
+                        dotBorder = 'rgba(255,255,255,0.1)';
+                        dotColor = '#333';
                     }
 
                     return (
-                        <div key={cond.key} style={{ zIndex: 3, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', position: 'relative' }}>
+                        <div key={idx} style={{ zIndex: 3, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', flex: 1 }}>
                             <div style={{
                                 width: '32px', height: '32px', borderRadius: '50%',
-                                background: dotBg,
-                                border: `3px solid ${dotBorder}`,
+                                background: dotBg, border: `2px solid ${dotBorder}`,
                                 boxShadow: shadow,
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                color: dotColor, fontWeight: 'bold', fontSize: '1.2rem',
+                                color: dotColor, fontWeight: 'bold', fontSize: '1rem',
                                 transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
                                 transform: `scale(${scale})`
                             }}>
-                                {isMet ? '✓' : idx + 1}
+                                {'✓'}
                             </div>
                             <div style={{ textAlign: 'center', opacity: isMet ? 1 : 0.5, transition: 'opacity 0.3s' }}>
                                 <div style={{ fontSize: '0.75rem', fontWeight: '700', color: isMet ? '#fff' : '#444' }}>{cond.label}</div>
-                                <div style={{ fontSize: '0.65rem', color: isMet ? '#aaa' : '#333' }}>{cond.desc}</div>
+                                <div style={{
+                                    fontSize: '0.65rem',
+                                    color: backendColor === 'red' ? '#ef4444' : backendColor === 'yellow' ? '#eab308' : (isMet ? '#aaa' : '#333'),
+                                    fontWeight: backendColor ? 'bold' : 'normal'
+                                }}>
+                                    {status?.[`${cond.key}_status`] || cond.desc}
+                                </div>
                             </div>
                         </div>
                     );
@@ -359,15 +356,53 @@ const MarketInsight = ({ market, stocks, signalHistory }) => {
                             </div>
                             <div style={{ color: '#d1d5db', fontSize: '0.9rem', lineHeight: '1.7', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                 {signalHistory && Array.isArray(signalHistory) && signalHistory.length > 0 ? (
-                                    signalHistory.map(sig => (
-                                        <div key={sig.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px dashed rgba(255,255,255,0.1)', paddingBottom: '8px', gap: '12px' }}>
-                                            <div style={{ minWidth: '140px', fontSize: '0.7rem' }}>
-                                                {formatDualTime(sig.signal_time)}
+                                    signalHistory.map(sig => {
+                                        // 한국시간만 표시
+                                        const kstTime = sig.time_kst || (sig.signal_time || '').split('(')[0].trim();
+
+                                        // BUY/SELL 한글 변환
+                                        const signalType = sig.signal_type || '';
+                                        let actionText = '';
+                                        let actionColor = '#888';
+
+                                        if (signalType.includes('BUY')) {
+                                            actionText = '매수';
+                                            actionColor = '#ef4444';  // 붉은색
+                                        } else if (signalType.includes('SELL')) {
+                                            actionText = '매도';
+                                            actionColor = '#3b82f6';  // 파란색
+                                        } else if (signalType.includes('WARNING')) {
+                                            actionText = '경보';
+                                            actionColor = '#eab308';  // 노란색
+                                        }
+
+                                        // 신호 이유
+                                        const reason = sig.signal_reason || '';
+
+                                        return (
+                                            <div key={sig.id} style={{
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                borderBottom: '1px dashed rgba(255,255,255,0.1)',
+                                                paddingBottom: '8px',
+                                                gap: '4px'
+                                            }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                    <span style={{ fontSize: '0.75rem', color: '#888' }}>
+                                                        {kstTime}
+                                                    </span>
+                                                    <span style={{ color: actionColor, fontWeight: 'bold', whiteSpace: 'nowrap' }}>
+                                                        {sig.ticker} {actionText}
+                                                    </span>
+                                                </div>
+                                                {reason && (
+                                                    <div style={{ fontSize: '0.7rem', color: '#666', paddingLeft: '4px' }}>
+                                                        {reason}
+                                                    </div>
+                                                )}
                                             </div>
-                                            <span style={{ color: (sig.signal_type || '').includes('BUY') ? '#ef4444' : '#3b82f6', fontWeight: 'bold', whiteSpace: 'nowrap' }}>{sig.ticker || '-'} {(sig.signal_type || '').replace(' (MASTER)', '')}</span>
-                                            <span style={{ color: '#aaa', whiteSpace: 'nowrap' }}>${sig.price}</span>
-                                        </div>
-                                    ))
+                                        );
+                                    })
                                 ) : (
                                     <div style={{ color: '#666' }}>최근 발생한 신호가 없습니다.</div>
                                 )}
@@ -386,67 +421,6 @@ const MarketInsight = ({ market, stocks, signalHistory }) => {
                 </div>
             </div>
 
-            {/* 2. Asset Sync Section */}
-            <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '2.5rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2rem' }}>
-                    <div style={{ width: '40px', height: '40px', background: 'rgba(96, 165, 250, 0.1)', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem' }}>🧠</div>
-                    <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#60a5fa', fontWeight: '800' }}>ASSET SYNC & INDIVIDUAL STRATEGY</h3>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1.5rem' }}>
-                    {activeStocks.filter(stock => stock && typeof stock === 'object').map(stock => {
-                        const position = String(stock.position || '');
-                        const isSync = position.includes('Master Sync') || position.includes('🔴') || position.includes('🔹');
-                        const isBuy = position.includes('매수');
-                        const isSell = position.includes('매도');
-
-                        return (
-                            <div key={stock.ticker} style={{
-                                background: isSync ? 'linear-gradient(135deg, rgba(96, 165, 250, 0.08), rgba(0,0,0,0.3))' : 'rgba(255,255,255,0.03)',
-                                padding: '1.5rem',
-                                borderRadius: '18px',
-                                border: isSync ? `1px solid ${isBuy ? '#ff6b6b44' : isSell ? '#60a5fa44' : '#60a5fa22'}` : '1px solid rgba(255,255,255,0.05)',
-                                position: 'relative',
-                                transition: 'all 0.3s ease',
-                                boxShadow: isSync ? '0 8px 25px rgba(0,0,0,0.2)' : 'none'
-                            }}>
-                                {isSync && (
-                                    <div style={{ position: 'absolute', top: '15px', right: '15px', display: 'flex', gap: '5px' }}>
-                                        <div style={{ background: isBuy ? '#ef4444' : isSell ? '#3b82f6' : '#888', width: '8px', height: '8px', borderRadius: '50%', animation: 'flash 1s infinite' }} />
-                                    </div>
-                                )}
-                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.2rem', alignItems: 'flex-start' }}>
-                                    <div>
-                                        <div style={{ fontWeight: '900', fontSize: '1.2rem', color: '#fff' }}>{stock.ticker}</div>
-                                        <div style={{
-                                            fontSize: '0.95rem', fontWeight: '800',
-                                            color: isBuy ? '#ff6b6b' : isSell ? '#4dabf7' : '#888',
-                                            marginTop: '8px'
-                                        }}>
-                                            {stock.position || '-'}
-                                        </div>
-                                    </div>
-                                    <div style={{ textAlign: 'right' }}>
-                                        <div style={{ color: '#4ade80', fontWeight: '900', fontSize: '1.4rem' }}>
-                                            {stock.current_ratio && !isNaN(parseFloat(String(stock.current_ratio))) ? parseFloat(String(stock.current_ratio)).toFixed(1) : '0.0'}%
-                                        </div>
-                                        <div style={{ fontSize: '0.75rem', color: '#666', marginTop: '4px' }}>
-                                            TARGET: {stock.target_ratio}%
-                                        </div>
-                                    </div>
-                                </div>
-                                <div style={{
-                                    fontSize: '0.85rem', color: '#9ca3af', lineHeight: '1.6',
-                                    background: 'rgba(0,0,0,0.3)', padding: '1rem', borderRadius: '12px',
-                                    minHeight: '4.5rem', display: 'flex', alignItems: 'center'
-                                }}>
-                                    {stock.strategy_text || "Syncing..."}
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-            </div>
             <style>{`
                 @keyframes pulse {
                     0% { transform: scale(1); opacity: 1; }

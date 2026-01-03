@@ -305,16 +305,19 @@ def save_signal(signal_data):
             
         with conn.cursor() as cursor:
             sql = """
-            INSERT INTO signal_history (ticker, name, signal_type, position_desc, price, signal_time, is_sent, score, interpretation)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO signal_history (ticker, name, signal_type, signal_reason, position_desc, price, signal_time, time_kst, time_ny, is_sent, score, interpretation)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """
             cursor.execute(sql, (
                 signal_data['ticker'],
                 signal_data['name'],
                 signal_data['signal_type'],
+                signal_data.get('signal_reason', ''),  # 신호 발생 이유
                 signal_data['position'],
                 signal_data['current_price'],
                 st, 
+                signal_data.get('time_kst', ''),  # 한국시간
+                signal_data.get('time_ny', ''),   # 미국시간
                 signal_data.get('is_sent', False),
                 signal_data.get('score', 0),
                 signal_data.get('interpretation', '')
