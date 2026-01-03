@@ -53,7 +53,8 @@ const JournalPage = () => {
             const stocksRes = await axios.get('/api/stocks');
             if (stocksRes.data) {
                 stocksRes.data.forEach(stock => {
-                    if (stock.current_price && stock.current_price > 0) {
+                    // current_price가 null이 아니면 사용 (0도 유효한 값)
+                    if (stock.current_price !== null && stock.current_price !== undefined) {
                         priceMap[stock.ticker] = stock.current_price;
                     }
                 });
@@ -210,7 +211,7 @@ const JournalPage = () => {
         Object.keys(holdings).forEach(ticker => {
             const h = holdings[ticker];
             if (h.qty > 0) {
-                h.currentPrice = currentPrices[ticker] || h.avgPrice; // API 현재가 우선, 없으면 마지막 거래 가격
+                h.currentPrice = (ticker in currentPrices) ? currentPrices[ticker] : h.avgPrice; // API 현재가 우선, 없으면 평균가
                 h.currentValue = h.qty * h.currentPrice;
                 h.currentValueKRW = h.currentValue * exchangeRate;
                 h.profit = h.currentValue - h.totalCost;
