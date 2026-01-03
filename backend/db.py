@@ -648,6 +648,32 @@ def update_managed_stock(id, data):
     finally:
         conn.close()
 
+def update_manual_price(id, price):
+    """
+    수동으로 현재가 입력
+    - is_manual_price를 TRUE로 설정하여 자동 업데이트에서 제외
+    """
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            sql = """
+            UPDATE managed_stocks 
+            SET current_price = %s,
+                is_manual_price = TRUE,
+                price_updated_at = NOW(),
+                is_market_open = TRUE
+            WHERE id = %s
+            """
+            cursor.execute(sql, (price, id))
+        conn.commit()
+        print(f"✅ 수동 현재가 입력 완료: ID={id}, Price=${price}")
+        return True
+    except Exception as e:
+        print(f"❌ 수동 현재가 입력 오류: {e}")
+        return False
+    finally:
+        conn.close()
+
 def delete_managed_stock(id):
     conn = get_connection()
     try:
@@ -1081,96 +1107,92 @@ def cleanup_old_candles(ticker, days=90):
 def update_stock_prices():
     """
     종목관리에 등록된 모든 종목의 현재가를 업데이트
-    - 사용자 요청 시 5분 조건 무시하고 즉시 업데이트
+    - KIS API 사용하여 실시간 가격 조회
+    - 수동 입력값(is_manual_price=TRUE)은 업데이트 제외
     - 휴장일 감지 및 is_market_open 플래그 설정
     """
-    from datetime import datetime, timedelta
-    from kis_api import kis_client
+    from datetime import datetime
+    from kis_api import get_current_price, get_exchange_code
     
     try:
         with get_connection() as conn:
             with conn.cursor() as cursor:
-                # 모든 활성 종목 조회 (5분 조건 제거 - 사용자 요청 시 즉시 업데이트)
+                # 자동 업데이트 대상 종목 조회 (수동 입력 제외)
                 sql = """
-                    SELECT ticker, name 
+                    SELECT ticker, name, exchange, is_manual_price
                     FROM managed_stocks 
                     WHERE is_active = TRUE
                 """
                 cursor.execute(sql)
                 rows = cursor.fetchall()
                 
-                print(f"🔍 DB 조회 결과: {len(rows)}개 행, 타입: {type(rows)}")
-                if rows:
-                    print(f"   첫 번째 행: {rows[0]}, 타입: {type(rows[0])}")
-                
-                # DictCursor를 사용하므로 row는 딕셔너리
-                stocks = []
-                for i, row in enumerate(rows):
-                    try:
-                        if isinstance(row, dict) and 'ticker' in row:
-                            stocks.append({
-                                'ticker': row['ticker'],
-                                'name': row['name']
-                            })
-                        else:
-                            print(f"  ⚠️ 행 {i} 형식 오류: {row}, 타입: {type(row)}")
-                    except Exception as e:
-                        print(f"  ❌ 행 {i} 처리 실패: {e}, 데이터: {row}")
-                        continue
-                
-                if not stocks:
+                if not rows:
                     print("⚠️ 등록된 종목이 없습니다")
                     return False
                 
-                print(f"📊 {len(stocks)}개 종목 현재가 업데이트 시작...")
+                print(f"📊 {len(rows)}개 종목 현재가 업데이트 시작...")
                 
                 updated_count = 0
-                for stock in stocks:
-                    ticker = stock['ticker']
+                skipped_count = 0
+                failed_count = 0
+                
+                for row in rows:
+                    ticker = row['ticker']
+                    name = row['name']
+                    exchange = row.get('exchange')
+                    is_manual = row.get('is_manual_price', False)
                     
-                    if not ticker:
-                        print(f"  ⚠️ 종목 코드가 없습니다: {stock}")
+                    # 수동 입력값은 보호
+                    if is_manual:
+                        print(f"  ⏭️ {ticker} - 수동 입력값 유지")
+                        skipped_count += 1
                         continue
                     
                     try:
-                        # KIS API로 현재가 조회
-                        print(f"  🔍 {ticker} 현재가 조회 중...")
-                        price_data = kis_client.get_price(ticker)
+                        # 거래소 코드 자동 감지
+                        if not exchange:
+                            exchange = get_exchange_code(ticker)
                         
-                        if price_data and price_data.get('price'):
-                            current_price = float(price_data['price'])
-                            is_market_open = True
+                        # KIS API로 현재가 조회
+                        print(f"  🔍 {ticker} ({exchange}) 조회 중...")
+                        price_data = get_current_price(ticker, exchange)
+                        
+                        if price_data and price_data.get('price', 0) > 0:
+                            current_price = price_data['price']
+                            is_market_open = price_data.get('is_open', True)
                             
                             # 현재가 업데이트
                             update_sql = """
                                 UPDATE managed_stocks 
                                 SET current_price = %s, 
                                     price_updated_at = NOW(), 
-                                    is_market_open = %s 
+                                    is_market_open = %s,
+                                    exchange = %s
                                 WHERE ticker = %s
                             """
-                            cursor.execute(update_sql, (current_price, is_market_open, ticker))
+                            cursor.execute(update_sql, (current_price, is_market_open, exchange, ticker))
                             updated_count += 1
                             print(f"  ✅ {ticker}: ${current_price:.2f}")
                         else:
-                            # 가격 데이터 없음 (휴장일 가능성)
+                            # 가격 데이터 없음 (휴장일 또는 오류)
                             update_sql = """
                                 UPDATE managed_stocks 
                                 SET is_market_open = FALSE, 
-                                    price_updated_at = NOW() 
+                                    price_updated_at = NOW(),
+                                    exchange = %s
                                 WHERE ticker = %s
                             """
-                            cursor.execute(update_sql, (ticker,))
-                            print(f"  ⚠️ {ticker}: 가격 데이터 없음 (휴장일 가능)")
-                            
+                            cursor.execute(update_sql, (exchange, ticker))
+                            failed_count += 1
+                            print(f"  ⚠️ {ticker}: 가격 조회 실패 (휴장 또는 오류)")
+                    
                     except Exception as e:
-                        print(f"  ❌ {ticker} 가격 조회 실패: {e}")
-                        import traceback
-                        traceback.print_exc()
+                        print(f"  ❌ {ticker} 업데이트 오류: {e}")
+                        failed_count += 1
                         continue
                 
                 conn.commit()
-                print(f"✅ 현재가 업데이트 완료: {updated_count}/{len(stocks)}개 성공")
+                print(f"\n✅ 업데이트 완료: {updated_count}개 성공, {skipped_count}개 스킵(수동), {failed_count}개 실패")
                 return True
                 
     except Exception as e:

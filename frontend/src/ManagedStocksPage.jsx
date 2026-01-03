@@ -5,6 +5,8 @@ const ManagedStocksPage = () => {
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingStock, setEditingStock] = useState(null);
+    const [editingPrice, setEditingPrice] = useState(null); // 수동 가격 입력 중인 종목
+    const [manualPrice, setManualPrice] = useState(''); // 수동 입력 가격
     const [formData, setFormData] = useState({
         ticker: '',
         name: '',
@@ -108,6 +110,39 @@ const ManagedStocksPage = () => {
         }
     };
 
+    const handlePriceEdit = (stock) => {
+        setEditingPrice(stock.id);
+        setManualPrice(stock.current_price || '');
+    };
+
+    const handlePriceSave = async (id) => {
+        const price = parseFloat(manualPrice);
+        if (isNaN(price) || price <= 0) {
+            alert('유효한 가격을 입력하세요');
+            return;
+        }
+
+        try {
+            const res = await fetch(`/api/managed-stocks/${id}/manual-price`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ price })
+            });
+            if (res.ok) {
+                setEditingPrice(null);
+                setManualPrice('');
+                fetchData();
+            }
+        } catch (e) {
+            console.error("Price update failed", e);
+        }
+    };
+
+    const handlePriceCancel = () => {
+        setEditingPrice(null);
+        setManualPrice('');
+    };
+
     // Grouping
     const groups = stocks.reduce((acc, stock) => {
         const g = stock.group_name || 'Uncategorized';
@@ -160,6 +195,7 @@ const ManagedStocksPage = () => {
                             <thead>
                                 <tr style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-secondary)' }}>
                                     <th style={{ padding: '12px', textAlign: 'left' }}>Ticker / Name</th>
+                                    <th style={{ padding: '12px', textAlign: 'right' }}>현재가</th>
                                     <th style={{ padding: '12px', textAlign: 'left' }}>전략 (Strategy)</th>
                                     <th style={{ padding: '12px', textAlign: 'center' }}>비중</th>
                                     <th style={{ padding: '12px', textAlign: 'center' }}>목표 수익</th>
@@ -172,6 +208,83 @@ const ManagedStocksPage = () => {
                                         <td style={{ padding: '12px' }}>
                                             <div style={{ fontWeight: 'bold', fontSize: '1.2rem', color: 'white' }}>{stock.ticker}</div>
                                             <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{stock.name || '-'}</div>
+                                        </td>
+                                        <td style={{ padding: '12px', textAlign: 'right' }}>
+                                            {editingPrice === stock.id ? (
+                                                <div style={{ display: 'flex', gap: '5px', justifyContent: 'flex-end', alignItems: 'center' }}>
+                                                    <input
+                                                        type="number"
+                                                        step="0.01"
+                                                        value={manualPrice}
+                                                        onChange={(e) => setManualPrice(e.target.value)}
+                                                        style={{
+                                                            width: '80px',
+                                                            padding: '4px 8px',
+                                                            background: 'rgba(0,0,0,0.3)',
+                                                            border: '1px solid var(--accent-blue)',
+                                                            color: 'white',
+                                                            borderRadius: '4px',
+                                                            fontSize: '0.9rem'
+                                                        }}
+                                                        autoFocus
+                                                    />
+                                                    <button
+                                                        onClick={() => handlePriceSave(stock.id)}
+                                                        style={{
+                                                            padding: '4px 8px',
+                                                            fontSize: '0.75rem',
+                                                            background: 'var(--accent-blue)',
+                                                            border: 'none',
+                                                            color: 'white',
+                                                            borderRadius: '4px',
+                                                            cursor: 'pointer'
+                                                        }}
+                                                    >
+                                                        ✓
+                                                    </button>
+                                                    <button
+                                                        onClick={handlePriceCancel}
+                                                        style={{
+                                                            padding: '4px 8px',
+                                                            fontSize: '0.75rem',
+                                                            background: 'rgba(255,255,255,0.1)',
+                                                            border: 'none',
+                                                            color: 'white',
+                                                            borderRadius: '4px',
+                                                            cursor: 'pointer'
+                                                        }}
+                                                    >
+                                                        ✕
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <div style={{ display: 'flex', gap: '5px', justifyContent: 'flex-end', alignItems: 'center' }}>
+                                                    <div style={{
+                                                        fontSize: '1rem',
+                                                        fontWeight: 'bold',
+                                                        color: stock.is_manual_price ? 'var(--accent-gold)' : 'white'
+                                                    }}>
+                                                        ${stock.current_price ? stock.current_price.toFixed(2) : '0.00'}
+                                                    </div>
+                                                    {stock.is_manual_price && (
+                                                        <span style={{ fontSize: '0.7rem', color: 'var(--accent-gold)' }} title="수동 입력값">✋</span>
+                                                    )}
+                                                    <button
+                                                        onClick={() => handlePriceEdit(stock)}
+                                                        style={{
+                                                            padding: '2px 6px',
+                                                            fontSize: '0.7rem',
+                                                            background: 'rgba(255,255,255,0.05)',
+                                                            border: '1px solid rgba(255,255,255,0.2)',
+                                                            color: '#888',
+                                                            borderRadius: '3px',
+                                                            cursor: 'pointer'
+                                                        }}
+                                                    >
+                                                        ✏️
+                                                    </button>
+                                                </div>
+                                            )}
                                         </td>
                                         <td style={{ padding: '12px' }}>
                                             <div style={{ marginBottom: '6px' }}>

@@ -356,12 +356,22 @@ def update_managed_stock_api(id: int, data: dict):
         return {"status": "success"}
     return {"status": "error"}
 
+@app.put("/api/managed-stocks/{id}/manual-price")
+def update_manual_price_api(id: int, data: dict):
+    """수동으로 현재가 입력 (자동 업데이트 제외)"""
+    from db import update_manual_price
+    price = data.get('price')
+    if price is not None and update_manual_price(id, price):
+        return {"status": "success"}
+    return {"status": "error", "message": "가격 정보가 필요합니다"}
+
 @app.delete("/api/managed-stocks/{id}")
 def delete_managed_stock_api(id: int):
     from db import delete_managed_stock
     if delete_managed_stock(id):
         return {"status": "success"}
     return {"status": "error"}
+
 
 @app.get("/api/dashboard-settings")
 def api_get_dashboard_settings():

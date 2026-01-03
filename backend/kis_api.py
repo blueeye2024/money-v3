@@ -101,3 +101,54 @@ class KisApi:
 
 # Singleton instance
 kis_client = KisApi()
+
+def get_exchange_code(ticker):
+    """
+    종목 코드로 거래소 추정
+    
+    Args:
+        ticker: 종목 코드
+    
+    Returns:
+        str: 거래소 코드 (NAS/NYS/AMS)
+    """
+    # 나스닥 주요 종목
+    nasdaq_tickers = [
+        'TSLA', 'GOOGL', 'GOOG', 'AAPL', 'MSFT', 'AMZN', 'META', 'NVDA',
+        'IONQ', 'SOXL', 'SOXS', 'TQQQ', 'SQQQ', 'QQQ', 'PLTR', 'AMD', 'UFO'
+    ]
+    
+    # 아멕스 ETF
+    amex_tickers = ['TMF', 'TLT', 'GLD', 'SLV', 'AAAU']
+    
+    if ticker in nasdaq_tickers:
+        return 'NAS'
+    elif ticker in amex_tickers:
+        return 'AMS'
+    else:
+        # 기본값: 뉴욕증권거래소
+        return 'NYS'
+
+def get_current_price(ticker, exchange=None):
+    """
+    해외 주식 현재가 조회 (kis_client 래퍼)
+    
+    Args:
+        ticker: 종목 코드
+        exchange: 거래소 코드 (NAS/NYS/AMS), None이면 자동 감지
+    
+    Returns:
+        dict: {'price': float, 'is_open': bool} 또는 None
+    """
+    if not exchange:
+        exchange = get_exchange_code(ticker)
+    
+    result = kis_client.get_price(ticker, exchange)
+    
+    if result and result.get('price'):
+        return {
+            'price': result['price'],
+            'is_open': True  # KIS API가 응답하면 개장 중
+        }
+    
+    return None
