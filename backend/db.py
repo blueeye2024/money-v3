@@ -1089,13 +1089,24 @@ def update_stock_prices():
                 cursor.execute(sql)
                 rows = cursor.fetchall()
                 
+                print(f"🔍 DB 조회 결과: {len(rows)}개 행, 타입: {type(rows)}")
+                if rows:
+                    print(f"   첫 번째 행: {rows[0]}, 타입: {type(rows[0])}")
+                
                 # 수동으로 딕셔너리 변환
                 stocks = []
-                for row in rows:
-                    stocks.append({
-                        'ticker': row[0],
-                        'name': row[1]
-                    })
+                for i, row in enumerate(rows):
+                    try:
+                        if isinstance(row, (list, tuple)) and len(row) >= 2:
+                            stocks.append({
+                                'ticker': row[0],
+                                'name': row[1]
+                            })
+                        else:
+                            print(f"  ⚠️ 행 {i} 형식 오류: {row}, 타입: {type(row)}")
+                    except Exception as e:
+                        print(f"  ❌ 행 {i} 처리 실패: {e}, 데이터: {row}")
+                        continue
                 
                 if not stocks:
                     print("⚠️ 등록된 종목이 없습니다")
