@@ -1,436 +1,434 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
-
-const TabButton = ({ active, onClick, children, icon }) => (
-    <button
-        onClick={onClick}
-        style={{
-            padding: '0.6rem 1.2rem',
-            background: active ? 'var(--accent-blue)' : 'transparent',
-            color: active ? 'white' : 'var(--text-secondary)',
-            border: 'none',
-            borderRadius: '8px',
-            cursor: 'pointer',
-            fontWeight: 'bold',
-            fontSize: '0.9rem',
-            transition: 'all 0.2s',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
-        }}
-    >
-        <span>{icon}</span> {children}
-    </button>
-);
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 
 const JournalPage = () => {
-    // === State ===
-    const [stocks, setStocks] = useState([]);
     const [transactions, setTransactions] = useState([]);
-    const [stats, setStats] = useState([]);
-    const [signalHistory, setSignalHistory] = useState([]); // Master Signal History
-    const [view, setView] = useState('journal'); // 'journal' | 'stocks'
-
-    const [exchangeRate, setExchangeRate] = useState(1350);
-    const [prices, setPrices] = useState({}); // {ticker: current_price}
-    const [marketRegime, setMarketRegime] = useState(null);
-    const [totalCapitalKRW, setTotalCapitalKRW] = useState(0);  // Store in KRW
-    const [capitalLoading, setCapitalLoading] = useState(false);
-
-    // Form State (Journal)
-    const getLocalISOString = () => {
-        const now = new Date();
-        const offset = now.getTimezoneOffset() * 60000;
-        return (new Date(now - offset)).toISOString().slice(0, 16);
-    };
-
-    const [formData, setFormData] = useState({
-        id: null,
-        ticker: '',
-        trade_type: 'BUY',
-        qty: '',
-        price: '',
-        trade_date: getLocalISOString(),
-        memo: ''
-    });
-
-    // Form State (Stock Manager)
+    const [stocks, setStocks] = useState([]);
+    const [currentPrices, setCurrentPrices] = useState({});
+    const [exchangeRate, setExchangeRate] = useState(1444.5);
+    const [totalCapitalKRW, setTotalCapitalKRW] = useState(14445000);
+    const [capitalInput, setCapitalInput] = useState('14445000');
+    const [showForm, setShowForm] = useState(false);
+    const [showStockManager, setShowStockManager] = useState(false);
+    const [showMemoPopup, setShowMemoPopup] = useState(false);
+    const [selectedMemo, setSelectedMemo] = useState({ ticker: '', memo: '' });
+    const [loading, setLoading] = useState(true);
     const [stockForm, setStockForm] = useState({ code: '', name: '' });
+    const [form, setForm] = useState({ ticker: '', qty: 1, price: '', memo: '' });
+    const [editingId, setEditingId] = useState(null);
 
-    // === Effects ===
-    useEffect(() => {
-        fetchStocks();
-        fetchTransactions();
-        fetchStats();
-        fetchExchangeRate();
-        fetchCurrentPrices();
-        fetchCapital();
-        fetchSignalHistory();
+    useEffect(() => { fetchAll(); }, []);
 
-        // Auto Refresh every 1 min for real-time signals
-        const interval = setInterval(() => {
-            fetchCurrentPrices();
-            fetchExchangeRate();
-            fetchSignalHistory();
-        }, 60000);
-        return () => clearInterval(interval);
-    }, []);
-
-    const fetchSignalHistory = async () => {
+    const fetchAll = async () => {
+        setLoading(true);
         try {
-            const res = await fetch('/api/signals?limit=10'); // Fetch last 10 signals
-            if (res.ok) setSignalHistory(await res.json());
-        } catch (e) { console.error(e); }
-    };
-
-    const fetchCapital = async () => {
-        try {
-            const res = await fetch('/api/capital');
-            if (res.ok) {
-                const d = await res.json();
-                setTotalCapitalKRW(Math.round(d.amount * 1350));
-            }
-        } catch (e) { console.error(e); }
-    };
-
-    useEffect(() => {
-        if (exchangeRate > 0) {
-            const reloadCapital = async () => {
-                const res = await fetch('/api/capital');
-                if (res.ok) {
-                    const d = await res.json();
-                    setTotalCapitalKRW(Math.round(d.amount * exchangeRate));
-                }
-            };
-            reloadCapital();
+            await Promise.all([fetchTransactions(), fetchStocks(), fetchCurrentPrices(), fetchCapital()]);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setLoading(false);
         }
-    }, [exchangeRate]);
-
-    const saveCapital = async (val) => {
-        setCapitalLoading(true);
-        try {
-            const usdAmount = parseFloat(val) / exchangeRate;
-            await fetch('/api/capital', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ amount: usdAmount })
-            });
-        } catch (e) { console.error(e); }
-        setCapitalLoading(false);
     };
 
-    const fetchCurrentPrices = async () => {
+    const fetchTransactions = async () => {
         try {
-            const res = await fetch('/api/report');
-            if (res.ok) {
-                const data = await res.json();
-                setMarketRegime(data.market_regime);
-                const priceMap = {};
-                if (data.stocks) {
-                    data.stocks.forEach(s => {
-                        priceMap[s.ticker] = s.current_price;
-                    });
-                }
-                setPrices(priceMap);
-            }
-        } catch (e) { console.error(e); }
-    };
-
-    const fetchExchangeRate = async () => {
-        try {
-            const res = await fetch('/api/exchange-rate');
-            if (res.ok) {
-                const data = await res.json();
-                setExchangeRate(data.rate);
-            }
+            const res = await axios.get('/api/transactions');
+            setTransactions(res.data || []);
         } catch (e) { console.error(e); }
     };
 
     const fetchStocks = async () => {
         try {
-            const res = await fetch('/api/stocks');
-            if (res.ok) setStocks(await res.json());
+            const res = await axios.get('/api/stocks');
+            setStocks(res.data || []);
         } catch (e) { console.error(e); }
     };
 
-    const fetchTransactions = async () => {
+    const fetchCurrentPrices = async () => {
         try {
-            const res = await fetch('/api/transactions');
-            if (res.ok) setTransactions(await res.json());
-        } catch (e) { console.error(e); }
-    };
+            const res = await axios.get('/api/report');
+            const priceMap = {};
+            if (res.data.market_regime?.details) {
+                const d = res.data.market_regime.details;
+                if (d.soxl?.current_price) priceMap['SOXL'] = d.soxl.current_price;
+                if (d.soxs?.current_price) priceMap['SOXS'] = d.soxs.current_price;
+                if (d.upro?.current_price) priceMap['UPRO'] = d.upro.current_price;
 
-    const fetchStats = async () => {
-        try {
-            const res = await fetch('/api/transactions/stats');
-            if (res.ok) setStats(await res.json());
-        } catch (e) { console.error(e); }
-    };
-
-    const handleStockSubmit = async (e) => {
-        e.preventDefault();
-        const res = await fetch('/api/stocks', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(stockForm)
-        });
-        if (res.ok) {
-            alert("종목이 등록되었습니다.");
-            setStockForm({ code: '', name: '' });
-            fetchStocks();
+                console.log('API 응답 details:', d); // 디버깅
+                console.log('현재가 데이터:', priceMap); // 디버깅
+            } else {
+                console.log('market_regime.details가 없습니다:', res.data);
+            }
+            if (res.data.market?.KRW) setExchangeRate(res.data.market.KRW.value || 1444.5);
+            setCurrentPrices(priceMap);
+        } catch (e) {
+            console.error('현재가 가져오기 실패:', e);
         }
     };
 
-    const deleteStock = async (code) => {
-        if (!confirm("정말 삭제하시겠습니까? 관련 매매 기록도 삭제될 수 있습니다.")) return;
-        const res = await fetch(`/api/stocks/${code}`, { method: 'DELETE' });
-        if (res.ok) fetchStocks();
+    const fetchCapital = async () => {
+        try {
+            const res = await axios.get('/api/capital');
+            const cap = res.data.amount || 14445000;
+            setTotalCapitalKRW(cap);
+            setCapitalInput(String(cap));
+        } catch (e) { console.error(e); }
     };
 
-    const handleTxSubmit = async (e) => {
-        e.preventDefault();
-        const qty = parseInt(formData.qty);
-        const price = parseFloat(formData.price);
-        if (isNaN(qty) || isNaN(price)) return;
-
-        const payload = { ...formData, qty, price };
-        if (!formData.id) delete payload.id;
-
-        const url = formData.id ? `/api/transactions/${formData.id}` : '/api/transactions';
-        const method = formData.id ? 'PUT' : 'POST';
-
-        const res = await fetch(url, {
-            method: method,
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-
-        if (res.ok) {
-            setFormData({
-                id: null, ticker: formData.ticker,
-                trade_type: 'BUY', qty: '', price: '',
-                trade_date: getLocalISOString(), memo: ''
-            });
-            fetchTransactions();
-            fetchStats();
+    const saveCapital = async () => {
+        try {
+            const val = parseFloat(capitalInput) || 14445000;
+            await axios.post('/api/capital', { amount: val });
+            setTotalCapitalKRW(val);
+            alert('총자산이 저장되었습니다.');
+        } catch (e) {
+            console.error(e);
+            alert('저장 실패');
         }
     };
 
-    const editTx = (tx) => {
-        setFormData({
-            id: tx.id, ticker: tx.ticker, trade_type: tx.trade_type,
-            qty: tx.qty, price: tx.price, trade_date: tx.trade_date, memo: tx.memo
-        });
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        try {
+            // Add trade_date (current date in YYYY-MM-DD format)
+            const today = new Date().toISOString().split('T')[0];
+            // 무조건 BUY로 고정
+            const dataToSend = { ...form, trade_type: 'BUY', trade_date: today };
+
+            // 같은 종목이 있는지 확인
+            const existingTx = transactions.find(tx => tx.ticker === form.ticker);
+
+            if (existingTx && !editingId) {
+                // 같은 종목이 있으면 경고 메시지 표시
+                alert(`${form.ticker} 종목이 이미 등록되어 있습니다.\n수정 모드로 전환합니다.`);
+                // 수정 모드로 전환
+                setForm({
+                    ticker: existingTx.ticker,
+                    qty: existingTx.qty,
+                    price: existingTx.price,
+                    memo: existingTx.memo || ''
+                });
+                setEditingId(existingTx.id);
+                return; // 저장하지 않고 종료
+            } else if (editingId) {
+                // 수정 모드
+                await axios.put(`/api/transactions/${editingId}`, dataToSend);
+            } else {
+                // 새로 추가
+                await axios.post('/api/transactions', dataToSend);
+            }
+
+            setForm({ ticker: '', qty: 1, price: '', memo: '' });
+            setEditingId(null);
+            setShowForm(false);
+            await fetchTransactions();
+            await fetchCurrentPrices(); // 현재가 재로드
+        } catch (e) {
+            console.error('저장 오류:', e);
+            alert('저장 실패: ' + (e.response?.data?.detail || e.message));
+        }
+    };
+
+    const handleEdit = (tx) => {
+        setForm({ ticker: tx.ticker, qty: tx.qty, price: tx.price, memo: tx.memo || '' });
+        setEditingId(tx.id);
+        setShowForm(true);
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
-    const deleteTx = async (id) => {
-        if (!confirm("삭제하시겠습니까?")) return;
-        const res = await fetch(`/api/transactions/${id}`, { method: 'DELETE' });
-        if (res.ok) {
+    const handleDelete = async (id) => {
+        if (!window.confirm('삭제하시겠습니까?')) return;
+        try {
+            await axios.delete(`/api/transactions/${id}`);
             fetchTransactions();
-            fetchStats();
-        }
+        } catch (e) { alert('삭제 실패'); }
     };
 
-    const getStockProfit = (ticker) => {
-        return stats.filter(s => s.ticker === ticker).reduce((sum, item) => sum + item.profit, 0);
+    const handleAddStock = async (e) => {
+        e.preventDefault();
+        try {
+            await axios.post('/api/stocks', stockForm);
+            setStockForm({ code: '', name: '' });
+            fetchStocks();
+        } catch (e) { alert('추가 실패'); }
     };
 
-    const groupedTransactions = transactions.reduce((acc, tx) => {
-        if (!acc[tx.ticker]) acc[tx.ticker] = [];
-        acc[tx.ticker].push(tx);
-        return acc;
-    }, {});
+    const handleDeleteStock = async (code) => {
+        if (!confirm(`${code} 종목을 삭제하시겠습니까?`)) return;
+        try {
+            await axios.delete(`/api/stocks/${code}`);
+            fetchStocks();
+        } catch (e) { alert('삭제 실패'); }
+    };
 
-    const sortedTickers = Object.keys(groupedTransactions).sort();
+    const calculateHoldings = () => {
+        const holdings = {};
 
-    const { totalInvested, totalUnrealized } = useMemo(() => {
-        if (!transactions || transactions.length === 0) return { totalInvested: 0, totalUnrealized: 0 };
-        let invested = 0;
-        let unrealized = 0;
-
-        const grouped = transactions.reduce((acc, tx) => {
-            if (!acc[tx.ticker]) acc[tx.ticker] = [];
-            acc[tx.ticker].push(tx);
-            return acc;
-        }, {});
-
-        Object.keys(grouped).forEach(ticker => {
-            const txs = grouped[ticker];
-            const queue = [];
-            [...txs].sort((a, b) => new Date(a.trade_date) - new Date(b.trade_date)).forEach(tx => {
-                if (tx.trade_type === 'BUY') queue.push({ price: tx.price, qty: tx.qty });
-                else {
-                    let sell = tx.qty;
-                    while (sell > 0 && queue.length) {
-                        let batch = queue[0];
-                        if (batch.qty > sell) { batch.qty -= sell; sell = 0; }
-                        else { sell -= batch.qty; queue.shift(); }
-                    }
-                }
-            });
-
-            const netQty = queue.reduce((acc, q) => acc + q.qty, 0);
-            const cost = queue.reduce((acc, q) => acc + (q.price * q.qty), 0);
-            const curPrice = prices[ticker] || 0;
-
-            if (netQty > 0) {
-                invested += cost;
-                if (curPrice > 0) {
-                    unrealized += ((netQty * curPrice) - cost);
-                }
+        // 각 종목의 최신 거래만 사용 (누적이 아닌 단일 보유 현황)
+        transactions.forEach(tx => {
+            if (tx.trade_type === 'BUY') {
+                holdings[tx.ticker] = {
+                    qty: tx.qty,
+                    avgPrice: tx.price,
+                    totalCost: tx.qty * tx.price,
+                    latestTrade: tx
+                };
             }
         });
-        return { totalInvested: invested, totalUnrealized: unrealized };
-    }, [transactions, prices]);
 
-    const getPeriod = (txList) => {
-        if (!txList || txList.length === 0) return '-';
-        const dates = txList.map(t => new Date(t.trade_date).getTime());
-        const min = new Date(Math.min(...dates));
-        const max = new Date(Math.max(...dates));
-        return `${min.toLocaleDateString()} ~ ${max.toLocaleDateString()}`;
+        Object.keys(holdings).forEach(ticker => {
+            const h = holdings[ticker];
+            if (h.qty > 0) {
+                h.currentPrice = currentPrices[ticker] || h.avgPrice; // API 현재가 우선, 없으면 마지막 거래 가격
+                h.currentValue = h.qty * h.currentPrice;
+                h.currentValueKRW = h.currentValue * exchangeRate;
+                h.profit = h.currentValue - h.totalCost;
+                h.profitPct = (h.profit / h.totalCost) * 100;
+                const stock = stocks.find(s => s.code === ticker);
+                h.name = stock ? stock.name : ticker;
+            } else {
+                delete holdings[ticker];
+            }
+        });
+        return holdings;
     };
 
+    const holdings = calculateHoldings();
+    const totalValueUSD = Object.values(holdings).reduce((sum, h) => sum + h.currentValue, 0);
+    const totalValueKRW = totalValueUSD * exchangeRate;
+    const totalCapitalUSD = totalCapitalKRW / exchangeRate;
+    const totalProfit = totalValueUSD - totalCapitalUSD;
+    const totalProfitPct = totalCapitalUSD > 0 ? (totalProfit / totalCapitalUSD) * 100 : 0;
+
+    // 비중 계산 및 비중 높은 순으로 정렬
+    Object.values(holdings).forEach(h => {
+        h.weight = totalValueUSD > 0 ? (h.currentValue / totalValueUSD) * 100 : 0;
+    });
+
+    const sortedHoldings = Object.entries(holdings).sort((a, b) => b[1].weight - a[1].weight);
+
     return (
-        <div className="container" style={{ paddingBottom: '6rem' }}>
+        <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '2rem', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
+            {/* Header */}
+            <div style={{ marginBottom: '3rem' }}>
+                <h1 style={{ fontSize: '2.5rem', fontWeight: '700', margin: '0 0 0.5rem 0', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                    Portfolio
+                </h1>
+                <p style={{ fontSize: '1.1rem', color: '#8e8e93', margin: 0 }}>투자 포트폴리오 관리</p>
+            </div>
 
-            {/* Header Area */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2rem', flexWrap: 'wrap', gap: '1.5rem' }}>
-                <div>
-                    <h1 className="text-gradient" style={{ margin: 0, fontWeight: 700, fontSize: 'clamp(1.5rem, 5vw, 2.2rem)' }}>매매 일지 & 수익률 분석</h1>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '1.2rem', marginTop: '1rem' }}>
-                        <p style={{ color: 'var(--text-secondary)', margin: 0 }}>나만의 트레이딩 기록과 성과를 관리하세요.</p>
-
-                        {/* Current Regime (UPRO based) */}
-                        {marketRegime?.details?.upro_status && (
-                            <div style={{
-                                display: 'flex', alignItems: 'center', gap: '10px',
-                                background: 'rgba(255,255,255,0.06)', padding: '6px 16px', borderRadius: '30px',
-                                border: '1px solid rgba(255,255,255,0.1)', fontSize: '0.9rem',
-                                boxShadow: '0 4px 10px rgba(0,0,0,0.2)'
-                            }}>
-                                <span style={{ color: '#aaa', fontWeight: 'bold' }}>CURRENT REGIME:</span>
-                                <span style={{
-                                    fontWeight: '900',
-                                    color: marketRegime.details.upro_status.label === '상승장' ? '#f87171' : marketRegime.details.upro_status.label === '하락장' ? '#60a5fa' : '#ccc'
-                                }}>
-                                    {marketRegime.details.upro_status.label}
-                                    ({marketRegime.details.upro_status.change_pct >= 0 ? '+' : ''}{marketRegime.details.upro_status.change_pct}%)
-                                </span>
-                            </div>
-                        )}
+            {/* Summary Cards */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem', marginBottom: '3rem' }}>
+                <div style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', borderRadius: '20px', padding: '2rem', boxShadow: '0 10px 40px rgba(102, 126, 234, 0.3)', transition: 'transform 0.2s', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-5px)'} onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}>
+                    <div style={{ fontSize: '0.9rem', color: 'rgba(255,255,255,0.8)', marginBottom: '1rem', fontWeight: '500' }}>총 자산</div>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', marginBottom: '1rem' }}>
+                        <input type="number" value={capitalInput} onChange={(e) => setCapitalInput(e.target.value)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', padding: '0.5rem', borderRadius: '10px', fontSize: '1.8rem', fontWeight: '700', width: '180px', outline: 'none' }} />
+                        <span style={{ fontSize: '1.2rem', color: 'white', fontWeight: '600' }}>원</span>
+                    </div>
+                    <button onClick={saveCapital} style={{ background: 'rgba(255,255,255,0.25)', backdropFilter: 'blur(10px)', border: 'none', color: 'white', padding: '0.75rem 1.5rem', borderRadius: '12px', cursor: 'pointer', fontWeight: '600', fontSize: '0.95rem', width: '100%', transition: 'all 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.35)'} onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.25)'}>
+                        저장
+                    </button>
+                    <div style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.7)', marginTop: '1rem' }}>
+                        ≈ ${totalCapitalUSD.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                     </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: '0.75rem', background: 'rgba(255,255,255,0.05)', padding: '0.4rem', borderRadius: '10px' }}>
-                    <TabButton active={view === 'journal'} onClick={() => setView('journal')} icon="📝">일지</TabButton>
-                    <TabButton active={view === 'stocks'} onClick={() => setView('stocks')} icon="💼">포트폴리오</TabButton>
+                <div style={{ background: 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 50%, #93c5fd 100%)', borderRadius: '20px', padding: '2rem', boxShadow: '0 4px 20px rgba(59,130,246,0.2)', border: '1px solid rgba(147,197,253,0.3)' }}>
+                    <div style={{ fontSize: '0.9rem', color: '#1e40af', marginBottom: '1rem', fontWeight: '500' }}>평가 금액</div>
+                    <div style={{ fontSize: '2.5rem', fontWeight: '700', color: '#1e3a8a', marginBottom: '0.5rem' }}>
+                        ${totalValueUSD.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    </div>
+                    <div style={{ fontSize: '1rem', color: '#3b82f6', marginBottom: '1.5rem' }}>
+                        {totalValueKRW.toLocaleString(undefined, { maximumFractionDigits: 0 })}원
+                    </div>
+                    <div style={{ borderTop: '1px solid rgba(59,130,246,0.2)', paddingTop: '1rem', marginTop: '1rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                            <span style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: '500' }}>현금 비중</span>
+                            <span style={{ fontSize: '1.1rem', color: '#1e3a8a', fontWeight: '700' }}>
+                                {((totalCapitalUSD - totalValueUSD) / totalCapitalUSD * 100).toFixed(1)}%
+                            </span>
+                        </div>
+                        <div style={{ fontSize: '0.85rem', color: '#64748b' }}>
+                            ${(totalCapitalUSD - totalValueUSD).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                            <span style={{ marginLeft: '0.5rem' }}>(
+                                {((totalCapitalUSD - totalValueUSD) * exchangeRate).toLocaleString(undefined, { maximumFractionDigits: 0 })}원
+                                )</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div style={{ background: totalProfit >= 0 ? 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)' : 'linear-gradient(135deg, #eb3349 0%, #f45c43 100%)', borderRadius: '20px', padding: '2rem', boxShadow: totalProfit >= 0 ? '0 10px 40px rgba(17, 153, 142, 0.3)' : '0 10px 40px rgba(235, 51, 73, 0.3)' }}>
+                    <div style={{ fontSize: '0.9rem', color: 'rgba(255,255,255,0.8)', marginBottom: '1rem', fontWeight: '500' }}>평가 손익</div>
+                    <div style={{ fontSize: '2.5rem', fontWeight: '700', color: 'white', marginBottom: '0.5rem' }}>
+                        {totalProfit >= 0 ? '+' : ''}${totalProfit.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    </div>
+                    <div style={{ fontSize: '1.2rem', color: 'rgba(255,255,255,0.9)', fontWeight: '600' }}>
+                        {totalProfitPct >= 0 ? '+' : ''}{totalProfitPct.toFixed(2)}%
+                    </div>
                 </div>
             </div>
 
-            {
-                view === 'stocks' && (
-                    <div className="glass-panel" style={{ padding: '1.5rem' }}>
-                        <h2 style={{ fontSize: '1.5rem', marginBottom: '1.5rem', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '1rem' }}>💼 포트폴리오(관심 종목) 관리</h2>
-                        <form onSubmit={handleStockSubmit} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.5rem', alignItems: 'end', marginBottom: '3rem' }}>
-                            <div className="form-group"><label>종목 코드</label><input placeholder="예: SOXL" value={stockForm.code} onChange={e => setStockForm({ ...stockForm, code: e.target.value.toUpperCase() })} required className="input-field" /></div>
-                            <div className="form-group"><label>종목명</label><input placeholder="예: 반도체 3배" value={stockForm.name} onChange={e => setStockForm({ ...stockForm, name: e.target.value })} required className="input-field" /></div>
-                            <button type="submit" className="btn-submit">＋ 종목 등록</button>
-                        </form>
-                        <div className="grid-cards">
-                            {stocks.map(s => (
-                                <div key={s.code} className="glass-panel" style={{ padding: '1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <div><div style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{s.code}</div><div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{s.name}</div></div>
-                                    <button onClick={() => deleteStock(s.code)} style={{ color: 'var(--accent-red)', background: 'rgba(248, 113, 113, 0.1)', border: 'none', padding: '0.5rem 0.75rem', borderRadius: '6px', cursor: 'pointer' }}>삭제</button>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )
-            }
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
+                <button onClick={() => { setShowStockManager(!showStockManager); setShowForm(false); }} style={{ background: showStockManager ? '#f5f5f7' : 'white', border: '1px solid #d2d2d7', color: '#1d1d1f', padding: '0.75rem 1.5rem', borderRadius: '12px', cursor: 'pointer', fontWeight: '600', fontSize: '0.95rem', transition: 'all 0.2s', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }} onMouseEnter={(e) => e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)'} onMouseLeave={(e) => e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)'}>
+                    ⚙️ 종목 관리
+                </button>
+                <button onClick={() => { setShowForm(!showForm); setShowStockManager(false); }} style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', border: 'none', color: 'white', padding: '0.75rem 1.5rem', borderRadius: '12px', cursor: 'pointer', fontWeight: '600', fontSize: '0.95rem', transition: 'all 0.2s', boxShadow: '0 4px 12px rgba(102, 126, 234, 0.3)' }} onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'} onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}>
+                    + 보유 종목
+                </button>
+            </div>
 
-            {
-                view === 'journal' && (
-                    <>
-                        <div className="glass-panel summary-grid" style={{ padding: '1.5rem', marginBottom: '2rem', background: 'linear-gradient(135deg, rgba(30,41,59,0.7) 0%, rgba(15,23,42,0.8) 100%)' }}>
-                            <div className="summary-item main">
-                                <h3 style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Live Profit</h3>
-                                <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.75rem', flexWrap: 'wrap' }}>
-                                    <div style={{ fontSize: '2rem', fontWeight: '800', color: totalUnrealized >= 0 ? 'var(--accent-red)' : 'var(--accent-blue)' }}>{totalUnrealized > 0 ? '+' : ''}${totalUnrealized.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
-                                    <div style={{ fontSize: '1rem', color: 'var(--text-secondary)', fontWeight: 600 }}>(약 {(totalUnrealized * exchangeRate).toLocaleString(undefined, { maximumFractionDigits: 0 })}원)</div>
+            {/* Stock Manager */}
+            {showStockManager && (
+                <div style={{ background: 'linear-gradient(135deg, #bfdbfe 0%, #93c5fd 50%, #60a5fa 100%)', borderRadius: '20px', padding: '2rem', marginBottom: '2rem', boxShadow: '0 4px 20px rgba(59,130,246,0.2)', border: '1px solid rgba(147,197,253,0.3)', animation: 'slideDown 0.3s ease' }}>
+                    <h2 style={{ fontSize: '1.5rem', fontWeight: '700', marginBottom: '1.5rem', color: '#1e3a8a' }}>종목 관리</h2>
+                    <form onSubmit={handleAddStock} style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
+                        <input type="text" value={stockForm.code} onChange={(e) => setStockForm({ ...stockForm, code: e.target.value.toUpperCase() })} placeholder="종목 코드" required style={{ flex: 1, padding: '0.75rem 1rem', background: '#f5f5f7', border: 'none', borderRadius: '10px', fontSize: '0.95rem', outline: 'none', transition: 'all 0.2s' }} onFocus={(e) => e.currentTarget.style.background = '#e8e8ed'} onBlur={(e) => e.currentTarget.style.background = '#f5f5f7'} />
+                        <input type="text" value={stockForm.name} onChange={(e) => setStockForm({ ...stockForm, name: e.target.value })} placeholder="종목명" required style={{ flex: 2, padding: '0.75rem 1rem', background: '#f5f5f7', border: 'none', borderRadius: '10px', fontSize: '0.95rem', outline: 'none', transition: 'all 0.2s' }} onFocus={(e) => e.currentTarget.style.background = '#e8e8ed'} onBlur={(e) => e.currentTarget.style.background = '#f5f5f7'} />
+                        <button type="submit" style={{ padding: '0.75rem 1.5rem', background: '#007aff', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontWeight: '600', fontSize: '0.95rem' }}>추가</button>
+                    </form>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '1rem' }}>
+                        {stocks.map(stock => (
+                            <div key={stock.code} style={{ background: '#f5f5f7', padding: '1rem', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div>
+                                    <div style={{ fontWeight: '700', fontSize: '1.1rem', color: '#1d1d1f' }}>{stock.code}</div>
+                                    <div style={{ fontSize: '0.85rem', color: '#8e8e93' }}>{stock.name}</div>
                                 </div>
-                                <div style={{ marginTop: '1rem', paddingTop: '0.8rem', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                    <label style={{ fontSize: '0.85rem', color: '#ccc' }}>💰 총 자산 (KRW):</label>
-                                    <input type="number" className="input-field" style={{ width: '120px', height: '32px', textAlign: 'right', fontWeight: 'bold', color: 'var(--accent-gold)', padding: '0 0.5rem' }} value={totalCapitalKRW} onChange={(e) => setTotalCapitalKRW(e.target.value)} onBlur={(e) => saveCapital(e.target.value)} />
-                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>(Rate: {exchangeRate})</span>
-                                    {capitalLoading && <span style={{ fontSize: '0.8rem' }}>💾</span>}
-                                </div>
+                                <button onClick={() => handleDeleteStock(stock.code)} style={{ background: 'transparent', border: 'none', color: '#ff3b30', cursor: 'pointer', fontSize: '1.2rem', padding: '0.25rem' }}>×</button>
                             </div>
-                            <div className="summary-item"><div style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>Invested</div><div style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>${totalInvested.toLocaleString()}</div><div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>≈ {(totalInvested * exchangeRate).toLocaleString(undefined, { maximumFractionDigits: 0 })}원</div></div>
-                            <div className="summary-item"><div style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>Transactions</div><div style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{transactions.length} 건</div></div>
-                        </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
-                        <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '3rem', border: '1px solid rgba(56, 189, 248, 0.3)' }}>
-                            <h3 style={{ marginBottom: '1.25rem' }}>{formData.id ? '✏️ 매매 기록 수정' : '✨ 새 매매 기록 추가'}</h3>
-                            <form onSubmit={handleTxSubmit} className="journal-form-grid">
-                                <div className="form-group"><label>종목 선택</label><select value={formData.ticker} onChange={e => setFormData({ ...formData, ticker: e.target.value })} required className="input-field" style={{ fontWeight: 'bold' }}><option value="" style={{ color: 'black' }}>-- 선택 --</option>{stocks.map(s => <option key={s.code} value={s.code} style={{ color: 'black' }}>{s.name} ({s.code})</option>)}</select></div>
-                                <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                                    <label>매매 구분</label>
-                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                        <button type="button" onClick={() => setFormData({ ...formData, trade_type: 'BUY' })} style={{ flex: 1, height: '44px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', background: formData.trade_type === 'BUY' ? 'var(--accent-red)' : 'rgba(255,255,255,0.05)', color: formData.trade_type === 'BUY' ? 'white' : '#888', border: '1px solid rgba(255,255,255,0.1)' }}>📈 매수</button>
-                                        <button type="button" onClick={() => setFormData({ ...formData, trade_type: 'SELL' })} style={{ flex: 1, height: '44px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', background: formData.trade_type === 'SELL' ? 'var(--accent-blue)' : 'rgba(255,255,255,0.05)', color: formData.trade_type === 'SELL' ? 'white' : '#888', border: '1px solid rgba(255,255,255,0.1)' }}>📉 매도</button>
-                                    </div>
-                                </div>
-                                <div className="form-group"><label>거래 일시</label><input type="datetime-local" value={formData.trade_date} onChange={e => setFormData({ ...formData, trade_date: e.target.value })} required className="input-field" /></div>
-                                <div className="form-group"><label>가격 ($)</label><input type="number" step="0.01" value={formData.price} onChange={e => setFormData({ ...formData, price: e.target.value })} required className="input-field" /></div>
-                                <div className="form-group"><label>수량</label><input type="number" value={formData.qty} onChange={e => setFormData({ ...formData, qty: e.target.value })} required className="input-field" /></div>
-                                <div className="form-group" style={{ gridColumn: 'span 2' }}><label>메모</label><input value={formData.memo} onChange={e => setFormData({ ...formData, memo: e.target.value })} className="input-field" /></div>
-                                <button type="submit" className="btn-submit" style={{ gridColumn: '1 / -1' }}>{formData.id ? '수정 내용 저장' : '기록 저장'}</button>
-                                {formData.id && <button type="button" onClick={() => setFormData({ id: null, ticker: '', trade_type: 'BUY', qty: '', price: '', trade_date: getLocalISOString(), memo: '' })} style={{ gridColumn: '1 / -1', padding: '0.8rem', background: 'transparent', border: '1px solid #888', color: '#888', borderRadius: '8px', cursor: 'pointer' }}>취소</button>}
-                            </form>
+            {/* Transaction Form */}
+            {showForm && (
+                <div style={{ background: 'linear-gradient(135deg, #93c5fd 0%, #60a5fa 50%, #3b82f6 100%)', borderRadius: '20px', padding: '2rem', marginBottom: '2rem', boxShadow: '0 4px 20px rgba(59,130,246,0.2)', border: '1px solid rgba(147,197,253,0.3)', animation: 'slideDown 0.3s ease' }}>
+                    <h2 style={{ fontSize: '1.5rem', fontWeight: '700', marginBottom: '1.5rem', color: '#1d1d1f' }}>{editingId ? '보유 수정' : '보유 추가'}</h2>
+                    <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: '#1d1d1f', fontWeight: '600' }}>종목</label>
+                                <select value={form.ticker} onChange={(e) => setForm({ ...form, ticker: e.target.value })} required style={{ width: '100%', padding: '0.75rem 1rem', background: '#f5f5f7', border: 'none', borderRadius: '10px', fontSize: '0.95rem', outline: 'none', color: '#1d1d1f', fontWeight: '500' }}>
+                                    <option value="">선택</option>
+                                    {stocks.map(stock => (<option key={stock.code} value={stock.code}>{stock.code} - {stock.name}</option>))}
+                                </select>
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: '#1d1d1f', fontWeight: '600' }}>수량</label>
+                                <input type="number" value={form.qty} onChange={(e) => setForm({ ...form, qty: parseInt(e.target.value) || 1 })} min="1" required style={{ width: '100%', padding: '0.75rem 1rem', background: '#f5f5f7', border: 'none', borderRadius: '10px', fontSize: '0.95rem', outline: 'none', color: '#1d1d1f', fontWeight: '500' }} />
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: '#1d1d1f', fontWeight: '600' }}>가격 ($)</label>
+                                <input type="number" step="0.01" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} required style={{ width: '100%', padding: '0.75rem 1rem', background: '#f5f5f7', border: 'none', borderRadius: '10px', fontSize: '0.95rem', outline: 'none', color: '#1d1d1f', fontWeight: '500' }} />
+                            </div>
                         </div>
+                        <div>
+                            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: '#1d1d1f', fontWeight: '600' }}>매매 사유</label>
+                            <textarea value={form.memo} onChange={(e) => setForm({ ...form, memo: e.target.value })} rows="3" placeholder="매매 사유를 입력하세요..." style={{ width: '100%', padding: '0.75rem 1rem', background: '#f5f5f7', border: 'none', borderRadius: '10px', fontSize: '0.95rem', outline: 'none', resize: 'vertical', color: '#1d1d1f', fontFamily: 'inherit' }} />
+                        </div>
+                        <div style={{ display: 'flex', gap: '1rem' }}>
+                            <button type="button" onClick={() => { setForm({ ticker: '', trade_type: 'BUY', qty: 1, price: '', memo: '' }); setEditingId(null); setShowForm(false); }} style={{ flex: 1, padding: '0.85rem', background: 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)', color: '#1e3a8a', border: 'none', borderRadius: '12px', cursor: 'pointer', fontWeight: '600', fontSize: '0.95rem', transition: 'all 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.opacity = '0.8'} onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}>취소</button>
+                            <button type="submit" style={{ flex: 1, padding: '0.85rem', background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)', color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer', fontWeight: '600', fontSize: '0.95rem', boxShadow: '0 4px 12px rgba(59,130,246,0.3)', transition: 'all 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'} onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}>저장</button>
+                        </div>
+                    </form>
+                </div>
+            )}
 
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-                            {sortedTickers.map(ticker => {
-                                const stockTxs = groupedTransactions[ticker];
-                                const profit = getStockProfit(ticker);
-                                const period = getPeriod(stockTxs);
-                                const stockName = stockTxs[0].stock_name || ticker;
-                                return (
-                                    <div key={ticker} className="glass-panel" style={{ padding: '0', overflow: 'hidden' }}>
-                                        <div style={{ padding: '1.25rem', background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <div><h3 style={{ fontSize: '1.25rem', margin: 0 }}>{stockName} <span style={{ fontSize: '0.9rem', color: '#888' }}>({ticker})</span></h3><div style={{ fontSize: '0.8rem', color: '#888' }}>기간: {period}</div></div>
-                                            <div style={{ textAlign: 'right' }}><div style={{ fontSize: '0.8rem', color: '#888' }}>누적 실현손익</div><div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: profit >= 0 ? 'var(--accent-red)' : 'var(--accent-blue)' }}>{profit > 0 ? '+' : ''}{profit.toLocaleString()}$</div></div>
-                                        </div>
-                                        <div className="table-container">
-                                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                                                <thead><tr style={{ background: 'rgba(0,0,0,0.2)' }}><th style={{ padding: '0.8rem' }}>날짜</th><th style={{ padding: '0.8rem' }}>구분</th><th style={{ padding: '0.8rem', textAlign: 'right' }}>가격</th><th style={{ padding: '0.8rem', textAlign: 'right' }}>수량</th><th style={{ padding: '0.8rem', textAlign: 'right' }}>합계</th><th style={{ padding: '0.8rem' }}>메모</th><th style={{ padding: '0.8rem', textAlign: 'right' }}>관리</th></tr></thead>
-                                                <tbody>
-                                                    {stockTxs.map(tx => (
-                                                        <tr key={tx.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}><td style={{ padding: '0.8rem' }}>{new Date(tx.trade_date).toLocaleDateString()}</td><td style={{ textAlign: 'center' }}><span style={{ padding: '3px 8px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 'bold', background: tx.trade_type === 'BUY' ? 'rgba(248,113,113,0.15)' : 'rgba(59,130,246,0.15)', color: tx.trade_type === 'BUY' ? 'var(--accent-red)' : 'var(--accent-blue)' }}>{tx.trade_type === 'BUY' ? '매수' : '매도'}</span></td><td style={{ textAlign: 'right' }}>${tx.price.toFixed(2)}</td><td style={{ textAlign: 'right' }}>{tx.qty}</td><td style={{ textAlign: 'right' }}>${(tx.price * tx.qty).toLocaleString()}</td><td style={{ color: '#888' }}>{tx.memo}</td><td style={{ textAlign: 'right' }}><button onClick={() => editTx(tx)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>✏️</button><button onClick={() => deleteTx(tx.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent-red)' }}>🗑️</button></td></tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-                                );
-                            })}
+            {/* Holdings Table */}
+            <div style={{ background: 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 50%, #93c5fd 100%)', borderRadius: '20px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(59,130,246,0.2)', border: '1px solid rgba(147,197,253,0.3)' }}>
+                <div style={{ padding: '1.5rem 2rem', borderBottom: '1px solid rgba(59,130,246,0.2)' }}>
+                    <h2 style={{ fontSize: '1.5rem', fontWeight: '700', margin: 0, color: '#1e3a8a' }}>보유 현황</h2>
+                </div>
+                <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                            <tr style={{ background: 'rgba(59,130,246,0.15)', borderBottom: '1px solid rgba(59,130,246,0.2)' }}>
+                                <th style={{ padding: '1rem 1.5rem', textAlign: 'left', fontSize: '0.85rem', fontWeight: '600', color: '#1e40af', textTransform: 'uppercase', letterSpacing: '0.5px' }}>종목</th>
+                                <th style={{ padding: '1rem 1.5rem', textAlign: 'right', fontSize: '0.85rem', fontWeight: '600', color: '#1e40af', textTransform: 'uppercase', letterSpacing: '0.5px' }}>평균가</th>
+                                <th style={{ padding: '1rem 1.5rem', textAlign: 'right', fontSize: '0.85rem', fontWeight: '600', color: '#1e40af', textTransform: 'uppercase', letterSpacing: '0.5px' }}>수량</th>
+                                <th style={{ padding: '1rem 1.5rem', textAlign: 'right', fontSize: '0.85rem', fontWeight: '600', color: '#1e40af', textTransform: 'uppercase', letterSpacing: '0.5px' }}>평가액</th>
+                                <th style={{ padding: '1rem 1.5rem', textAlign: 'right', fontSize: '0.85rem', fontWeight: '600', color: '#1e40af', textTransform: 'uppercase', letterSpacing: '0.5px' }}>현재가</th>
+                                <th style={{ padding: '1rem 1.5rem', textAlign: 'right', fontSize: '0.85rem', fontWeight: '600', color: '#1e40af', textTransform: 'uppercase', letterSpacing: '0.5px' }}>손익</th>
+                                <th style={{ padding: '1rem 1.5rem', textAlign: 'center', fontSize: '0.85rem', fontWeight: '600', color: '#1e40af', textTransform: 'uppercase', letterSpacing: '0.5px' }}>비중</th>
+                                <th style={{ padding: '1rem 1.5rem', textAlign: 'right', fontSize: '0.85rem', fontWeight: '600', color: '#1e40af', textTransform: 'uppercase', letterSpacing: '0.5px' }}>관리</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {loading ? (
+                                <tr><td colSpan="8" style={{ textAlign: 'center', padding: '4rem', color: '#64748b' }}>로딩 중...</td></tr>
+                            ) : sortedHoldings.length === 0 ? (
+                                <tr><td colSpan="8" style={{ textAlign: 'center', padding: '4rem', color: '#64748b' }}>보유 종목이 없습니다.</td></tr>
+                            ) : (
+                                sortedHoldings.map(([ticker, h]) => (
+                                    <tr key={ticker} style={{ borderBottom: '1px solid rgba(59,130,246,0.15)', transition: 'background 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(59,130,246,0.08)'} onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
+                                        <td style={{ padding: '1.25rem 1.5rem' }}>
+                                            <div style={{ fontWeight: '700', fontSize: '1.1rem', color: '#1e3a8a', marginBottom: '0.25rem' }}>{ticker}</div>
+                                            <div style={{ fontSize: '0.85rem', color: '#64748b' }}>{h.name}</div>
+                                        </td>
+                                        <td style={{ padding: '1.25rem 1.5rem', textAlign: 'right', fontSize: '0.95rem', color: '#1e3a8a', fontWeight: '500' }}>${h.avgPrice.toFixed(2)}</td>
+                                        <td style={{ padding: '1.25rem 1.5rem', textAlign: 'right', fontSize: '1rem', color: '#1e3a8a', fontWeight: '700' }}>{h.qty}</td>
+                                        <td style={{ padding: '1.25rem 1.5rem', textAlign: 'right' }}>
+                                            <div style={{ fontSize: '1rem', fontWeight: '700', color: '#1e40af', marginBottom: '0.25rem' }}>${h.currentValue.toFixed(2)}</div>
+                                            <div style={{ fontSize: '0.8rem', color: '#64748b' }}>{h.currentValueKRW.toLocaleString(undefined, { maximumFractionDigits: 0 })}원</div>
+                                        </td>
+                                        <td style={{ padding: '1.25rem 1.5rem', textAlign: 'right', fontSize: '0.95rem', color: '#1e3a8a', fontWeight: '500' }}>${h.currentPrice.toFixed(2)}</td>
+                                        <td style={{ padding: '1.25rem 1.5rem', textAlign: 'right' }}>
+                                            <div style={{ fontSize: '1rem', fontWeight: '700', color: h.profit >= 0 ? '#10b981' : '#ef4444', marginBottom: '0.25rem' }}>
+                                                {h.profit >= 0 ? '+' : ''}${h.profit.toFixed(2)}
+                                            </div>
+                                            <div style={{ fontSize: '0.85rem', color: h.profit >= 0 ? '#10b981' : '#ef4444', fontWeight: '600' }}>
+                                                {h.profitPct >= 0 ? '+' : ''}{h.profitPct.toFixed(2)}%
+                                            </div>
+                                        </td>
+                                        <td style={{ padding: '1.25rem 1.5rem', textAlign: 'center' }}>
+                                            <span style={{ display: 'inline-block', padding: '0.35rem 0.75rem', background: 'rgba(59,130,246,0.2)', borderRadius: '8px', fontSize: '0.9rem', fontWeight: '700', color: '#1e3a8a' }}>
+                                                {h.weight.toFixed(1)}%
+                                            </span>
+                                        </td>
+                                        <td style={{ padding: '1.25rem 1.5rem', textAlign: 'right' }}>
+                                            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                                                <button onClick={() => { setSelectedMemo({ ticker, memo: h.latestTrade?.memo || '매매 사유 없음' }); setShowMemoPopup(true); }} style={{ padding: '0.5rem 0.75rem', background: 'rgba(59,130,246,0.2)', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem' }}>📄</button>
+                                                <button onClick={() => handleEdit(h.latestTrade)} style={{ padding: '0.5rem 0.75rem', background: 'rgba(59,130,246,0.2)', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '600', color: '#1e40af' }}>수정</button>
+                                                <button onClick={() => handleDelete(h.latestTrade.id)} style={{ padding: '0.5rem 0.75rem', background: 'rgba(239,68,68,0.2)', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '600', color: '#dc2626' }}>삭제</button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {/* Memo Popup */}
+            {showMemoPopup && (
+                <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(10px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000, animation: 'fadeIn 0.2s ease' }} onClick={() => setShowMemoPopup(false)}>
+                    <div style={{ background: 'linear-gradient(135deg, #faf5ff 0%, #f5f3ff 50%, #ffffff 100%)', borderRadius: '20px', padding: '2.5rem', maxWidth: '600px', width: '90%', maxHeight: '80vh', overflow: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', animation: 'slideUp 0.3s ease' }} onClick={(e) => e.stopPropagation()}>
+                        <h2 style={{ fontSize: '1.5rem', fontWeight: '700', marginBottom: '1.5rem', color: '#1d1d1f' }}>매매 사유 - {selectedMemo.ticker}</h2>
+                        <div style={{ background: '#f5f5f7', padding: '1.5rem', borderRadius: '12px', lineHeight: '1.8', fontSize: '1rem', color: '#1d1d1f', whiteSpace: 'pre-wrap', minHeight: '100px' }}>
+                            {selectedMemo.memo}
                         </div>
-                    </>
-                )
-            }
+                        <button onClick={() => setShowMemoPopup(false)} style={{ marginTop: '1.5rem', width: '100%', padding: '0.85rem', background: '#007aff', color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer', fontWeight: '600', fontSize: '0.95rem' }}>닫기</button>
+                    </div>
+                </div>
+            )}
 
             <style>{`
-                .container { max-width: 1200px; margin: 0 auto; padding: 0 1rem; font-family: 'Inter', sans-serif; }
-                .form-group { display: flex; flex-direction: column; gap: 0.5rem; }
-                .input-field { background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); color: white; padding: 0.8rem; border-radius: 8px; outline: none; transition: all 0.2; min-height: 44px; }
-                .btn-submit { padding: 1rem; background: linear-gradient(90deg, var(--accent-blue), var(--accent-purple)); color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
-                .summary-grid { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 1.5rem; }
-                .table-container { overflow-x: auto; }
+                @keyframes slideDown {
+                    from { opacity: 0; transform: translateY(-20px); }
+                    to { opacity: 1; transform: translateY(0); }
+                }
+                @keyframes fadeIn {
+                    from { opacity: 0; }
+                    to { opacity: 1; }
+                }
+                @keyframes slideUp {
+                    from { opacity: 0; transform: translateY(30px); }
+                    to { opacity: 1; transform: translateY(0); }
+                }
             `}</style>
-        </div >
+        </div>
     );
 };
 

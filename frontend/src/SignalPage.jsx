@@ -82,13 +82,29 @@ const SignalPage = () => {
 
             if (reportRes.ok) {
                 const reportData = await reportRes.json();
-                // Create map {ticker: current_price}
+                // Create map {ticker: current_price} from MASTER CONTROL TOWER
                 const priceMap = {};
-                if (reportData.stocks) {
-                    reportData.stocks.forEach(s => {
-                        priceMap[s.ticker] = s.current_price;
-                    });
+
+                // Ver 3.0: Get prices from market_regime details
+                if (reportData.market_regime && reportData.market_regime.details) {
+                    const details = reportData.market_regime.details;
+
+                    // SOXL price
+                    if (details.soxl && details.soxl.current_price) {
+                        priceMap['SOXL'] = details.soxl.current_price;
+                    }
+
+                    // SOXS price
+                    if (details.soxs && details.soxs.current_price) {
+                        priceMap['SOXS'] = details.soxs.current_price;
+                    }
+
+                    // UPRO price (from upro_status or separate field)
+                    if (details.upro && details.upro.current_price) {
+                        priceMap['UPRO'] = details.upro.current_price;
+                    }
                 }
+
                 setPrices(priceMap);
             }
 
@@ -122,7 +138,7 @@ const SignalPage = () => {
     const fetchSmsLogs = async () => {
         setLogsLoading(true);
         try {
-            const res = await fetch('/api/sms/history');
+            const res = await fetch('/api/sms/history?limit=20');  // 최근 20개만
             if (res.ok) setSmsLogs(await res.json());
         } catch (e) {
             console.error(e);
@@ -316,17 +332,17 @@ const SignalPage = () => {
                     <button onClick={deleteAllSignals} style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--accent-red)', border: '1px solid var(--accent-red)', borderRadius: '6px', padding: '0.4rem 0.8rem', cursor: 'pointer' }}>전체 삭제</button>
                 </div>
                 <div className="table-container">
-                    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '800px' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1000px' }}>
                         <thead>
                             <tr style={{ background: 'rgba(0,0,0,0.2)', color: 'var(--text-secondary)' }}>
-                                <th style={{ padding: '1.2rem', textAlign: 'left' }}>발생 시간</th>
-                                <th style={{ padding: '1.2rem', textAlign: 'left' }}>종목</th>
-                                <th style={{ padding: '1.2rem', textAlign: 'center' }}>구분</th>
-                                <th style={{ padding: '1.2rem', textAlign: 'right' }}>신호가</th>
-                                <th style={{ padding: '1.2rem', textAlign: 'right' }}>현재가</th>
-                                <th style={{ padding: '1.2rem', textAlign: 'center' }}>수익률</th>
-                                <th style={{ padding: '1.2rem', textAlign: 'left' }}>점수 / 상태</th>
-                                <th style={{ padding: '1.2rem', textAlign: 'center' }}>관리</th>
+                                <th style={{ padding: '1.2rem', textAlign: 'left', width: '160px' }}>발생 시간</th>
+                                <th style={{ padding: '1.2rem', textAlign: 'left', width: '90px' }}>종목</th>
+                                <th style={{ padding: '1.2rem', textAlign: 'center', width: '90px' }}>구분</th>
+                                <th style={{ padding: '1.2rem', textAlign: 'left' }}>신호 이유</th>
+                                <th style={{ padding: '1.2rem', textAlign: 'right', width: '110px' }}>신호가</th>
+                                <th style={{ padding: '1.2rem', textAlign: 'right', width: '110px' }}>현재가</th>
+                                <th style={{ padding: '1.2rem', textAlign: 'center', width: '100px' }}>수익률</th>
+                                <th style={{ padding: '1.2rem', textAlign: 'center', width: '80px' }}>관리</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -335,44 +351,95 @@ const SignalPage = () => {
                             ) : signals.length === 0 ? (
                                 <tr><td colSpan="8" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-secondary)' }}>신호 내역이 없습니다.</td></tr>
                             ) : (
-                                signals.map(sig => (
-                                    <tr key={sig.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                                        <td style={{ padding: '1.2rem', fontSize: '0.9rem' }}>
-                                            {formatDualTime(sig.signal_time)}
-                                        </td>
-                                        <td style={{ padding: '1.2rem' }}>
-                                            <div style={{ fontWeight: 'bold' }}>{sig.ticker}</div>
-                                            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{sig.name}</div>
-                                        </td>
-                                        <td style={{ padding: '1.2rem', textAlign: 'center' }}>
-                                            <span style={{
-                                                padding: '4px 12px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 'bold',
-                                                background: sig.signal_type === 'BUY' ? 'rgba(248, 113, 113, 0.15)' : 'rgba(59, 130, 246, 0.15)',
-                                                color: sig.signal_type === 'BUY' ? 'var(--accent-red)' : 'var(--accent-blue)'
-                                            }}>
-                                                {sig.signal_type === 'BUY' ? '매수' : '매도'}
-                                            </span>
-                                        </td>
-                                        <td style={{ padding: '1.2rem', textAlign: 'right', fontWeight: 'bold' }}>${sig.price}</td>
-                                        <td style={{ padding: '1.2rem', textAlign: 'right' }}>
-                                            {prices[sig.ticker] ? `$${prices[sig.ticker]}` : '-'}
-                                        </td>
-                                        <td style={{ padding: '1.2rem', textAlign: 'center', fontWeight: 'bold', color: getProfitColor(sig.price, prices[sig.ticker], sig.signal_type) }}>
-                                            {calcProfit(sig.price, prices[sig.ticker], sig.signal_type)}
-                                        </td>
-                                        <td style={{ padding: '1.2rem' }}>
-                                            <div style={{ fontSize: '0.9rem' }}>{sig.position_desc}</div>
-                                            {sig.score > 0 && (
-                                                <div style={{ fontSize: '0.8rem', color: 'var(--accent-gold)', marginTop: '4px' }}>
-                                                    ⭐ {sig.score}점 ({sig.interpretation || '-'})
+                                signals.map(sig => {
+                                    // BUY/SELL 판단 (Ver 3.0)
+                                    const signalType = sig.signal_type || '';
+                                    const isBuy = signalType.includes('BUY');
+                                    const isSell = signalType.includes('SELL');
+                                    const isWarning = signalType.includes('WARNING');
+
+                                    let actionText = '기타';
+                                    let actionColor = '#888';
+                                    let bgColor = 'rgba(136, 136, 136, 0.1)';
+
+                                    if (isBuy) {
+                                        actionText = '매수';
+                                        actionColor = '#ef4444';
+                                        bgColor = 'rgba(239, 68, 68, 0.15)';
+                                    } else if (isSell) {
+                                        actionText = '매도';
+                                        actionColor = '#3b82f6';
+                                        bgColor = 'rgba(59, 130, 246, 0.15)';
+                                    } else if (isWarning) {
+                                        actionText = '경보';
+                                        actionColor = '#eab308';
+                                        bgColor = 'rgba(234, 179, 8, 0.15)';
+                                    }
+
+                                    // 시간 형식: yyyy.MM.dd HH:mm (초 제거)
+                                    let kstTime = '-';
+                                    if (sig.time_kst) {
+                                        // DB에서 가져온 time_kst 사용
+                                        kstTime = sig.time_kst;
+                                    } else if (sig.signal_time) {
+                                        // signal_time을 KST로 변환
+                                        const date = new Date(sig.signal_time);
+                                        const year = date.getFullYear();
+                                        const month = String(date.getMonth() + 1).padStart(2, '0');
+                                        const day = String(date.getDate()).padStart(2, '0');
+                                        const hours = String(date.getHours()).padStart(2, '0');
+                                        const minutes = String(date.getMinutes()).padStart(2, '0');
+                                        kstTime = `${year}.${month}.${day} ${hours}:${minutes}`;
+                                    }
+
+                                    return (
+                                        <tr key={sig.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                            <td style={{ padding: '1rem 1.2rem', fontSize: '0.85rem', color: '#999', fontFamily: 'monospace' }}>
+                                                {kstTime}
+                                            </td>
+                                            <td style={{ padding: '1rem 1.2rem' }}>
+                                                <div style={{ fontWeight: 'bold', fontSize: '0.95rem' }}>{sig.ticker}</div>
+                                            </td>
+                                            <td style={{ padding: '1rem 1.2rem', textAlign: 'center' }}>
+                                                <span style={{
+                                                    display: 'inline-block',
+                                                    minWidth: '50px',
+                                                    padding: '5px 10px',
+                                                    borderRadius: '4px',
+                                                    fontSize: '0.8rem',
+                                                    fontWeight: 'bold',
+                                                    background: bgColor,
+                                                    color: actionColor,
+                                                    textAlign: 'center'
+                                                }}>
+                                                    {actionText}
+                                                </span>
+                                            </td>
+                                            <td style={{ padding: '1rem 1.2rem' }}>
+                                                <div style={{ fontSize: '0.85rem', color: '#aaa' }}>
+                                                    {sig.signal_reason || sig.interpretation || '-'}
                                                 </div>
-                                            )}
-                                        </td>
-                                        <td style={{ padding: '1.2rem', textAlign: 'center' }}>
-                                            <button onClick={() => deleteSignal(sig.id)} style={{ background: 'rgba(255, 50, 50, 0.1)', border: 'none', color: '#ff6b6b', padding: '0.4rem 0.8rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem' }}>삭제</button>
-                                        </td>
-                                    </tr>
-                                ))
+                                                {sig.position_desc && (
+                                                    <div style={{ fontSize: '0.75rem', color: '#666', marginTop: '4px' }}>
+                                                        {sig.position_desc.split('\\n')[0]}
+                                                    </div>
+                                                )}
+                                            </td>
+                                            <td style={{ padding: '1rem 1.2rem', textAlign: 'right', fontWeight: 'bold', fontSize: '0.9rem' }}>
+                                                ${Number(sig.price).toFixed(2)}
+                                            </td>
+                                            <td style={{ padding: '1rem 1.2rem', textAlign: 'right', fontSize: '0.9rem' }}>
+                                                {prices[sig.ticker] ? `$${Number(prices[sig.ticker]).toFixed(2)}` : '-'}
+                                            </td>
+                                            <td style={{ padding: '1rem 1.2rem', textAlign: 'center', fontWeight: 'bold', fontSize: '0.9rem', color: getProfitColor(sig.price, prices[sig.ticker], isBuy ? 'BUY' : 'SELL') }}>
+                                                {calcProfit(sig.price, prices[sig.ticker], isBuy ? 'BUY' : 'SELL')}
+                                            </td>
+                                            <td style={{ padding: '1rem 1.2rem', textAlign: 'center' }}>
+                                                <button onClick={() => deleteSignal(sig.id)} style={{ background: 'rgba(255, 50, 50, 0.1)', border: 'none', color: '#ff6b6b', padding: '0.4rem 0.8rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem' }}>삭제</button>
+                                            </td>
+                                        </tr>
+                                    );
+                                })
                             )}
                         </tbody>
                     </table>

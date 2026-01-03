@@ -404,8 +404,8 @@ def api_test_sms(data: SMSPostModel):
     return {"status": "success" if success else "error"}
 
 @app.get("/api/sms/history")
-def api_get_sms_history():
-    return get_sms_logs(limit=30)
+def api_get_sms_history(limit: int = 30):
+    return get_sms_logs(limit=limit)
 
 @app.delete("/api/sms/history/all")
 def api_delete_all_sms_logs():

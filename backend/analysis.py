@@ -1662,7 +1662,7 @@ def determine_market_regime_v2(daily_data, data_30m, data_5m=None):
         "comment": comment,
         "current_strategy": current_strategy,
         "risk_plan": risk_plan,
-        "upro_status": {"label": regime, "change_pct": round(upro_change, 2)},
+        "upro": upro_res,  # upro_status -> upro로 변경하여 current_price 포함
         "soxl": soxl_res,
         "soxs": soxs_res,
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
