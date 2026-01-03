@@ -1071,7 +1071,7 @@ def cleanup_old_candles(ticker, days=90):
 def update_stock_prices():
     """
     종목관리에 등록된 모든 종목의 현재가를 업데이트
-    - 5분 이상 지난 종목만 업데이트
+    - 사용자 요청 시 5분 조건 무시하고 즉시 업데이트
     - 휴장일 감지 및 is_market_open 플래그 설정
     """
     from datetime import datetime, timedelta
@@ -1080,29 +1080,32 @@ def update_stock_prices():
     try:
         with get_connection() as conn:
             with conn.cursor(dictionary=True) as cursor:
-                # 5분 이상 지난 종목 또는 한 번도 업데이트 안 된 종목 조회
+                # 모든 활성 종목 조회 (5분 조건 제거 - 사용자 요청 시 즉시 업데이트)
                 sql = """
-                    SELECT ticker, code, name, price_updated_at 
+                    SELECT code, name 
                     FROM managed_stocks 
-                    WHERE is_active = TRUE 
-                    AND (price_updated_at IS NULL 
-                         OR price_updated_at < DATE_SUB(NOW(), INTERVAL 5 MINUTE))
+                    WHERE is_active = TRUE
                 """
                 cursor.execute(sql)
                 stocks = cursor.fetchall()
                 
                 if not stocks:
-                    print("✅ 모든 종목 현재가가 최신 상태입니다 (5분 이내)")
-                    return True
+                    print("⚠️ 등록된 종목이 없습니다")
+                    return False
                 
                 print(f"📊 {len(stocks)}개 종목 현재가 업데이트 시작...")
                 
                 updated_count = 0
                 for stock in stocks:
-                    ticker = stock['ticker'] or stock['code']
+                    ticker = stock['code']  # code 필드 사용
+                    
+                    if not ticker:
+                        print(f"  ⚠️ 종목 코드가 없습니다: {stock}")
+                        continue
                     
                     try:
                         # KIS API로 현재가 조회
+                        print(f"  🔍 {ticker} 현재가 조회 중...")
                         price_data = kis_client.get_price(ticker)
                         
                         if price_data and price_data.get('price'):
@@ -1115,9 +1118,9 @@ def update_stock_prices():
                                 SET current_price = %s, 
                                     price_updated_at = NOW(), 
                                     is_market_open = %s 
-                                WHERE ticker = %s OR code = %s
+                                WHERE code = %s
                             """
-                            cursor.execute(update_sql, (current_price, is_market_open, ticker, ticker))
+                            cursor.execute(update_sql, (current_price, is_market_open, ticker))
                             updated_count += 1
                             print(f"  ✅ {ticker}: ${current_price:.2f}")
                         else:
@@ -1126,13 +1129,15 @@ def update_stock_prices():
                                 UPDATE managed_stocks 
                                 SET is_market_open = FALSE, 
                                     price_updated_at = NOW() 
-                                WHERE ticker = %s OR code = %s
+                                WHERE code = %s
                             """
-                            cursor.execute(update_sql, (ticker, ticker))
+                            cursor.execute(update_sql, (ticker,))
                             print(f"  ⚠️ {ticker}: 가격 데이터 없음 (휴장일 가능)")
                             
                     except Exception as e:
                         print(f"  ❌ {ticker} 가격 조회 실패: {e}")
+                        import traceback
+                        traceback.print_exc()
                         continue
                 
                 conn.commit()
@@ -1141,6 +1146,8 @@ def update_stock_prices():
                 
     except Exception as e:
         print(f"❌ 현재가 업데이트 오류: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 def get_stock_current_price(ticker):
