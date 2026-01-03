@@ -1082,7 +1082,7 @@ def update_stock_prices():
             with conn.cursor() as cursor:
                 # 모든 활성 종목 조회 (5분 조건 제거 - 사용자 요청 시 즉시 업데이트)
                 sql = """
-                    SELECT code, name 
+                    SELECT ticker, name 
                     FROM managed_stocks 
                     WHERE is_active = TRUE
                 """
@@ -1093,7 +1093,7 @@ def update_stock_prices():
                 stocks = []
                 for row in rows:
                     stocks.append({
-                        'code': row[0],
+                        'ticker': row[0],
                         'name': row[1]
                     })
                 
@@ -1105,7 +1105,7 @@ def update_stock_prices():
                 
                 updated_count = 0
                 for stock in stocks:
-                    ticker = stock['code']  # code 필드 사용
+                    ticker = stock['ticker']
                     
                     if not ticker:
                         print(f"  ⚠️ 종목 코드가 없습니다: {stock}")
@@ -1126,7 +1126,7 @@ def update_stock_prices():
                                 SET current_price = %s, 
                                     price_updated_at = NOW(), 
                                     is_market_open = %s 
-                                WHERE code = %s
+                                WHERE ticker = %s
                             """
                             cursor.execute(update_sql, (current_price, is_market_open, ticker))
                             updated_count += 1
@@ -1137,7 +1137,7 @@ def update_stock_prices():
                                 UPDATE managed_stocks 
                                 SET is_market_open = FALSE, 
                                     price_updated_at = NOW() 
-                                WHERE code = %s
+                                WHERE ticker = %s
                             """
                             cursor.execute(update_sql, (ticker,))
                             print(f"  ⚠️ {ticker}: 가격 데이터 없음 (휴장일 가능)")
@@ -1166,7 +1166,7 @@ def get_stock_current_price(ticker):
                 sql = """
                     SELECT current_price, price_updated_at, is_market_open 
                     FROM managed_stocks 
-                    WHERE code = %s AND is_active = TRUE
+                    WHERE ticker = %s AND is_active = TRUE
                 """
                 cursor.execute(sql, (ticker,))
                 row = cursor.fetchone()

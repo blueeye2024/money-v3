@@ -54,7 +54,7 @@ const JournalPage = () => {
             if (stocksRes.data) {
                 stocksRes.data.forEach(stock => {
                     if (stock.current_price && stock.current_price > 0) {
-                        priceMap[stock.code] = stock.current_price;
+                        priceMap[stock.ticker] = stock.current_price;
                     }
                 });
             }
