@@ -1093,14 +1093,14 @@ def update_stock_prices():
                 if rows:
                     print(f"   첫 번째 행: {rows[0]}, 타입: {type(rows[0])}")
                 
-                # 수동으로 딕셔너리 변환
+                # DictCursor를 사용하므로 row는 딕셔너리
                 stocks = []
                 for i, row in enumerate(rows):
                     try:
-                        if isinstance(row, (list, tuple)) and len(row) >= 2:
+                        if isinstance(row, dict) and 'ticker' in row:
                             stocks.append({
-                                'ticker': row[0],
-                                'name': row[1]
+                                'ticker': row['ticker'],
+                                'name': row['name']
                             })
                         else:
                             print(f"  ⚠️ 행 {i} 형식 오류: {row}, 타입: {type(row)}")
