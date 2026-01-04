@@ -609,15 +609,23 @@ class UserLogin(BaseModel):
 def register_api(user: UserRegister):
     from db import create_user, get_user_by_email
     try:
-        if get_user_by_email(user.email):
-            return {"status": "error", "message": "이미 존재하는 이메일입니다."}
+        print(f"DEBUG: Register API called for {user.email}")
+        existing = get_user_by_email(user.email)
+        print(f"DEBUG: get_user_by_email result: {existing}")
         
+        if existing:
+            return {"status": "error", "message": f"이미 존재하는 이메일입니다: {user.email}"}
+        
+        print(f"DEBUG: Creating user {user.name}")
         hashed_pw = pbkdf2_sha256.hash(user.password)
         if create_user(user.email, hashed_pw, user.name):
             return {"status": "success", "message": "회원가입 성공"}
-        return {"status": "error", "message": "회원가입 실패"}
+        
+        return {"status": "error", "message": "회원가입 DB 처리 실패"}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        import traceback
+        traceback.print_exc()
+        return {"status": "error", "message": f"서버 오류: {str(e)}"}
 
 @app.post("/api/auth/login")
 def login_api(user: UserLogin):
