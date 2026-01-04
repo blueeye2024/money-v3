@@ -461,7 +461,7 @@ const JournalPage = () => {
                                             <div style={{ fontWeight: '700', fontSize: '1.1rem', color: '#1e3a8a', marginBottom: '0.25rem' }}>{ticker}</div>
                                             <div style={{ fontSize: '0.85rem', color: '#64748b' }}>{h.name}</div>
                                         </td>
-                                        <td style={{ padding: '1.25rem 1.5rem', textAlign: 'right', fontSize: '0.95rem', color: '#1e3a8a', fontWeight: '500' }}>${h.avgPrice.toFixed(4)}</td>
+                                        <td style={{ padding: '1.25rem 1.5rem', textAlign: 'right', fontSize: '0.95rem', color: '#1e3a8a', fontWeight: '500' }}>${Number(h.avgPrice).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 4 })}</td>
                                         <td style={{ padding: '1.25rem 1.5rem', textAlign: 'right', fontSize: '1rem', color: '#1e3a8a', fontWeight: '700' }}>{h.qty}</td>
                                         <td style={{ padding: '1.25rem 1.5rem', textAlign: 'right' }}>
                                             <div style={{ fontSize: '1rem', fontWeight: '700', color: '#1e40af', marginBottom: '0.25rem' }}>${h.currentValue.toFixed(2)}</div>
@@ -474,7 +474,7 @@ const JournalPage = () => {
                                                     fontWeight: '600',
                                                     color: h.isManualPrice ? '#f59e0b' : '#1e3a8a'
                                                 }}>
-                                                    ${h.currentPrice.toFixed(4)}
+                                                    ${Number(h.currentPrice).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 4 })}
                                                 </div>
                                                 {h.isManualPrice && (
                                                     <span style={{ fontSize: '0.7rem', color: '#f59e0b' }} title="수동 입력값">✋</span>
