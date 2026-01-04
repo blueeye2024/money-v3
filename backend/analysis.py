@@ -1611,6 +1611,35 @@ def check_triple_filter(ticker, data_30m, data_5m):
     
     return result
 
+def generate_antigravity_guide(ticker, res, regime_info=None):
+    # Time settings
+    kr_tz = pytz.timezone('Asia/Seoul')
+    ny_tz = pytz.timezone('America/New_York')
+    now_kr = datetime.now(kr_tz)
+    now_ny = datetime.now(ny_tz)
+    time_str = f"🇺🇸 (NY) {now_ny.strftime('%Y.%m.%d %H:%M')} 🇰🇷 (KR) {now_kr.strftime('%Y.%m.%d %H:%M')}"
+    
+    # 1. 진입 (BUY)
+    if res.get("final"):
+         return f"🚀 [진입 신호] {ticker} 매수 실행\n이유: 30분봉 추세가 정배열이며, 현재 힘(+2% 돌파)과 5분봉 타이밍이 모두 일치합니다.\n비중: 자산의 100% 투입\n가이드: 이제부터 수익 10% 도달 전까지는 단계별 경보(Yellow/Orange)를 주시하세요.\n{time_str}"
+    
+    # 2. Yellow (Warning 1)
+    if res.get("step3_color") == "yellow":
+         return f"🟡 [주의] 보유 물량 30% 익절/손절 권고\n이유: 5분봉에서 단기 추세가 꺾였습니다. 특히 거래량이 실린 하락이므로 리스크 관리가 필요합니다.\n비중: 현재 수량의 30% 매도 (남은 비중: 70%)\n가이드: 추세가 다시 살아나지 않고 30분봉까지 꺾이면 전량 매도 준비를 해야 합니다.\n{time_str}"
+
+    # 3. Orange (Warning 2)
+    if res.get("step2_color") == "orange":
+         return f"🟠 [위험] 보유 물량 30% 추가 매도 권고\n이유: 현재가가 진입가보다 낮아져 원금 손실 구간에 진입했습니다.\n비중: 추가 30% 매도\n가이드: 박스권 하단 이탈 시 전량 매도합니다.\n{time_str}"
+         
+    # Context specific monitoring
+    if regime_info == "Bull" and ticker == "SOXL":
+        return f"👀 [관망] {ticker} 진입 대기 중\n이유: 현재 상승장(Bull)이나 정확한 3단계 필터 진입 타점을 기다리고 있습니다.\n가이드: 5분봉 골든크로스가 나오면 즉시 진입합니다.\n{time_str}"
+        
+    if regime_info == "Bear" and ticker == "SOXS":
+        return f"👀 [관망] {ticker} 진입 대기 중\n이유: 현재 하락장(Bear)이나 정확한 3단계 필터 진입 타점을 기다리고 있습니다.\n가이드: 5분봉 골든크로스가 나오면 즉시 진입합니다.\n{time_str}"
+        
+    return f"💤 [휴식] {ticker} 관망 구간\n이유: 현재 시장 주도 추세와 맞지 않거나 뚜렷한 신호가 없습니다.\n가이드: UPRO 변동성을 체크하며 다음 기회를 기다리세요.\n{time_str}"
+
 def determine_market_regime_v2(daily_data, data_30m, data_5m=None):
     """
     Cheongan V2.3 Master Signal Logic (Control Tower)
@@ -1649,13 +1678,11 @@ def determine_market_regime_v2(daily_data, data_30m, data_5m=None):
     soxl_count = sum([soxl_res["step1"], soxl_res["step2"], soxl_res["step3"]])
     soxs_count = sum([soxs_res["step1"], soxs_res["step2"], soxs_res["step3"]])
     
-    risk_plan = "변동성 관리: UPRO 등락률을 기준으로 시장의 온도를 체크하세요."
-
-    # Warning Checks (Keep existing logic)
-    if soxl_res.get("step3_color") == "yellow":
-         risk_plan = "⚠️ SOXL 단기/중기 이평 데드크로스 주의"
-    if soxs_res.get("step3_color") == "yellow":
-         risk_plan = "⚠️ SOXS 단기/중기 이평 데드크로스 주의"
+    # Generate Guide Message (Antigravity V2.1)
+    target_ticker = "SOXL" if regime == "Bull" else ("SOXS" if regime == "Bear" else "SOXL/SOXS")
+    target_res = soxl_res if regime == "Bull" else (soxs_res if regime == "Bear" else {})
+    
+    risk_plan = generate_antigravity_guide(target_ticker, target_res, regime)
 
     # Prepare Final Details
     details = {

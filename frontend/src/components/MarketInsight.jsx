@@ -411,9 +411,9 @@ const MarketInsight = ({ market, stocks, signalHistory }) => {
 
                         <div style={{ background: 'rgba(0,0,0,0.2)', padding: '1.2rem', borderRadius: '16px' }}>
                             <div style={{ color: '#4ade80', fontWeight: 'bold', fontSize: '0.9rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <div style={{ width: '6px', height: '6px', background: '#4ade80', borderRadius: '50%' }} /> 리스크 관리 & 운영 전술
+                                <div style={{ width: '6px', height: '6px', background: '#4ade80', borderRadius: '50%' }} /> 청안 가이드
                             </div>
-                            <div style={{ color: '#9ca3af', fontSize: '0.85rem', lineHeight: '1.6' }}>
+                            <div style={{ color: '#9ca3af', fontSize: '0.85rem', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>
                                 {regimeDetails?.risk_plan || "-"}
                             </div>
                         </div>
