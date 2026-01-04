@@ -1,65 +1,42 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
-
 * {
   box-sizing: border-box;
 }
 
 :root {
-  /* Cheongan Prime 2026 Palette */
-  --bg-primary: #020617;
-  /* Slate 950 (Deepest Navy) */
-  --bg-secondary: #0f172a;
-  /* Slate 900 */
-  --bg-card: rgba(15, 23, 42, 0.6);
-
-  --text-primary: #f8fafc;
-  /* Slate 50 */
+  --bg-primary: #0f172a;
+  --bg-secondary: #1e293b;
+  --text-primary: #f1f5f9;
   --text-secondary: #94a3b8;
-  /* Slate 400 */
-  --text-muted: #64748b;
-
-  /* Accents */
-  --accent-cyan: #06b6d4;
-  /* Intelligence */
-  --accent-blue: #3b82f6;
-  /* Trust */
-  --accent-green: #10b981;
-  /* Buy/Up */
-  --accent-red: #f43f5e;
-  /* Sell/Down */
+  --accent-blue: #38bdf8;
+  --accent-green: #34d399;
+  /* Buy */
+  --accent-red: #f87171;
+  /* Sell */
   --accent-purple: #818cf8;
-  /* Insight */
-
-  /* Glassmorphism */
-  --glass-bg: rgba(2, 6, 23, 0.6);
-  --glass-border: rgba(255, 255, 255, 0.08);
-  --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+  --glass-bg: rgba(30, 41, 59, 0.7);
+  --glass-border: rgba(148, 163, 184, 0.1);
 }
 
 body {
   margin: 0;
   font-family: 'Outfit', 'Noto Sans KR', sans-serif;
-  /* Modern, Geometric Sans */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-color: var(--bg-primary);
   color: var(--text-primary);
-  /* Cosmic Background Gradient */
   background-image:
-    radial-gradient(circle at 15% 50%, rgba(6, 182, 212, 0.08) 0px, transparent 40%),
-    radial-gradient(circle at 85% 30%, rgba(59, 130, 246, 0.08) 0px, transparent 40%);
+    radial-gradient(at 0% 0%, rgba(56, 189, 248, 0.1) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(129, 140, 248, 0.1) 0px, transparent 50%);
   background-attachment: fixed;
-  overflow-x: hidden;
 }
 
 code {
-  font-family: 'JetBrains Mono', source-code-pro, Menlo, Monaco, Consolas, monospace;
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
 }
 
 /* Scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
 }
 
 ::-webkit-scrollbar-track {
@@ -67,49 +44,41 @@ code {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--glass-border);
-  border-radius: 99px;
+  background: var(--bg-secondary);
+  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-secondary);
 }
 
-/* Glass Panel Utility */
+/* Utilities */
 .glass-panel {
   background: var(--glass-bg);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(12px);
   border: 1px solid var(--glass-border);
-  border-radius: 20px;
-  box-shadow: var(--glass-shadow);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  border-radius: 16px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 
-/* Text Gradients */
 .text-gradient {
-  background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+  background: linear-gradient(to right, var(--accent-blue), var(--accent-purple));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  background-clip: text;
 }
 
-/* Signals */
 .buy-signal {
   color: var(--accent-green);
-  text-shadow: 0 0 10px rgba(16, 185, 129, 0.3);
 }
 
 .sell-signal {
   color: var(--accent-red);
-  text-shadow: 0 0 10px rgba(244, 63, 94, 0.3);
 }
 
 .neutral-signal {
   color: var(--text-secondary);
 }
 
-/* Animation Utilities */
 .animate-pulse-slow {
   animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
@@ -122,31 +91,52 @@ code {
   }
 
   50% {
-    opacity: .6;
+    opacity: .7;
   }
 }
 
-/* Layout Containers */
+/* Layout */
 .app-container {
   width: 100%;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
-
-.dashboard-container {
-  max-width: 1600px;
-  /* Wider for Bento Grid */
+  max-width: 1400px;
   margin: 0 auto;
-  width: 100%;
-  padding: 0;
+  padding: 0 1rem;
 }
 
-/* Responsive Grid */
+.container {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+}
+
 .grid-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 1.5rem;
+}
+
+/* Touch Targets & Optimization */
+button,
+.nav-link,
+input,
+select {
+  min-height: 44px;
+  padding: 0.75rem 1rem;
+}
+
+/* Responsive Table */
+.table-container {
+  width: 100%;
+  overflow-x: auto;
+  margin-top: 1.5rem;
+  border-radius: 12px;
+}
+
+/* Header & Typography */
+header h1 {
+  font-size: clamp(1.5rem, 5vw, 2.75rem);
+  line-height: 1.2;
 }
 
 /* Navigation */
@@ -154,91 +144,89 @@ code {
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 1rem;
-  padding: 1rem;
+  gap: 2rem;
+  padding: 1.5rem 0;
   border-bottom: 1px solid var(--glass-border);
-  background: rgba(2, 6, 23, 0.8);
-  backdrop-filter: blur(12px);
-  position: sticky;
-  top: 0;
-  z-index: 50;
+  margin-bottom: 2rem;
+  position: relative;
 }
 
-.nav-link {
-  color: var(--text-secondary);
-  text-decoration: none;
-  font-weight: 500;
-  padding: 0.5rem 1rem;
-  border-radius: 12px;
-  transition: all 0.2s;
-}
-
-.nav-link:hover,
-.nav-link.active {
+.mobile-menu-btn {
+  display: none;
+  background: none;
+  border: none;
   color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.05);
+  font-size: 1.5rem;
+  cursor: pointer;
+  z-index: 1001;
 }
 
-.nav-link.active {
-  background: rgba(6, 182, 212, 0.1);
-  color: var(--accent-cyan);
-  border: 1px solid rgba(6, 182, 212, 0.2);
+/* Media Queries */
+
+/* Tablet (768px) */
+@media (max-width: 1024px) {
+  .grid-cards {
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  }
 }
 
-/* Tables */
-.table-container {
-  width: 100%;
-  overflow-x: auto;
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 16px;
-  border: 1px solid var(--glass-border);
-}
-
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-th {
-  text-align: left;
-  padding: 1rem;
-  color: var(--text-secondary);
-  font-weight: 500;
-  border-bottom: 1px solid var(--glass-border);
-}
-
-td {
-  padding: 1rem;
-  border-bottom: 1px solid var(--glass-border);
-  color: var(--text-primary);
-}
-
-tr:last-child td {
-  border-bottom: none;
-}
-
-tr:hover td {
-  background: rgba(255, 255, 255, 0.02);
-}
-
-/* Mobile Optimizations */
 @media (max-width: 768px) {
-  .dashboard-container {
-    padding: 0.5rem;
+  .main-nav {
+    flex-direction: column;
+    position: fixed;
+    top: 0;
+    right: -100%;
+    width: 280px;
+    height: 100vh;
+    background: var(--bg-secondary);
+    box-shadow: -4px 0 20px rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    justify-content: flex-start;
+    padding-top: 5rem;
+    transition: 0.3s ease-in-out;
+  }
+
+  .main-nav.active {
+    right: 0;
+  }
+
+  .mobile-menu-btn {
+    display: block;
+    position: absolute;
+    top: 1.5rem;
+    right: 1rem;
   }
 
   .grid-cards {
     grid-template-columns: 1fr;
   }
 
-  header h1 {
-    font-size: 1.75rem;
+  .container {
+    padding: 1.5rem 0.75rem;
   }
 
-  /* Mobile Bottom Nav style if needed, currently keeping simple stack */
-  .main-nav {
-    overflow-x: auto;
-    justify-content: flex-start;
-    padding: 1rem;
+  header {
+    text-align: left;
+  }
+}
+
+/* Mobile (480px) */
+@media (max-width: 480px) {
+  :root {
+    --glass-bg: rgba(30, 41, 59, 0.9);
+  }
+
+  header h1 {
+    font-size: 1.5rem;
+  }
+
+  .glass-panel {
+    padding: 1rem !important;
+  }
+
+  th,
+  td {
+    padding: 0.75rem 0.5rem;
+    font-size: 0.85rem;
   }
 }
