@@ -18,7 +18,8 @@ source venv/bin/activate
 pip install -r requirements.txt
 
 # Gunicorn 서비스 재시작 (변경사항 반영 핵심)
-sudo systemctl restart cheongan-backend
+# sudo 비밀번호 자동 입력
+echo "blueeye0037!" | sudo -S systemctl restart cheongan-backend
 
 # 3. 프론트엔드 빌드 (수정된 React 코드 반영)
 echo "⚛️ 프론트엔드 새 파일 빌드 중..."
