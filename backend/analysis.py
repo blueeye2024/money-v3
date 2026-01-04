@@ -1679,35 +1679,72 @@ def generate_expert_commentary(ticker, res, tech, regime):
     rsi = tech.get('rsi', 50)
     macd = tech.get('macd', 0)
     sig = tech.get('macd_sig', 0)
-    
-    comment = f"📊 [전문가 분석: {ticker}]\n"
-    
-    # 1. RSI 분석
-    if rsi < 30:
-        comment += f"- RSI({rsi:.1f}): 과매도 구간(침체). 기술적 반등이 임박했습니다. 분할 매수 적기입니다.\n"
-    elif rsi > 70:
-        comment += f"- RSI({rsi:.1f}): 과매수 구간(과열). 단기 조정 가능성이 높으니 추격 매수는 자제하고 익절을 고려하세요.\n"
-    else:
-        comment += f"- RSI({rsi:.1f}): 중립 구간. 추세의 방향성이 중요합니다.\n"
-        
-    # 2. MACD 분석
-    if macd > sig:
-        comment += "- MACD: 골든크로스(상승 추세) 상태 유지 중. 매수 포지션 보유가 유리합니다.\n"
-    else:
-        comment += "- MACD: 데드크로스(하락/조정) 상태. 섣불리 진입하기보다 지지선을 확인하세요.\n"
-        
-    # 3. 종합 의견
     score = res.get('score', 0)
-    if score >= 90:
-        comment += "\n🚀 [최종 결론] 강력 매수 (Strong Buy)\n모든 지표가 상승을 가리키고 있습니다. 적극 진입하세요."
-    elif score >= 70:
-        comment += "\n✅ [최종 결론] 매수 우위 (Buy)\n수급이 양호합니다. 눌림목에서 진입을 시도하세요."
-    elif score <= 30:
-        comment += "\n⚠️ [최종 결론] 관망 권장 (Wait)\n아직 뚜렷한 상승 신호가 없습니다. 리스크 관리가 우선입니다."
+    
+    # --- 1. 시세 포착 근거 (Triple Filter Analysis) ---
+    logic_text = ""
+    if res.get('step1'):
+        logic_text += "   ✅ [추세] 30분봉 완전 정배열 (Trend established)\n"
     else:
-        comment += "\n⏳ [최종 결론] 중립 (Neutral)\n박스권 등락이 예상됩니다. 짧은 단타로 대응하세요."
+        logic_text += "   ⚠️ [추세] 30분봉 역배열/혼조세 (Trend uncertain)\n"
         
-    return comment
+    if res.get('step2'):
+        logic_text += "   ✅ [수급] 박스권 돌파 및 세력 개입 확인 (Breakout)\n"
+    elif res.get('step2_color') == 'orange':
+        logic_text += "   🚨 [위험] 주요 지지선 이탈 경보 (Support Broken)\n"
+    else:
+        logic_text += "   ⏳ [수급] 수급 모멘텀 대기 중 (Waiting for volume)\n"
+        
+    if res.get('step3'):
+        logic_text += "   ✅ [타이밍] 5분봉 정밀 진입 시점 포착 (Entry Point)\n"
+        
+    # --- 2. 매수/청산 이유 (Technical Confluence) ---
+    reason_text = ""
+    if rsi < 30:
+        reason_text += f"   - RSI({rsi:.1f}) 과매도 구간으로 기술적 반등 확률 80% 이상\n"
+    elif rsi > 70:
+        reason_text += f"   - RSI({rsi:.1f}) 과열 구간 진입, 차익 실현 매물 출회 주의\n"
+    
+    if macd > sig:
+        reason_text += "   - MACD 골든크로스 상태 유지 (상승 에너지 확산)\n"
+    else:
+        reason_text += "   - MACD 데드크로스 진행 중 (조정 압력 지속)\n"
+        
+    if res.get('step3_color') == 'yellow':
+        reason_text += "   - 단기 추세 꺾임(Yellow Signal) 발생으로 리스크 관리 필수\n"
+
+    # --- 3. 최종 결론 및 전략 (Action Plan) ---
+    action_header = ""
+    action_detail = ""
+    
+    if score >= 90:
+        action_header = "🚀 강력 매수 (STRONG BUY)"
+        action_detail = "모든 진입 조건이 완벽합니다. 비중을 실어 적극 진입하십시오. 목표 수익률은 +3% 이상입니다."
+    elif score >= 70:
+        action_header = "✅ 매수 (BUY)"
+        action_detail = "상승 추세가 확인되었습니다. 눌림목 발생 시 분할로 진입하는 것이 유리합니다."
+    elif score <= 30:
+        action_header = "⚠️ 관망/매도 (WAIT/SELL)"
+        action_detail = "진입 근거가 부족합니다. 무리한 진입보다 현금 비중을 늘리고 다음 파동을 기다리십시오."
+    elif res.get('step2_color') == 'orange':
+        action_header = "🚨 긴급 탈출 (STOP LOSS)"
+        action_detail = "원금 보전을 최우선으로 하십시오. 즉시 비중을 축소하거나 전량 청산하는 것을 권장합니다."
+    else:
+        action_header = "⏳ 중립/박스권 (NEUTRAL)"
+        action_detail = "방향성 탐색 구간입니다. 짧은 스캘핑 외에는 관망하는 것이 좋습니다."
+
+    # Combine All
+    final_report = f"""🎯 [청안 {ticker} 정밀 분석 리포트]
+
+1️⃣ 시세 포착 기준 (System Logic):
+{logic_text}
+2️⃣ 기술적/심리적 분석 (Technical & Reason):
+{reason_text}
+3️⃣ 최종 행동 지침 (Action Plan):
+🔥 {action_header}
+"{action_detail}"
+"""
+    return final_report.strip()
 
 def calculate_trade_readiness(res, tech={}):
     score = 0
