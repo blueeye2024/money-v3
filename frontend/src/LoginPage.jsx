@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { User, Lock, ArrowRight, Github } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 // Shadcn/UI 스타일의 유틸리티 컴포넌트 (Tailwind 기반)
 const Card = ({ children, className = "" }) => (
@@ -51,11 +52,20 @@ const Button = ({ children, variant = "primary", className = "", ...props }) => 
 
 export default function LoginPage() {
     const [isLoading, setIsLoading] = useState(false);
+    const navigate = useNavigate();
 
     const handleLogin = (e) => {
         e.preventDefault();
         setIsLoading(true);
-        setTimeout(() => setIsLoading(false), 2000); // 데모용 시뮬레이션
+
+        // 로그인 시뮬레이션 (1.5초 후 성공)
+        setTimeout(() => {
+            setIsLoading(false);
+            localStorage.setItem('isAuthenticated', 'true'); // 인증 상태 저장
+            // 이벤트를 발생시켜 상위 컴포넌트가 감지할 수 있게 함 (선택적)
+            window.dispatchEvent(new Event('storage'));
+            navigate('/'); // 메인으로 이동
+        }, 1500);
     };
 
     return (

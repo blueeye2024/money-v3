@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
 import FinalSignal from './components/FinalSignal';
 import MarketStats from './components/MarketStats';
 import MarketInsight from './components/MarketInsight';
@@ -173,10 +173,35 @@ function Dashboard() {
 }
 
 import RequestPage from './RequestPage';
+import LoginPage from './LoginPage';
 
 function Layout() {
     const location = useLocation();
+    const navigate = useNavigate();
     const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+    // Check authentication status
+    useEffect(() => {
+        const checkAuth = () => {
+            const auth = localStorage.getItem('isAuthenticated') === 'true';
+            setIsAuthenticated(auth);
+        };
+
+        checkAuth();
+        // Listen for storage events (e.g. login from another tab or dispatched event)
+        window.addEventListener('storage', checkAuth);
+
+        return () => {
+            window.removeEventListener('storage', checkAuth);
+        };
+    }, []);
+
+    const handleLogout = () => {
+        localStorage.removeItem('isAuthenticated');
+        setIsAuthenticated(false);
+        navigate('/');
+    };
 
     // Close menu when route changes
     useEffect(() => {
@@ -217,6 +242,34 @@ function Layout() {
                     color: location.pathname === '/requests' ? 'var(--accent-blue)' : 'var(--text-primary)',
                     fontWeight: location.pathname === '/requests' ? 'bold' : 'normal',
                 }}>요청사항</Link>
+
+                {isAuthenticated ? (
+                    <button
+                        onClick={handleLogout}
+                        className="nav-link"
+                        style={{
+                            background: 'rgba(255, 99, 71, 0.1)',
+                            border: '1px solid rgba(255, 99, 71, 0.2)',
+                            cursor: 'pointer',
+                            color: '#ff6347',
+                            padding: '0.5rem 1rem',
+                            borderRadius: '6px',
+                            marginLeft: '10px'
+                        }}
+                    >
+                        로그아웃
+                    </button>
+                ) : (
+                    <Link to="/login" className="nav-link" style={{
+                        color: location.pathname === '/login' ? 'var(--accent-blue)' : 'var(--text-primary)',
+                        fontWeight: location.pathname === '/login' ? 'bold' : 'normal',
+                        background: 'rgba(99, 102, 241, 0.1)',
+                        padding: '0.5rem 1rem',
+                        borderRadius: '6px',
+                        border: '1px solid rgba(99, 102, 241, 0.2)',
+                        marginLeft: '10px'
+                    }}>로그인</Link>
+                )}
             </nav>
 
             <Routes>
@@ -226,6 +279,7 @@ function Layout() {
                 <Route path="/managed-stocks" element={<ManagedStocksPage />} />
                 <Route path="/backtest" element={<BacktestPage />} />
                 <Route path="/requests" element={<RequestPage />} />
+                <Route path="/login" element={<LoginPage />} />
             </Routes>
 
 
@@ -233,7 +287,7 @@ function Layout() {
                 textAlign: 'center', padding: '2rem', marginTop: '4rem',
                 borderTop: '1px solid var(--glass-border)', color: 'var(--text-secondary)'
             }}>
-                <p>&copy; 2026 Cheongan FinTech. All rights reserved. Ver 3.0.10 (Build: 2026-01-04 22:25)</p>
+                <p>&copy; 2026 Cheongan FinTech. All rights reserved. Ver 3.0.11 (Build: 2026-01-05 00:10)</p>
             </footer>
         </div>
     );
