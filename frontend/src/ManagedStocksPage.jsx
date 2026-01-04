@@ -264,7 +264,7 @@ const ManagedStocksPage = () => {
                                                         fontWeight: 'bold',
                                                         color: stock.is_manual_price ? 'var(--accent-gold)' : 'white'
                                                     }}>
-                                                        ${stock.current_price ? stock.current_price.toFixed(2) : '0.00'}
+                                                        ${stock.current_price ? Number(stock.current_price).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 4 }) : '0.00'}
                                                     </div>
                                                     {stock.is_manual_price && (
                                                         <span style={{ fontSize: '0.7rem', color: 'var(--accent-gold)' }} title="수동 입력값">✋</span>

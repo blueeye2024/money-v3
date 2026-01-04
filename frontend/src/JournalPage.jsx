@@ -254,8 +254,9 @@ const JournalPage = () => {
 
                 h.currentValue = h.qty * h.currentPrice;
                 h.currentValueKRW = h.currentValue * exchangeRate;
-                h.profit = h.currentValue - h.totalCost;
-                h.profitPct = (h.profit / h.totalCost) * 100;
+                const cost = h.currentValue * 0.002; // 비용 0.2%
+                h.profit = h.currentValue - h.totalCost - cost;
+                h.profitPct = h.totalCost > 0 ? (h.profit / h.totalCost) * 100 : 0;
                 const stock = stocks.find(s => s.code === ticker);
                 h.name = stock ? stock.name : ticker;
             } else {
@@ -269,8 +270,9 @@ const JournalPage = () => {
     const totalValueUSD = Object.values(holdings).reduce((sum, h) => sum + h.currentValue, 0);
     const totalValueKRW = totalValueUSD * exchangeRate;
     const totalCapitalUSD = totalCapitalKRW / exchangeRate;
-    const totalProfit = totalValueUSD - totalCapitalUSD;
-    const totalProfitPct = totalCapitalUSD > 0 ? (totalProfit / totalCapitalUSD) * 100 : 0;
+    const totalProfit = Object.values(holdings).reduce((sum, h) => sum + h.profit, 0);
+    const totalInvested = Object.values(holdings).reduce((sum, h) => sum + h.totalCost, 0);
+    const totalProfitPct = totalInvested > 0 ? (totalProfit / totalInvested) * 100 : 0;
 
     // 비중 계산 및 비중 높은 순으로 정렬
     Object.values(holdings).forEach(h => {
@@ -333,6 +335,9 @@ const JournalPage = () => {
                     <div style={{ fontSize: '0.9rem', color: 'rgba(255,255,255,0.8)', marginBottom: '1rem', fontWeight: '500' }}>평가 손익</div>
                     <div style={{ fontSize: '2.5rem', fontWeight: '700', color: 'white', marginBottom: '0.5rem' }}>
                         {totalProfit >= 0 ? '+' : ''}${totalProfit.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    </div>
+                    <div style={{ fontSize: '1rem', color: 'rgba(255,255,255,0.7)', marginBottom: '0.2rem' }}>
+                        {(totalProfit * exchangeRate).toLocaleString(undefined, { maximumFractionDigits: 0 })}원
                     </div>
                     <div style={{ fontSize: '1.2rem', color: 'rgba(255,255,255,0.9)', fontWeight: '600' }}>
                         {totalProfitPct >= 0 ? '+' : ''}{totalProfitPct.toFixed(2)}%
