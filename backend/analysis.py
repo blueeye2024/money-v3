@@ -1611,6 +1611,82 @@ def check_triple_filter(ticker, data_30m, data_5m):
     
     return result
 
+# --- Antigravity V2.1 Helper Functions ---
+
+_NEWS_CACHE = {"data": [], "last_fetch": 0}
+
+def get_market_news_v2():
+    global _NEWS_CACHE
+    now = time.time()
+    if now - _NEWS_CACHE["last_fetch"] < 600: # Cache 10 min
+        return _NEWS_CACHE["data"]
+    
+    try:
+        news_items = []
+        # Fetch News from Lead Tickers
+        for t in ["SOXL", "NVDA", "SPY"]:
+            try:
+                tick = yf.Ticker(t)
+                news = tick.news
+                if news: news_items.extend(news[:2])
+            except: pass
+                
+        # Sort & Format
+        sorted_news = sorted(news_items, key=lambda x: x.get('providerPublishTime', 0), reverse=True)[:3]
+        formatted = []
+        for n in sorted_news:
+            # Convert timestamp to HH:MM (NY Time approx or just relative)
+            ts = n.get('providerPublishTime', 0)
+            dt = datetime.fromtimestamp(ts)
+            formatted.append({
+                "title": n.get('title', 'No Title'),
+                "publisher": n.get('publisher', 'Unknown'),
+                "url": n.get('link', '#'),
+                "time": dt.strftime('%H:%M')
+            })
+            
+        _NEWS_CACHE = {"data": formatted, "last_fetch": now}
+        return formatted
+    except Exception as e:
+        print(f"News Error: {e}")
+        return []
+
+def calculate_trade_readiness(res):
+    score = 0
+    details = []
+    
+    # Step 1: Trend (40%)
+    if res.get('step1'): 
+        score += 40
+        details.append("추세 정배열")
+    
+    # Step 2: Momentum (30%)
+    daily = res.get('daily_change', 0)
+    if res.get('step2'): 
+        score += 30
+        details.append("수급 돌파")
+    elif daily > 1.0: 
+        score += 15
+        details.append("수급 유입 중")
+        
+    # Step 3: Timing (30%)
+    if res.get('step3'): 
+        score += 30
+        details.append("타이밍 완료")
+        
+    # Risk Adjustment
+    is_risk = False
+    if res.get('step3_color') == 'yellow':
+        score = 50
+        details = ["단기 추세 꺾임 (Yellow)"]
+        is_risk = True
+    if res.get('step2_color') == 'orange':
+        score = 90
+        details = ["원금 위협 (Orange)"]
+        is_risk = True
+        
+    return {"score": score, "details": details, "is_risk": is_risk}
+    
 def generate_antigravity_guide(ticker, res, regime_info=None):
     # Time settings
     kr_tz = pytz.timezone('Asia/Seoul')
@@ -1684,9 +1760,21 @@ def determine_market_regime_v2(daily_data, data_30m, data_5m=None):
     
     risk_plan = generate_antigravity_guide(target_ticker, target_res, regime)
 
+    # V2.2 Advanced Data
+    soxl_readiness = calculate_trade_readiness(soxl_res)
+    soxs_readiness = calculate_trade_readiness(soxs_res)
+    recent_news = get_market_news_v2()
+
     # Prepare Final Details
     details = {
-        "version": "2.6.0",
+        "version": "3.0.23",
+        "prime_guide": {
+            "soxl_score": soxl_readiness,
+            "soxs_score": soxs_readiness,
+            "main_guide": risk_plan,
+            "news": recent_news,
+            "atr_volatility": "High (예상 진폭 $2.5)"  # Placeholder logic for now
+        },
         "regime": regime,
         "reason": reason,
         "comment": comment,
