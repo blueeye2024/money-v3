@@ -17,6 +17,24 @@ const JournalPage = () => {
     const [form, setForm] = useState({ ticker: '', qty: 1, price: '', memo: '' });
     const [editingId, setEditingId] = useState(null);
     const [updatingPrices, setUpdatingPrices] = useState(false);
+    const [costRate, setCostRate] = useState(0.2);
+
+    useEffect(() => {
+        const savedCostRate = localStorage.getItem('costRate');
+        if (savedCostRate) {
+            setCostRate(parseFloat(savedCostRate));
+        }
+    }, []);
+
+    const handleCostRateChange = (e) => {
+        const val = parseFloat(e.target.value);
+        if (!isNaN(val)) {
+            setCostRate(val);
+            localStorage.setItem('costRate', val);
+        } else {
+            setCostRate('');
+        }
+    };
 
     useEffect(() => { fetchAll(); }, []);
 
@@ -254,7 +272,7 @@ const JournalPage = () => {
 
                 h.currentValue = h.qty * h.currentPrice;
                 h.currentValueKRW = h.currentValue * exchangeRate;
-                const cost = h.currentValue * 0.002; // 비용 0.2%
+                const cost = h.currentValue * (costRate / 100); // 사용자 설정 비용 비율 반영
                 h.profit = h.currentValue - h.totalCost - cost;
                 h.profitPct = h.totalCost > 0 ? (h.profit / h.totalCost) * 100 : 0;
                 const stock = stocks.find(s => s.code === ticker);
@@ -332,7 +350,20 @@ const JournalPage = () => {
                 </div>
 
                 <div style={{ background: totalProfit >= 0 ? 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)' : 'linear-gradient(135deg, #eb3349 0%, #f45c43 100%)', borderRadius: '20px', padding: '2rem', boxShadow: totalProfit >= 0 ? '0 10px 40px rgba(17, 153, 142, 0.3)' : '0 10px 40px rgba(235, 51, 73, 0.3)' }}>
-                    <div style={{ fontSize: '0.9rem', color: 'rgba(255,255,255,0.8)', marginBottom: '1rem', fontWeight: '500' }}>평가 손익</div>
+                    <div style={{ fontSize: '0.9rem', color: 'rgba(255,255,255,0.8)', marginBottom: '1rem', fontWeight: '500', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>평가 손익</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.8rem', background: 'rgba(0,0,0,0.1)', padding: '2px 6px', borderRadius: '6px' }}>
+                            <span>비용</span>
+                            <input
+                                type="number"
+                                value={costRate}
+                                onChange={handleCostRateChange}
+                                step="0.01"
+                                style={{ width: '45px', background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '3px', padding: '2px', textAlign: 'right', outline: 'none', fontWeight: 'bold' }}
+                            />
+                            <span>%</span>
+                        </div>
+                    </div>
                     <div style={{ fontSize: '2.5rem', fontWeight: '700', color: 'white', marginBottom: '0.5rem' }}>
                         {totalProfit >= 0 ? '+' : ''}${totalProfit.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                     </div>
