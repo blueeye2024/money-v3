@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## [Ver 3.0.19] - 2026-01-05
+
+### 디자인 (Design)
+- **로그인 페이지 리뉴얼**:
+  - 최신 핀테크 트렌드를 반영한 **Dark Theme & Glassmorphism** 디자인 적용.
+  - **Framer Motion**을 활용한 동적 배경 애니메이션(Moving Blobs) 및 UI 전환 효과 구현.
+
 ## [Ver 3.0.18] - 2026-01-05
 
 ### UI 변경 (UI Changes)
