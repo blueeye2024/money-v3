@@ -10,3 +10,6 @@ apscheduler
 requests
 cryptography
 DBUtils==3.1.2
+passlib
+pyjwt
+bcrypt
