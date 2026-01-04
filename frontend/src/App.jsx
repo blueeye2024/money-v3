@@ -293,7 +293,7 @@ function Layout() {
                 textAlign: 'center', padding: '2rem', marginTop: '4rem',
                 borderTop: '1px solid var(--glass-border)', color: 'var(--text-secondary)'
             }}>
-                <p>&copy; 2026 Cheongan FinTech. All rights reserved. Ver 3.3.0 (Dual Strategy & Intel)</p>
+                <p>&copy; 2026 Cheongan FinTech. All rights reserved. Ver 3.4.0 (Cheongan Index Active)</p>
             </footer>
         </div>
     );

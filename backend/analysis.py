@@ -1615,6 +1615,61 @@ def check_triple_filter(ticker, data_30m, data_5m):
 
 _NEWS_CACHE = {"data": [], "last_fetch": 0}
 
+# Helper: Calculate Cheongan Index (보유 매력도)
+def calculate_cheongan_index(res):
+    score = 0
+    breakdown = {"trend": 0, "timing": 0, "box": 0}
+    reasons = []
+
+    # 1. 30분봉 기준 (50점) - 추세
+    # step1이 True이면 30분봉 정배열/골든크로스로 간주
+    if res.get('step1'): 
+        score += 50
+        breakdown['trend'] = 50
+        reasons.append("30분봉 추세 상승 (+50)")
+    
+    # 2. 5분봉 진입 신호 (30점) - 타이밍
+    # step3가 True이면 5분봉 매수 신호
+    if res.get('step3'):
+        score += 30
+        breakdown['timing'] = 30
+        reasons.append("5분봉 진입 신호 (+30)")
+    
+    # 3. 박스권 돌파 (20점) - 모멘텀
+    # step2가 True이면 수급 돌파
+    if res.get('step2'):
+        score += 20
+        breakdown['box'] = 20
+        reasons.append("박스권/수급 돌파 (+20)")
+    elif res.get('daily_change', 0) > 1.5: # 대안: 당일 강한 상승
+        score += 10
+        breakdown['box'] = 10
+        reasons.append("강한 수급 유입 (+10)")
+
+    # Risk Deduction (Yellow/Orange)
+    risk_factor = False
+    if res.get('step3_color') == 'yellow':
+        score = max(0, score - 20)
+        reasons.append("단기 추세 약화 (-20)")
+        risk_factor = True
+    
+    return {"score": score, "breakdown": breakdown, "reasons": reasons, "is_risk": risk_factor}
+
+# Helper: Generate One-Line Tech Comment
+def get_tech_comment(rsi, macd):
+    comment = ""
+    # RSI Analysis
+    if rsi >= 70: comment = "과매수 구간 (단기 조정 가능성)"
+    elif rsi <= 30: comment = "과매도 구간 (반등 기대)"
+    elif 50 <= rsi < 70: comment = "안정적 매수세 유지"
+    else: comment = "관망세 우위"
+    
+    # MACD Analysis
+    if macd > 0: comment += " / 상승 모멘텀 지속"
+    else: comment += " / 하락 압력 존재"
+    
+    return comment
+
 def get_market_news_v2():
     global _NEWS_CACHE
     now = time.time()
@@ -1746,177 +1801,108 @@ def generate_expert_commentary(ticker, res, tech, regime):
 """
     return final_report.strip()
 
-def calculate_trade_readiness(res, tech={}):
+def calculate_cheongan_index(res):
     score = 0
-    details = []
+    breakdown = {"30m": 0, "5m": 0, "box": 0}
     
-    # Fundamental Triple Filter Score
-    if res.get('step1'): score += 30; details.append("추세 정배열")
-    if res.get('step2'): score += 20; details.append("수급 돌파")
-    if res.get('step3'): score += 20; details.append("타이밍 OK")
+    # 1. 30분봉 기준 (50점) - 추세/골드크로스
+    # step1: 30분봉 정배열 여부
+    if res.get('step1'): 
+        score += 50
+        breakdown['30m'] = 50
     
-    # Technical Boost
-    rsi = tech.get('rsi', 50)
-    macd = tech.get('macd', 0)
-    macd_sig = tech.get('macd_sig', 0)
+    # 2. 5분봉 진입 신호 (30점)
+    # step3: 5분봉 타점
+    if res.get('step3'):
+        score += 30
+        breakdown['5m'] = 30
     
-    # RSI Oversold Bounce or Momentum
-    if 30 <= rsi <= 60: score += 10 # Healthy zone
-    if rsi < 30: score += 15; details.append("RSI 과매도 매력") # Oversold is good for entry
-    
-    # MACD Trend
-    if macd > macd_sig: score += 15; details.append("MACD 상승신호")
-    
-    # Risk Check
-    is_risk = False
-    if rsi > 75: 
-        score -= 20
-        details.append("RSI 과열 주의")
-        is_risk = True
+    # 3. 박스권 돌파 (20점)
+    # step2: 수급/박스권
+    if res.get('step2'):
+        score += 20
+        breakdown['box'] = 20
+    elif res.get('daily_change', 0) > 1.5:
+        score += 10
+        breakdown['box'] = 10 # 부분 점수 (강한 상승세)
         
-    # Final Cap
-    score = min(score, 100)
+    # Risk Factor (감점 요인)
+    if res.get('step3_color') == 'yellow': score -= 10
+    if res.get('step2_color') == 'orange': score -= 20
     
-    if res.get('step3_color') == 'yellow':
-        score = 50; is_risk = True; details = ["하락 전환 주의"]
-        
-    return {"score": score, "details": details, "is_risk": is_risk}
-    
-def generate_antigravity_guide(ticker, res, regime_info=None):
-    # Time settings
-    kr_tz = pytz.timezone('Asia/Seoul')
-    ny_tz = pytz.timezone('America/New_York')
-    now_kr = datetime.now(kr_tz)
-    now_ny = datetime.now(ny_tz)
-    time_str = f"🇺🇸 (NY) {now_ny.strftime('%Y.%m.%d %H:%M')} 🇰🇷 (KR) {now_kr.strftime('%Y.%m.%d %H:%M')}"
-    
-    # 1. 진입 (BUY)
-    if res.get("final"):
-         return f"🚀 [진입 신호] {ticker} 매수 실행\n이유: 30분봉 추세가 정배열이며, 현재 힘(+2% 돌파)과 5분봉 타이밍이 모두 일치합니다.\n비중: 자산의 100% 투입\n가이드: 이제부터 수익 10% 도달 전까지는 단계별 경보(Yellow/Orange)를 주시하세요.\n{time_str}"
-    
-    # 2. Yellow (Warning 1)
-    if res.get("step3_color") == "yellow":
-         return f"🟡 [주의] 보유 물량 30% 익절/손절 권고\n이유: 5분봉에서 단기 추세가 꺾였습니다. 특히 거래량이 실린 하락이므로 리스크 관리가 필요합니다.\n비중: 현재 수량의 30% 매도 (남은 비중: 70%)\n가이드: 추세가 다시 살아나지 않고 30분봉까지 꺾이면 전량 매도 준비를 해야 합니다.\n{time_str}"
+    return {"score": max(0, min(100, score)), "breakdown": breakdown}
 
-    # 3. Orange (Warning 2)
-    if res.get("step2_color") == "orange":
-         return f"🟠 [위험] 보유 물량 30% 추가 매도 권고\n이유: 현재가가 진입가보다 낮아져 원금 손실 구간에 진입했습니다.\n비중: 추가 30% 매도\n가이드: 박스권 하단 이탈 시 전량 매도합니다.\n{time_str}"
-         
-    # Context specific monitoring
-    if regime_info == "Bull" and ticker == "SOXL":
-        return f"👀 [관망] {ticker} 진입 대기 중\n이유: 현재 상승장(Bull)이나 정확한 3단계 필터 진입 타점을 기다리고 있습니다.\n가이드: 5분봉 골든크로스가 나오면 즉시 진입합니다.\n{time_str}"
-        
-    if regime_info == "Bear" and ticker == "SOXS":
-        return f"👀 [관망] {ticker} 진입 대기 중\n이유: 현재 하락장(Bear)이나 정확한 3단계 필터 진입 타점을 기다리고 있습니다.\n가이드: 5분봉 골든크로스가 나오면 즉시 진입합니다.\n{time_str}"
-        
-    return f"💤 [휴식] {ticker} 관망 구간\n이유: 현재 시장 주도 추세와 맞지 않거나 뚜렷한 신호가 없습니다.\n가이드: UPRO 변동성을 체크하며 다음 기회를 기다리세요.\n{time_str}"
+def get_tech_comment(rsi, macd):
+    comment = []
+    if rsi >= 70: comment.append("RSI 과매수(조정 주의)")
+    elif rsi <= 30: comment.append("RSI 과매도(반등 기대)")
+    else: comment.append(f"RSI {rsi:.1f} (중립)")
+    
+    if macd > 0: comment.append("MACD 상승세")
+    else: comment.append("MACD 하락/조정")
+    
+    return " / ".join(comment)
 
-def determine_market_regime_v2(daily_data, data_30m, data_5m=None):
+def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
     """
-    Cheongan V2.3 Master Signal Logic (Control Tower)
+    Cheongan V3.4 Master Signal Logic (Control Tower)
+    Validates UPRO, SOXL, SOXS with Cheongan Index
     """
     if data_5m is None:
         data_5m = _DATA_CACHE.get("5m")
-
-    # Calculate Signals
-    upro_res = check_triple_filter("UPRO", data_30m, data_5m) # For Regime Calculation
-    soxl_res = check_triple_filter("SOXL", data_30m, data_5m)
-    soxs_res = check_triple_filter("SOXS", data_30m, data_5m)
-
-    # Market Regime Logic (Based on UPRO Daily Change)
-    # Rule: Bull (>= +1.5%), Bear (<= -1.5%), Sideways (In-between)
-    upro_change = upro_res.get("daily_change", 0)
-    upro_price = upro_res.get("current_price", 0)
+        
+    tickers = ["SOXL", "SOXS", "UPRO"]
+    results = {}
+    techs = {}
     
-    if upro_change >= 1.5:
-        regime = "Bull"
-        reason = f"UPRO {upro_change:+.2f}% (상승장)"
-        comment = "시장 상황: 상승장 (Bull Market). SOXL 진입 기회 모색."
-        current_strategy = "추세 추종: 지수가 강한 상승 국면입니다. SOXL의 신호에 집중하세요."
-    elif upro_change <= -1.5:
-        regime = "Bear"
-        reason = f"UPRO {upro_change:+.2f}% (하락장)"
-        comment = "시장 상황: 하락장 (Bear Market). SOXS 진입 기회 모색."
-        current_strategy = "추세 하락: 지수가 약세입니다. 인버스(SOXS) 신호를 주시하거나 현금 비중을 높이세요."
-    else:
-        regime = "Sideways"
-        # reason display format for UI
-        reason = f"UPRO {upro_change:+.2f}% (보합장)"
-        comment = "시장 상황: 보합장 (Sideways). 뚜렷한 추세가 없으므로 박스권 매매 유효."
-        current_strategy = "관망 및 단기 대응: 무리한 진입보다 확실한 돌파 신호(Step 2)를 기다리세요."
-
-    # SOXL/SOXS Status Logic (For detailed view, kept for reference)
-    soxl_count = sum([soxl_res["step1"], soxl_res["step2"], soxl_res["step3"]])
-    soxs_count = sum([soxs_res["step1"], soxs_res["step2"], soxs_res["step3"]])
+    for t in tickers:
+        # Triple Filter Logic (Requires backend to have data for these tickers)
+        results[t] = check_triple_filter(t, data_30m, data_5m)
+        
+        # Tech Indicators (5m)
+        df_5m = data_5m.get(t) if data_5m else None
+        techs[t] = calculate_tech_indicators(df_5m)
+        
+    # Analyze Regime (Reference UPRO Daily Change)
+    upro_chg = results["UPRO"].get("daily_change", 0)
+    regime = "Bull" if upro_chg >= 1.0 else ("Bear" if upro_chg <= -1.0 else "Neutral")
     
-    # Generate Guide Message (Antigravity V2.1)
-    target_ticker = "SOXL" if regime == "Bull" else ("SOXS" if regime == "Bear" else "SOXL/SOXS")
-    target_res = soxl_res if regime == "Bull" else (soxs_res if regime == "Bear" else {})
+    # Calculate Scores & Guides
+    scores = {}
+    guides = {}
+    tech_comments = {}
     
-    risk_plan = generate_antigravity_guide(target_ticker, target_res, regime)
-
-    # V2.2 Advanced Technical Analysis
-    try:
-        # Calculate Indicators on 5m data for short-term precision
-        # SOXL
-        soxl_df = data_5m.get('SOXL') if data_5m else None
-        soxl_tech = calculate_tech_indicators(soxl_df) if soxl_df is not None and not soxl_df.empty else {}
+    for t in tickers:
+        scores[t] = calculate_cheongan_index(results[t])
+        guides[t] = generate_expert_commentary(t, results[t], techs[t], regime)
         
-        # SOXS
-        soxs_df = data_5m.get('SOXS') if data_5m else None
-        soxs_tech = calculate_tech_indicators(soxs_df) if soxs_df is not None and not soxs_df.empty else {}
+        rsi = techs[t].get("rsi", 50)
+        macd = techs[t].get("macd", 0)
+        tech_comments[t] = get_tech_comment(rsi, macd)
         
-        # Update Readiness Score with Tech Data
-        soxl_readiness = calculate_trade_readiness(soxl_res, soxl_tech)
-        soxs_readiness = calculate_trade_readiness(soxs_res, soxs_tech)
-        
-        # EXPERT COMMENTARY GENERATION (Dual Strategy)
-        soxl_comment = generate_expert_commentary("SOXL", soxl_res, soxl_tech, regime)
-        soxs_comment = generate_expert_commentary("SOXS", soxs_res, soxs_tech, regime)
-        
-    except Exception as e:
-        print(f"Tech Analysis Error: {e}")
-        soxl_readiness = {"score": 0, "details": [], "is_risk": False}
-        soxs_readiness = {"score": 0, "details": [], "is_risk": False}
-        soxl_comment = risk_plan
-        soxs_comment = risk_plan
-
     recent_news = get_market_news_v2()
-
-    # Prepare Final Details
+    
     details = {
-        "version": "3.3.0 (Dual Core)",
+        "version": "3.4.0 (Cheongan Index)",
         "prime_guide": {
-            "soxl_score": soxl_readiness,
-            "soxs_score": soxs_readiness,
-            "soxl_guide": soxl_comment,
-            "soxs_guide": soxs_comment,
-            "main_guide": soxl_comment, # Fallback
-            "news": recent_news,
-            "tech_summary": { 
-                "soxl_rsi": f"{soxl_tech.get('rsi', 0):.1f}", 
-                "soxl_macd": f"{soxl_tech.get('macd', 0):.2f}",
-                "soxs_rsi": f"{soxs_tech.get('rsi', 0):.1f}",
-                "soxs_macd": f"{soxs_tech.get('macd', 0):.2f}"
-            },
-            "atr_volatility": "High"
+            "scores": scores,
+            "guides": guides,
+            "tech_summary": techs, # {ticker: {rsi, macd}}
+            "tech_comments": tech_comments, # {ticker: "comment"}
+            "news": recent_news
         },
         "regime": regime,
-        "reason": reason,
-        "comment": comment,
-        "current_strategy": current_strategy,
-        "risk_plan": risk_plan,
-        "upro": upro_res,  # upro_status -> upro로 변경하여 current_price 포함
-        "soxl": soxl_res,
-        "soxs": soxs_res,
+        "upro": results["UPRO"], # Signal Result
+        "soxl": results["SOXL"],
+        "soxs": results["SOXS"],
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
-
+    
     try:
         from db import update_market_status
         update_market_status(regime, details)
     except: pass
-
+    
     return {"regime": regime, "details": details}
     
 
