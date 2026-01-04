@@ -181,21 +181,25 @@ function Layout() {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-    // Check authentication status
+    // Check authentication and Protect Routes
     useEffect(() => {
         const checkAuth = () => {
             const auth = localStorage.getItem('isAuthenticated') === 'true';
             setIsAuthenticated(auth);
+
+            // 미인증 상태에서 로그인 페이지가 아닌 곳에 접근 시 로그인 페이지로 이동
+            if (!auth && location.pathname !== '/login') {
+                navigate('/login');
+            }
         };
 
         checkAuth();
-        // Listen for storage events (e.g. login from another tab or dispatched event)
         window.addEventListener('storage', checkAuth);
 
         return () => {
             window.removeEventListener('storage', checkAuth);
         };
-    }, []);
+    }, [location, navigate]); // 라우트 변경 시마다 체크
 
     const handleLogout = () => {
         localStorage.removeItem('isAuthenticated');
@@ -289,7 +293,7 @@ function Layout() {
                 textAlign: 'center', padding: '2rem', marginTop: '4rem',
                 borderTop: '1px solid var(--glass-border)', color: 'var(--text-secondary)'
             }}>
-                <p>&copy; 2026 Cheongan FinTech. All rights reserved. Ver 3.0.14 (Build: 2026-01-05 00:40)</p>
+                <p>&copy; 2026 Cheongan FinTech. All rights reserved. Ver 3.0.15 (Build: 2026-01-05 00:52)</p>
             </footer>
         </div>
     );
