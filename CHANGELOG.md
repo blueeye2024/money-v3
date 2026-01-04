@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## [Ver 3.0.3] - 2026-01-04
+
+### 추가 (Added)
+- **Brave Search MCP 서버**: 실시간 웹 검색 기능 추가
+  - API 키: BSAuMtSaYEFlWlGFHDg4ee1ZN-GLLOV
+  - 최신 뉴스, 시장 동향, 기술 정보 검색 가능
+  - 모든 MCP 설정 파일에 등록 완료
+
+### 개선 (Changed)
+- **MCP 서버 총 8개로 확장**: Context7, Sequential Thinking, Filesystem, MySQL, Shell, Memory, Fetch, Brave Search
+- **환경 변수 추가**: .bashrc에 BRAVE_API_KEY 추가
+- **문서 업데이트**: MCP 빠른참조 가이드에 Brave Search 사용 예시 추가
+- **프로젝트 정리**: 기존 지침 문서들을 backup 폴더로 이동
+
 ## [Ver 3.0.2] - 2026-01-04
 
 ### 추가 (Added)
