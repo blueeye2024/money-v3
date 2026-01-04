@@ -79,15 +79,18 @@ def is_market_open():
     
     return market_start <= now_est <= market_end
 
-def fetch_data(tickers=None):
+def fetch_data(tickers=None, force=False):
     global _DATA_CACHE
     
     target_list = tickers if tickers else TARGET_TICKERS
     now = time.time()
     
     # 1. Tiered Fetching Logic
-    # check real-time (30m, 5m): 1 min
-    needs_realtime = (now - _DATA_CACHE.get("last_fetch_realtime", 0)) > 60
+    # check real-time (30m, 5m): Default TTL 300s (5min) to rely on background scheduler
+    # If force=True (from scheduler), update immediately.
+    ttl = 300
+    needs_realtime = force or ((now - _DATA_CACHE.get("last_fetch_realtime", 0)) > ttl)
+
     # check long-term (1d, indices): 10 min
     needs_longterm = (now - _DATA_CACHE.get("last_fetch_longterm", 0)) > 600
     
@@ -1029,7 +1032,7 @@ def generate_trade_guidelines(results, market_data, regime_info, total_capital=1
 # Legacy regime functions removed.
 
 
-def run_analysis(held_tickers=[]):
+def run_analysis(held_tickers=[], force_update=False):
     print("Starting Analysis Run...")
     
     # -------------------------------------------------------------
@@ -1058,7 +1061,7 @@ def run_analysis(held_tickers=[]):
     # -------------------------------------------------------------
 
     # 1. Fetch Market Data (Only for SOXL, SOXS, UPRO)
-    data_30m, data_5m, data_1d, market_data, regime_daily_data = fetch_data(active_tickers)
+    data_30m, data_5m, data_1d, market_data, regime_daily_data = fetch_data(active_tickers, force=force_update)
     
     # 2. Determine Market Regime (V2.3 Master Signal)
     regime_info = determine_market_regime_v2(regime_daily_data, data_30m, data_5m)

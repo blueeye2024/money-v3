@@ -111,7 +111,8 @@ def monitor_signals():
     
     try:
         # Use run_analysis for all processing to ensure consistency with dashboard
-        full_report = run_analysis()
+        # Force update cache in background job so frontend gets fast cached data
+        full_report = run_analysis(force_update=True)
         stocks_data = full_report.get('stocks', [])
         
         for stock_res in stocks_data:
