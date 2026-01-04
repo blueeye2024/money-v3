@@ -1,14 +1,15 @@
 import React from 'react';
-import { Newspaper, TrendingUp, AlertTriangle, Zap, Activity, Radio, Info } from 'lucide-react';
+import { Newspaper, TrendingUp, AlertTriangle, Zap, Activity, Info } from 'lucide-react';
 
 // --- Sub Components ---
 
 const ScoreGauge = ({ ticker, data, isBull }) => {
+    // Safety check for data
     const score = data?.score || 0;
-    const isRisk = data?.is_risk;
+    const isRisk = data?.is_risk || false;
+    const details = data?.details || [];
 
     // Color Palette
-    // Bull(Cyan), Bear(Purple), Risk(Red)
     const baseColor = isRisk ? '#ef4444' : (isBull ? '#06b6d4' : '#a855f7');
 
     // Gradient styles
@@ -61,8 +62,8 @@ const ScoreGauge = ({ ticker, data, isBull }) => {
 
             {/* Logic Details */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {data?.details?.length > 0 ? (
-                    data.details.map((det, idx) => (
+                {details.length > 0 ? (
+                    details.map((det, idx) => (
                         <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', color: '#d1d5db' }}>
                             <Zap size={14} color={baseColor} fill={baseColor} />
                             <span>{det}</span>
@@ -102,11 +103,20 @@ const NewsItem = ({ news }) => (
 
 // MAIN COMPONENT
 const MarketInsight = ({ market, stocks, signalHistory }) => {
-    if (!market) return <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>데이터 분석 중...</div>;
+    // Robust Null Check
+    if (!market || !market.market_regime) {
+        return <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>데이터 분석 중...</div>;
+    }
 
     const { market_regime } = market;
-    const details = market_regime?.details;
-    const prime = details?.prime_guide || {};
+    const details = market_regime.details || {};
+    // Ensure prime object exists to prevent crash
+    const prime = details.prime_guide || {
+        soxl_score: { score: 0, details: [] },
+        soxs_score: { score: 0, details: [] },
+        main_guide: "데이터 동기화 중입니다...",
+        news: []
+    };
 
     return (
         <div className="glass-panel" style={{ padding: '0', marginBottom: '3rem', overflow: 'hidden' }}>
@@ -170,7 +180,7 @@ const MarketInsight = ({ market, stocks, signalHistory }) => {
                             <span style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>MARKET NEWS (Real-time)</span>
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                            {prime.news && prime.news.length > 0 ? (
+                            {prime.news && Array.isArray(prime.news) && prime.news.length > 0 ? (
                                 prime.news.map((n, i) => <NewsItem key={i} news={n} />)
                             ) : (
                                 <div style={{ fontSize: '0.8rem', color: '#555', padding: '1rem', textAlign: 'center' }}>뉴스 데이터 수신 중...</div>
