@@ -147,6 +147,8 @@ const RequestItem = ({ req }) => {
 const RequestPage = () => {
     const [requests, setRequests] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 20;
 
     useEffect(() => {
         fetch('/api/requests')
@@ -162,6 +164,19 @@ const RequestPage = () => {
             });
     }, []);
 
+    // Pagination Calculation
+    const indexOfLastItem = currentPage * itemsPerPage;
+    const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+    const currentRequests = requests.slice(indexOfFirstItem, indexOfLastItem);
+    const totalPages = Math.ceil(requests.length / itemsPerPage);
+
+    const handlePageChange = (newPage) => {
+        if (newPage >= 1 && newPage <= totalPages) {
+            setCurrentPage(newPage);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    };
+
     return (
         <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '2rem 1rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
@@ -171,6 +186,8 @@ const RequestPage = () => {
                 </h2>
                 <div style={{ color: '#94a3b8', fontSize: '0.9rem' }}>
                     Total: <span style={{ color: '#60a5fa', fontWeight: 'bold' }}>{requests.length}</span>
+                    <span style={{ margin: '0 8px', color: '#475569' }}>|</span>
+                    Page: <span style={{ color: '#e2e8f0', fontWeight: 'bold' }}>{currentPage}</span> / {totalPages}
                 </div>
             </div>
 
@@ -184,19 +201,75 @@ const RequestPage = () => {
                     아직 기록된 요청사항이 없습니다.
                 </div>
             ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                    {/* Header Row (Optional, for column guides) */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(140px, auto) 1fr minmax(80px, auto) 30px', gap: '1.5rem', padding: '0 1.5rem 0.8rem', color: '#64748b', fontSize: '0.8rem', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                        <div>Timestamp</div>
-                        <div>User Request Summary</div>
-                        <div style={{ textAlign: 'center' }}>Status</div>
-                        <div></div>
+                <>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        {/* Header Row */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(140px, auto) 1fr minmax(80px, auto) 30px', gap: '1.5rem', padding: '0 1.5rem 0.8rem', color: '#64748b', fontSize: '0.8rem', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                            <div>Timestamp</div>
+                            <div>User Request Summary</div>
+                            <div style={{ textAlign: 'center' }}>Status</div>
+                            <div></div>
+                        </div>
+
+                        {currentRequests.map(req => (
+                            <RequestItem key={req.id} req={req} />
+                        ))}
                     </div>
 
-                    {requests.map(req => (
-                        <RequestItem key={req.id} req={req} />
-                    ))}
-                </div>
+                    {/* Pagination Controls */}
+                    {totalPages > 1 && (
+                        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1rem', marginTop: '2.5rem' }}>
+                            <button
+                                onClick={() => handlePageChange(currentPage - 1)}
+                                disabled={currentPage === 1}
+                                style={{
+                                    padding: '0.6rem 1.2rem',
+                                    background: currentPage === 1 ? 'rgba(255,255,255,0.05)' : 'rgba(59, 130, 246, 0.2)',
+                                    color: currentPage === 1 ? '#64748b' : '#60a5fa',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+                                    fontWeight: '600',
+                                    fontSize: '0.9rem',
+                                    transition: 'all 0.2s'
+                                }}
+                            >
+                                ← Previous
+                            </button>
+
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                                    // 심플한 페이지 번호 표시 로직 (현재 페이지 주변만 보여주기 등 복잡한 로직 대신 1~5만 보여주거나 전체 보여주기)
+                                    // 여기서는 일단 단순하게 전체 페이지 수가 적을 때는 다 보여주고, 많으면... 
+                                    // 일단 심플하게 Prev/Next 버튼 위주로 가고 현재 페이지만 텍스트로 표시했음.
+                                    // 버튼만 있는게 깔끔하므로 번호 버튼은 생략하거나 현재 페이지 표시만 유지.
+                                    return null;
+                                })}
+                                <span style={{ color: '#94a3b8', fontSize: '0.95rem', background: 'rgba(0,0,0,0.2)', padding: '0.5rem 1rem', borderRadius: '8px' }}>
+                                    Page <span style={{ color: '#fff', fontWeight: 'bold' }}>{currentPage}</span> of {totalPages}
+                                </span>
+                            </div>
+
+                            <button
+                                onClick={() => handlePageChange(currentPage + 1)}
+                                disabled={currentPage === totalPages}
+                                style={{
+                                    padding: '0.6rem 1.2rem',
+                                    background: currentPage === totalPages ? 'rgba(255,255,255,0.05)' : 'rgba(59, 130, 246, 0.2)',
+                                    color: currentPage === totalPages ? '#64748b' : '#60a5fa',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
+                                    fontWeight: '600',
+                                    fontSize: '0.9rem',
+                                    transition: 'all 0.2s'
+                                }}
+                            >
+                                Next →
+                            </button>
+                        </div>
+                    )}
+                </>
             )}
 
             <style>{`
