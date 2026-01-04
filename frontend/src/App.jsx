@@ -66,25 +66,27 @@ function Dashboard() {
         }
     };
 
-    // Skeleton Loading Screen (Lazy Loading Effect)
     if (loading && !data) return (
-        <div className="dashboard-container" style={{ opacity: 0.7, pointerEvents: 'none' }}>
-            <header className="dashboard-header">
-                <div className="header-content">
-                    <div>
-                        <h1 style={{ color: 'var(--text-primary)', opacity: 0.5 }}>Analyzing Market...</h1>
-                        <p style={{ color: 'var(--text-secondary)' }}>실시간 데이터를 수신하고 있습니다.</p>
-                    </div>
-                </div>
-            </header>
-            <div style={{ padding: '0 2rem 2rem 2rem', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-                {/* Market Stats Skeleton */}
-                <div style={{ height: '80px', background: 'rgba(255,255,255,0.03)', borderRadius: '12px' }} />
-                {/* Insight Skeleton */}
-                <div style={{ height: '250px', background: 'rgba(255,255,255,0.03)', borderRadius: '16px' }} />
-                {/* Signal List Skeleton */}
-                <div style={{ height: '400px', background: 'rgba(255,255,255,0.03)', borderRadius: '16px' }} />
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh', flexDirection: 'column' }}>
+            <div style={{ fontSize: '2.5rem', fontWeight: 800, marginBottom: '2rem', background: 'linear-gradient(to right, #60a5fa, #34d399)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                CHEONGAN SYSTEM
             </div>
+            <div style={{ width: '320px', height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '10px', overflow: 'hidden', position: 'relative' }}>
+                <div style={{
+                    position: 'absolute', top: 0, left: 0, height: '100%', width: '100px',
+                    background: 'linear-gradient(90deg, transparent, #60a5fa, #34d399, transparent)',
+                    animation: 'loading-slide 1.5s infinite linear'
+                }} />
+            </div>
+            <div style={{ color: 'var(--text-secondary)', marginTop: '1.5rem', fontSize: '1rem', letterSpacing: '2px', fontWeight: 600 }}>
+                청안 해외주식 분석 시스템 가동 중...
+            </div>
+            <style>{`
+                @keyframes loading-slide {
+                    0% { transform: translateX(-100%); }
+                    100% { transform: translateX(320px); }
+                }
+            `}</style>
         </div>
     );
 
@@ -291,7 +293,7 @@ function Layout() {
                 textAlign: 'center', padding: '2rem', marginTop: '4rem',
                 borderTop: '1px solid var(--glass-border)', color: 'var(--text-secondary)'
             }}>
-                <p>&copy; 2026 Cheongan FinTech. All rights reserved. Ver 3.0.17 (Build: 2026-01-05 01:15)</p>
+                <p>&copy; 2026 Cheongan FinTech. All rights reserved. Ver 3.0.18 (Build: 2026-01-05 01:18)</p>
             </footer>
         </div>
     );
