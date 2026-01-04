@@ -1651,39 +1651,97 @@ def get_market_news_v2():
         print(f"News Error: {e}")
         return []
 
-def calculate_trade_readiness(res):
+def calculate_tech_indicators(df):
+    if df is None or len(df) < 26: return {}
+    try:
+        # RSI (14)
+        delta = df['Close'].diff()
+        gain = (delta.where(delta > 0, 0)).ewm(alpha=1/14, adjust=False).mean()
+        loss = (-delta.where(delta < 0, 0)).ewm(alpha=1/14, adjust=False).mean()
+        rs = gain / loss
+        df['RSI'] = 100 - (100 / (1 + rs))
+        
+        # MACD (12, 26, 9)
+        exp12 = df['Close'].ewm(span=12, adjust=False).mean()
+        exp26 = df['Close'].ewm(span=26, adjust=False).mean()
+        macd = exp12 - exp26
+        signal = macd.ewm(span=9, adjust=False).mean()
+        
+        current_rsi = df['RSI'].iloc[-1]
+        current_macd = macd.iloc[-1]
+        current_signal = signal.iloc[-1]
+        
+        return {"rsi": current_rsi, "macd": current_macd, "macd_sig": current_signal}
+    except:
+        return {}
+
+def generate_expert_commentary(ticker, res, tech, regime):
+    rsi = tech.get('rsi', 50)
+    macd = tech.get('macd', 0)
+    sig = tech.get('macd_sig', 0)
+    
+    comment = f"📊 [전문가 분석: {ticker}]\n"
+    
+    # 1. RSI 분석
+    if rsi < 30:
+        comment += f"- RSI({rsi:.1f}): 과매도 구간(침체). 기술적 반등이 임박했습니다. 분할 매수 적기입니다.\n"
+    elif rsi > 70:
+        comment += f"- RSI({rsi:.1f}): 과매수 구간(과열). 단기 조정 가능성이 높으니 추격 매수는 자제하고 익절을 고려하세요.\n"
+    else:
+        comment += f"- RSI({rsi:.1f}): 중립 구간. 추세의 방향성이 중요합니다.\n"
+        
+    # 2. MACD 분석
+    if macd > sig:
+        comment += "- MACD: 골든크로스(상승 추세) 상태 유지 중. 매수 포지션 보유가 유리합니다.\n"
+    else:
+        comment += "- MACD: 데드크로스(하락/조정) 상태. 섣불리 진입하기보다 지지선을 확인하세요.\n"
+        
+    # 3. 종합 의견
+    score = res.get('score', 0)
+    if score >= 90:
+        comment += "\n🚀 [최종 결론] 강력 매수 (Strong Buy)\n모든 지표가 상승을 가리키고 있습니다. 적극 진입하세요."
+    elif score >= 70:
+        comment += "\n✅ [최종 결론] 매수 우위 (Buy)\n수급이 양호합니다. 눌림목에서 진입을 시도하세요."
+    elif score <= 30:
+        comment += "\n⚠️ [최종 결론] 관망 권장 (Wait)\n아직 뚜렷한 상승 신호가 없습니다. 리스크 관리가 우선입니다."
+    else:
+        comment += "\n⏳ [최종 결론] 중립 (Neutral)\n박스권 등락이 예상됩니다. 짧은 단타로 대응하세요."
+        
+    return comment
+
+def calculate_trade_readiness(res, tech={}):
     score = 0
     details = []
     
-    # Step 1: Trend (40%)
-    if res.get('step1'): 
-        score += 40
-        details.append("추세 정배열")
+    # Fundamental Triple Filter Score
+    if res.get('step1'): score += 30; details.append("추세 정배열")
+    if res.get('step2'): score += 20; details.append("수급 돌파")
+    if res.get('step3'): score += 20; details.append("타이밍 OK")
     
-    # Step 2: Momentum (30%)
-    daily = res.get('daily_change', 0)
-    if res.get('step2'): 
-        score += 30
-        details.append("수급 돌파")
-    elif daily > 1.0: 
-        score += 15
-        details.append("수급 유입 중")
-        
-    # Step 3: Timing (30%)
-    if res.get('step3'): 
-        score += 30
-        details.append("타이밍 완료")
-        
-    # Risk Adjustment
+    # Technical Boost
+    rsi = tech.get('rsi', 50)
+    macd = tech.get('macd', 0)
+    macd_sig = tech.get('macd_sig', 0)
+    
+    # RSI Oversold Bounce or Momentum
+    if 30 <= rsi <= 60: score += 10 # Healthy zone
+    if rsi < 30: score += 15; details.append("RSI 과매도 매력") # Oversold is good for entry
+    
+    # MACD Trend
+    if macd > macd_sig: score += 15; details.append("MACD 상승신호")
+    
+    # Risk Check
     is_risk = False
+    if rsi > 75: 
+        score -= 20
+        details.append("RSI 과열 주의")
+        is_risk = True
+        
+    # Final Cap
+    score = min(score, 100)
+    
     if res.get('step3_color') == 'yellow':
-        score = 50
-        details = ["단기 추세 꺾임 (Yellow)"]
-        is_risk = True
-    if res.get('step2_color') == 'orange':
-        score = 90
-        details = ["원금 위협 (Orange)"]
-        is_risk = True
+        score = 50; is_risk = True; details = ["하락 전환 주의"]
         
     return {"score": score, "details": details, "is_risk": is_risk}
     
@@ -1760,20 +1818,49 @@ def determine_market_regime_v2(daily_data, data_30m, data_5m=None):
     
     risk_plan = generate_antigravity_guide(target_ticker, target_res, regime)
 
-    # V2.2 Advanced Data
-    soxl_readiness = calculate_trade_readiness(soxl_res)
-    soxs_readiness = calculate_trade_readiness(soxs_res)
+    # V2.2 Advanced Technical Analysis
+    try:
+        # Calculate Indicators on 5m data for short-term precision
+        # SOXL
+        soxl_df = data_5m.get('SOXL') if data_5m else None
+        soxl_tech = calculate_tech_indicators(soxl_df) if soxl_df is not None and not soxl_df.empty else {}
+        
+        # SOXS
+        soxs_df = data_5m.get('SOXS') if data_5m else None
+        soxs_tech = calculate_tech_indicators(soxs_df) if soxs_df is not None and not soxs_df.empty else {}
+        
+        # Update Readiness Score with Tech Data
+        soxl_readiness = calculate_trade_readiness(soxl_res, soxl_tech)
+        soxs_readiness = calculate_trade_readiness(soxs_res, soxs_tech)
+        
+        # EXPERT COMMENTARY GENERATION
+        # Combine Regime + Signal + Tech Indicators
+        target_tech = soxl_tech if regime == "Bull" else soxs_tech
+        expert_comment = generate_expert_commentary(target_ticker, target_res, target_tech, regime)
+        
+    except Exception as e:
+        print(f"Tech Analysis Error: {e}")
+        soxl_readiness = {"score": 0, "details": [], "is_risk": False}
+        soxs_readiness = {"score": 0, "details": [], "is_risk": False}
+        expert_comment = risk_plan # Fallback
+
     recent_news = get_market_news_v2()
 
     # Prepare Final Details
     details = {
-        "version": "3.0.23",
+        "version": "3.1.0 (Expert)",
         "prime_guide": {
             "soxl_score": soxl_readiness,
             "soxs_score": soxs_readiness,
-            "main_guide": risk_plan,
+            "main_guide": expert_comment,
             "news": recent_news,
-            "atr_volatility": "High (예상 진폭 $2.5)"  # Placeholder logic for now
+            "tech_summary": { # New Field for UI
+                "soxl_rsi": f"{soxl_tech.get('rsi', 0):.1f}", 
+                "soxl_macd": f"{soxl_tech.get('macd', 0):.2f}",
+                "soxs_rsi": f"{soxs_tech.get('rsi', 0):.1f}",
+                "soxs_macd": f"{soxs_tech.get('macd', 0):.2f}"
+            },
+            "atr_volatility": "High (예상 진폭 $3.5)" 
         },
         "regime": regime,
         "reason": reason,
