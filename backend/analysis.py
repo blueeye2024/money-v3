@@ -1870,34 +1870,36 @@ def determine_market_regime_v2(daily_data, data_30m, data_5m=None):
         soxl_readiness = calculate_trade_readiness(soxl_res, soxl_tech)
         soxs_readiness = calculate_trade_readiness(soxs_res, soxs_tech)
         
-        # EXPERT COMMENTARY GENERATION
-        # Combine Regime + Signal + Tech Indicators
-        target_tech = soxl_tech if regime == "Bull" else soxs_tech
-        expert_comment = generate_expert_commentary(target_ticker, target_res, target_tech, regime)
+        # EXPERT COMMENTARY GENERATION (Dual Strategy)
+        soxl_comment = generate_expert_commentary("SOXL", soxl_res, soxl_tech, regime)
+        soxs_comment = generate_expert_commentary("SOXS", soxs_res, soxs_tech, regime)
         
     except Exception as e:
         print(f"Tech Analysis Error: {e}")
         soxl_readiness = {"score": 0, "details": [], "is_risk": False}
         soxs_readiness = {"score": 0, "details": [], "is_risk": False}
-        expert_comment = risk_plan # Fallback
+        soxl_comment = risk_plan
+        soxs_comment = risk_plan
 
     recent_news = get_market_news_v2()
 
     # Prepare Final Details
     details = {
-        "version": "3.1.0 (Expert)",
+        "version": "3.3.0 (Dual Core)",
         "prime_guide": {
             "soxl_score": soxl_readiness,
             "soxs_score": soxs_readiness,
-            "main_guide": expert_comment,
+            "soxl_guide": soxl_comment,
+            "soxs_guide": soxs_comment,
+            "main_guide": soxl_comment, # Fallback
             "news": recent_news,
-            "tech_summary": { # New Field for UI
+            "tech_summary": { 
                 "soxl_rsi": f"{soxl_tech.get('rsi', 0):.1f}", 
                 "soxl_macd": f"{soxl_tech.get('macd', 0):.2f}",
                 "soxs_rsi": f"{soxs_tech.get('rsi', 0):.1f}",
                 "soxs_macd": f"{soxs_tech.get('macd', 0):.2f}"
             },
-            "atr_volatility": "High (예상 진폭 $3.5)" 
+            "atr_volatility": "High"
         },
         "regime": regime,
         "reason": reason,

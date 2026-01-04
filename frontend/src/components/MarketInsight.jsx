@@ -342,180 +342,208 @@ const MarketInsight = ({ market, stocks, signalHistory }) => {
                     <TripleFilterStatus title="SOXS (BEAR TOWER)" status={regimeDetails?.soxs} isBear={true} />
                 </div>
 
-                {/* Detailed Strategy Guide */}
-                <div style={{ background: 'linear-gradient(145deg, rgba(30,41,59,0.5), rgba(15,23,42,0.6))', padding: '1.5rem', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', marginBottom: '1.5rem' }}>
-                        <div style={{ width: '36px', height: '36px', background: 'rgba(96, 165, 250, 0.2)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem' }}>📋</div>
-                        <h4 style={{ margin: 0, fontSize: '1.2rem', color: '#60a5fa', fontWeight: '800' }}>종합 매매 실천 계획 & 상세 전략 가이드</h4>
+                {/* 2. Prime Guide : Action Plan (Full Width, Dual Core) */}
+                <div style={{ background: 'rgba(15, 23, 42, 0.9)', padding: '1.5rem', borderRadius: '20px', border: '1px solid rgba(56, 189, 248, 0.5)', boxShadow: '0 0 30px rgba(56, 189, 248, 0.1)', marginBottom: '24px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '1rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <div style={{ width: '12px', height: '12px', background: '#38bdf8', borderRadius: '50%', boxShadow: '0 0 15px #38bdf8' }} />
+                            <h3 style={{ margin: 0, fontSize: '1.4rem', color: '#38bdf8', fontWeight: '900', letterSpacing: '-0.5px' }}>청안 Prime Guide : Action Plan</h3>
+                        </div>
+                        <div style={{ fontSize: '0.8rem', color: '#64748b', background: '#0f172a', padding: '4px 10px', borderRadius: '20px' }}>V3.3 Dual Core Active</div>
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem' }}>
-                        <div style={{ background: 'rgba(0,0,0,0.2)', padding: '1.2rem', borderRadius: '16px' }}>
-                            <div style={{ color: 'var(--accent-gold)', fontWeight: 'bold', fontSize: '0.9rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <div style={{ width: '6px', height: '6px', background: 'var(--accent-gold)', borderRadius: '50%' }} /> HISTORY (신호 발생 기록)
+                    {/* Dual Guide Layout */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                        {/* SOXL Guide */}
+                        <div style={{ background: 'rgba(6, 182, 212, 0.05)', padding: '1.5rem', borderRadius: '16px', border: '1px solid rgba(6, 182, 212, 0.2)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                                <h4 style={{ margin: 0, color: '#06b6d4', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '6px' }}>🐂 SOXL 전략 <span style={{ fontSize: '0.7rem', opacity: 0.7 }}>Risk On</span></h4>
+                                <div style={{ textAlign: 'right' }}>
+                                    <span style={{ fontSize: '0.8rem', color: '#67e8f9', display: 'block' }}>매수 준비율</span>
+                                    <span style={{ fontSize: '1.4rem', fontWeight: '900', color: '#06b6d4' }}>
+                                        {regimeDetails?.prime_guide?.soxl_score?.score}%
+                                    </span>
+                                </div>
                             </div>
-                            <div style={{ color: '#d1d5db', fontSize: '0.9rem', lineHeight: '1.7', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                {signalHistory && Array.isArray(signalHistory) && signalHistory.length > 0 ? (
-                                    signalHistory.map(sig => {
-                                        // 한국시간만 표시
-                                        const kstTime = sig.time_kst || (sig.signal_time || '').split('(')[0].trim();
-
-                                        // BUY/SELL 한글 변환
-                                        const signalType = sig.signal_type || '';
-                                        let actionText = '';
-                                        let actionColor = '#888';
-
-                                        if (signalType.includes('BUY')) {
-                                            actionText = '매수';
-                                            actionColor = '#ef4444';  // 붉은색
-                                        } else if (signalType.includes('SELL')) {
-                                            actionText = '매도';
-                                            actionColor = '#3b82f6';  // 파란색
-                                        } else if (signalType.includes('WARNING')) {
-                                            actionText = '경보';
-                                            actionColor = '#eab308';  // 노란색
-                                        }
-
-                                        // 신호 이유
-                                        const reason = sig.signal_reason || '';
-
-                                        return (
-                                            <div key={sig.id} style={{
-                                                display: 'flex',
-                                                flexDirection: 'column',
-                                                borderBottom: '1px dashed rgba(255,255,255,0.1)',
-                                                paddingBottom: '8px',
-                                                gap: '4px'
-                                            }}>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                    <span style={{ fontSize: '0.75rem', color: '#888' }}>
-                                                        {kstTime}
-                                                    </span>
-                                                    <span style={{ color: actionColor, fontWeight: 'bold', whiteSpace: 'nowrap' }}>
-                                                        {sig.ticker} {actionText}
-                                                    </span>
-                                                </div>
-                                                {reason && (
-                                                    <div style={{ fontSize: '0.7rem', color: '#666', paddingLeft: '4px' }}>
-                                                        {reason}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        );
-                                    })
-                                ) : (
-                                    <div style={{ color: '#666' }}>최근 발생한 신호가 없습니다.</div>
-                                )}
+                            <div style={{ width: '100%', height: '4px', background: '#164e63', marginBottom: '15px', borderRadius: '2px' }}><div style={{ width: `${regimeDetails?.prime_guide?.soxl_score?.score}%`, height: '100%', background: '#06b6d4', borderRadius: '2px' }} /></div>
+                            <div style={{ whiteSpace: 'pre-wrap', lineHeight: '1.7', fontSize: '0.92rem', color: '#cffafe', fontFamily: "'Noto Sans KR', sans-serif" }}>
+                                {regimeDetails?.prime_guide?.soxl_guide || "분석 중..."}
                             </div>
                         </div>
 
-                        <div style={{ background: 'rgba(0,0,0,0.3)', padding: '1.2rem', borderRadius: '16px', border: '1px solid rgba(56, 189, 248, 0.3)', boxShadow: '0 4px 20px rgba(0,0,0,0.3)' }}>
-                            <div style={{ marginBottom: '1rem', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '1rem' }}>
-                                <div style={{ color: '#38bdf8', fontWeight: 'bold', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <div style={{ width: '8px', height: '8px', background: '#38bdf8', borderRadius: '50%', boxShadow: '0 0 10px #38bdf8' }} />
-                                    청안 Prime Guide : Action Plan
+                        {/* SOXS Guide */}
+                        <div style={{ background: 'rgba(168, 85, 247, 0.05)', padding: '1.5rem', borderRadius: '16px', border: '1px solid rgba(168, 85, 247, 0.2)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                                <h4 style={{ margin: 0, color: '#a855f7', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '6px' }}>🐻 SOXS 전략 <span style={{ fontSize: '0.7rem', opacity: 0.7 }}>Risk Off</span></h4>
+                                <div style={{ textAlign: 'right' }}>
+                                    <span style={{ fontSize: '0.8rem', color: '#d8b4fe', display: 'block' }}>매수 준비율</span>
+                                    <span style={{ fontSize: '1.4rem', fontWeight: '900', color: '#a855f7' }}>
+                                        {regimeDetails?.prime_guide?.soxs_score?.score}%
+                                    </span>
                                 </div>
-                                <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '4px' }}>최종 결론 및 행동 지침 (Score 기반)</div>
                             </div>
+                            <div style={{ width: '100%', height: '4px', background: '#4c1d95', marginBottom: '15px', borderRadius: '2px' }}><div style={{ width: `${regimeDetails?.prime_guide?.soxs_score?.score}%`, height: '100%', background: '#a855f7', borderRadius: '2px' }} /></div>
+                            <div style={{ whiteSpace: 'pre-wrap', lineHeight: '1.7', fontSize: '0.92rem', color: '#f3e8ff', fontFamily: "'Noto Sans KR', sans-serif" }}>
+                                {regimeDetails?.prime_guide?.soxs_guide || "분석 중..."}
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
-                            {/* Score Bars */}
-                            <div style={{ display: 'flex', gap: '15px', marginBottom: '20px' }}>
-                                {['SOXL', 'SOXS'].map(ticker => {
-                                    const guide = regimeDetails?.prime_guide;
-                                    const score = guide?.[ticker.toLowerCase() + '_score']?.score || 0;
-                                    const color = ticker === 'SOXL' ? '#06b6d4' : '#a855f7';
+                {/* 3. Bottom Grid: History & Intelligence */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(320px, 1fr) 2fr', gap: '24px' }}>
+
+                    {/* Col 1: History (Existing Logic) */}
+                    <div style={{ background: 'rgba(0,0,0,0.2)', padding: '1.5rem', borderRadius: '16px' }}>
+                        <div style={{ color: 'var(--accent-gold)', fontWeight: 'bold', fontSize: '1rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <div style={{ width: '6px', height: '6px', background: 'var(--accent-gold)', borderRadius: '50%' }} /> HISTORY (신호 발생 기록)
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '450px', overflowY: 'auto', paddingRight: '5px' }}>
+                            {signalHistory && Array.isArray(signalHistory) && signalHistory.length > 0 ? (
+                                signalHistory.map(sig => {
+                                    const kstTime = sig.time_kst || (sig.signal_time || '').split('(')[0].trim();
+                                    const signalType = sig.signal_type || '';
+                                    let actionText = '';
+                                    let actionColor = '#888';
+
+                                    if (signalType.includes('BUY')) {
+                                        actionText = '매수';
+                                        actionColor = '#ef4444';
+                                    } else if (signalType.includes('SELL')) {
+                                        actionText = '매도';
+                                        actionColor = '#3b82f6';
+                                    } else if (signalType.includes('WARNING')) {
+                                        actionText = '경보';
+                                        actionColor = '#eab308';
+                                    }
+
+                                    const reason = sig.signal_reason || '';
+
                                     return (
-                                        <div key={ticker} style={{ flex: 1, background: 'rgba(255,255,255,0.03)', padding: '12px', borderRadius: '12px', border: `1px solid ${color}33` }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', marginBottom: '8px' }}>
-                                                <span style={{ color: color, fontWeight: 'bold' }}>{ticker} 매수 준비율</span>
-                                                <span style={{ color: 'white', fontWeight: '900', fontSize: '1.1rem' }}>{score}%</span>
+                                        <div key={sig.id} style={{
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            borderBottom: '1px dashed rgba(255,255,255,0.1)',
+                                            paddingBottom: '8px',
+                                            gap: '4px'
+                                        }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <span style={{ fontSize: '0.75rem', color: '#888' }}>
+                                                    {kstTime}
+                                                </span>
+                                                <span style={{ color: actionColor, fontWeight: 'bold', whiteSpace: 'nowrap' }}>
+                                                    {sig.ticker} {actionText}
+                                                </span>
                                             </div>
-                                            <div style={{ width: '100%', height: '8px', background: '#333', borderRadius: '4px' }}>
-                                                <div style={{ width: `${score}%`, height: '100%', background: color, borderRadius: '4px', transition: 'width 0.5s', boxShadow: `0 0 12px ${color}55` }} />
-                                            </div>
+                                            {reason && (
+                                                <div style={{ fontSize: '0.7rem', color: '#666', paddingLeft: '4px' }}>
+                                                    {reason}
+                                                </div>
+                                            )}
                                         </div>
-                                    )
-                                })}
-                            </div>
+                                    );
+                                })
+                            ) : (
+                                <div style={{ color: '#666' }}>최근 발생한 신호가 없습니다.</div>
+                            )}
+                        </div>
+                    </div>
 
-                            {/* Main Guide Deep Dive */}
-                            <div style={{
-                                background: 'rgba(15, 23, 42, 0.6)',
-                                padding: '16px',
-                                borderRadius: '12px',
-                                marginBottom: '0',
-                                borderLeft: '4px solid #38bdf8'
-                            }}>
-                                <h5 style={{ margin: '0 0 10px 0', color: '#38bdf8', fontSize: '0.9rem' }}>🎯 종합 매매 실천 계획 & 상세 전략 가이드</h5>
-                                <div style={{ color: '#f1f5f9', fontSize: '0.9rem', lineHeight: '1.7', whiteSpace: 'pre-wrap', fontFamily: "'Noto Sans KR', sans-serif" }}>
-                                    {regimeDetails?.prime_guide?.main_guide || "전략 생성 중..."}
-                                </div>
+                    {/* Col 2: Market Intelligence Center */}
+                    <div style={{ background: 'rgba(0,0,0,0.2)', padding: '1.5rem', borderRadius: '16px' }}>
+                        <h4 style={{ margin: '0 0 16px 0', fontSize: '1.1rem', color: '#e2e8f0', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '10px' }}>
+                            🌐 Market Intelligence Center (심층 분석)
+                        </h4>
+
+                        {/* My Stocks Ticker */}
+                        <div style={{ background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '12px', marginBottom: '20px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                            <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginBottom: '8px', fontWeight: 'bold' }}>💼 내 보유 주식 현황 (Active Stocks)</div>
+                            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                                {stocks && stocks.filter(s => s.is_active).map(s => (
+                                    <div key={s.id} style={{
+                                        display: 'flex', alignItems: 'center', gap: '8px',
+                                        background: 'rgba(0,0,0,0.4)', padding: '8px 12px', borderRadius: '8px',
+                                        borderLeft: '3px solid #64748b'
+                                    }}>
+                                        <span style={{ fontWeight: 'bold', color: 'white' }}>{s.symbol}</span>
+                                        <span style={{ color: '#e2e8f0', fontWeight: '500' }}>${s.current_price || '-'}</span>
+                                        <span style={{ fontSize: '0.8rem', color: (s.change_rate > 0 ? '#4ade80' : s.change_rate < 0 ? '#f87171' : '#94a3b8') }}>
+                                            {s.change_rate ? `${s.change_rate}%` : ''}
+                                        </span>
+                                    </div>
+                                ))}
+                                {(!stocks || stocks.filter(s => s.is_active).length === 0) && <span style={{ color: '#666', fontSize: '0.8rem', padding: '4px' }}>활성화된 보유 종목이 없습니다.</span>}
                             </div>
                         </div>
 
-                        {/* --- New Section: Market Intelligence Center --- */}
-                        <div style={{ marginTop: '24px', background: 'rgba(0,0,0,0.2)', padding: '1.2rem', borderRadius: '16px' }}>
-                            <h4 style={{ margin: '0 0 16px 0', fontSize: '1rem', color: '#e2e8f0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                🌐 Market Intelligence Center (심층 분석)
-                            </h4>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
-
-                                {/* 1. Technical Detail Panel */}
-                                <div style={{ background: 'rgba(255,255,255,0.03)', padding: '12px', borderRadius: '12px' }}>
-                                    <h5 style={{ margin: '0 0 10px 0', color: '#94a3b8', fontSize: '0.8rem' }}>📊 SOXL/SOXS 상세 분석</h5>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                        {['SOXL', 'SOXS'].map(ticker => {
-                                            const guide = regimeDetails?.prime_guide;
-                                            const rsi = guide?.tech_summary?.[ticker.toLowerCase() + '_rsi'] || '-';
-                                            const macd = guide?.tech_summary?.[ticker.toLowerCase() + '_macd'] || '-';
-                                            const color = ticker === 'SOXL' ? '#06b6d4' : '#a855f7';
-                                            return (
-                                                <div key={ticker} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '6px' }}>
-                                                    <span style={{ color: color, fontWeight: 'bold' }}>{ticker}</span>
-                                                    <span style={{ color: '#ccc' }}>RSI: <b style={{ color: Number(rsi) > 70 ? '#f87171' : (Number(rsi) < 30 ? '#4ade80' : 'white') }}>{rsi}</b></span>
-                                                    <span style={{ color: '#ccc' }}>MACD: <b>{macd}</b></span>
-                                                </div>
-                                            );
-                                        })}
+                        {/* Tech Analysis & News Grid */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                            <div style={{ background: 'rgba(255,255,255,0.03)', padding: '15px', borderRadius: '12px' }}>
+                                <h5 style={{ margin: '0 0 12px 0', color: '#06b6d4', display: 'flex', justifyContent: 'space-between' }}>
+                                    📊 SOXL Tech Detail
+                                    <span style={{ fontSize: '0.7rem', color: '#666' }}>5m Chart</span>
+                                </h5>
+                                <div style={{ fontSize: '0.9rem', color: '#cbd5e1', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                        <span>RSI (14)</span>
+                                        <span style={{ fontWeight: 'bold', color: Number(regimeDetails?.prime_guide?.tech_summary?.soxl_rsi) > 70 ? '#f87171' : Number(regimeDetails?.prime_guide?.tech_summary?.soxl_rsi) < 30 ? '#4ade80' : 'white' }}>
+                                            {regimeDetails?.prime_guide?.tech_summary?.soxl_rsi || '-'}
+                                        </span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                        <span>MACD</span>
+                                        <span style={{ fontWeight: 'bold' }}>{regimeDetails?.prime_guide?.tech_summary?.soxl_macd || '-'}</span>
                                     </div>
                                 </div>
-
-                                {/* 2. Global News Panel */}
-                                <div style={{ gridColumn: 'span 2', background: 'rgba(255,255,255,0.03)', padding: '12px', borderRadius: '12px' }}>
-                                    <h5 style={{ margin: '0 0 10px 0', color: '#94a3b8', fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between' }}>
-                                        <span>📰 주요 증시 뉴스 (Global)</span>
-                                        <span style={{ fontSize: '0.7rem', color: '#666' }}>실시간 업데이트</span>
-                                    </h5>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                                        {(regimeDetails?.prime_guide?.news || []).slice(0, 4).map((n, i) => (
-                                            n.url ? (
-                                                <a key={i} href={n.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
-                                                    <div style={{
-                                                        padding: '8px', background: 'rgba(0,0,0,0.2)', borderRadius: '6px',
-                                                        border: '1px solid rgba(255,255,255,0.05)', height: '100%',
-                                                        cursor: 'pointer', transition: 'background 0.2s'
-                                                    }}
-                                                        onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
-                                                        onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.2)'}
-                                                    >
-                                                        <div style={{ fontSize: '0.8rem', color: '#e2e8f0', marginBottom: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.title}</div>
-                                                        <div style={{ fontSize: '0.7rem', color: '#64748b' }}>{n.publisher} • {n.time}</div>
-                                                    </div>
-                                                </a>
-                                            ) : null
-                                        ))}
-                                        {(!regimeDetails?.prime_guide?.news || regimeDetails.prime_guide.news.length === 0) && (
-                                            <div style={{ padding: '20px', textAlign: 'center', fontSize: '0.8rem', color: '#666', gridColumn: 'span 2' }}>분석 중이거나 뉴스가 없습니다.</div>
-                                        )}
+                            </div>
+                            <div style={{ background: 'rgba(255,255,255,0.03)', padding: '15px', borderRadius: '12px' }}>
+                                <h5 style={{ margin: '0 0 12px 0', color: '#a855f7', display: 'flex', justifyContent: 'space-between' }}>
+                                    📊 SOXS Tech Detail
+                                    <span style={{ fontSize: '0.7rem', color: '#666' }}>5m Chart</span>
+                                </h5>
+                                <div style={{ fontSize: '0.9rem', color: '#cbd5e1', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                        <span>RSI (14)</span>
+                                        <span style={{ fontWeight: 'bold', color: Number(regimeDetails?.prime_guide?.tech_summary?.soxs_rsi) > 70 ? '#f87171' : Number(regimeDetails?.prime_guide?.tech_summary?.soxs_rsi) < 30 ? '#4ade80' : 'white' }}>
+                                            {regimeDetails?.prime_guide?.tech_summary?.soxs_rsi || '-'}
+                                        </span>
                                     </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                        <span>MACD</span>
+                                        <span style={{ fontWeight: 'bold' }}>{regimeDetails?.prime_guide?.tech_summary?.soxs_macd || '-'}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div style={{ gridColumn: 'span 2', background: 'rgba(255,255,255,0.03)', padding: '15px', borderRadius: '12px' }}>
+                                <h5 style={{ margin: '0 0 12px 0', color: '#94a3b8' }}>📰 Global Market News (Real-time)</h5>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    {(regimeDetails?.prime_guide?.news || []).slice(0, 4).map((n, i) => (
+                                        n.url ? (
+                                            <a key={i} href={n.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
+                                                <div style={{
+                                                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                                    padding: '8px', background: 'rgba(0,0,0,0.2)', borderRadius: '6px',
+                                                    border: '1px solid rgba(255,255,255,0.05)', transition: 'all 0.2s'
+                                                }}
+                                                    onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                                                    onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.2)'}
+                                                >
+                                                    <span style={{ color: '#e2e8f0', fontSize: '0.85rem', fontWeight: '500' }}>{n.title}</span>
+                                                    <span style={{ color: '#64748b', fontSize: '0.75rem', minWidth: '60px', textAlign: 'right' }}>{n.time}</span>
+                                                </div>
+                                            </a>
+                                        ) : null
+                                    ))}
+                                    {(!regimeDetails?.prime_guide?.news || regimeDetails.prime_guide.news.length === 0) && (
+                                        <div style={{ color: '#666', textAlign: 'center', padding: '10px' }}>뉴스 데이터 수신 중...</div>
+                                    )}
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <style>{`
+                <style>{`
                 @keyframes pulse {
                     0% { transform: scale(1); opacity: 1; }
                     50% { transform: scale(1.05); opacity: 0.9; }
@@ -526,7 +554,12 @@ const MarketInsight = ({ market, stocks, signalHistory }) => {
                     50% { opacity: 0.3; }
                     100% { opacity: 1; }
                 }
+                .glass-panel {
+                    /* Existing styles inherited */
+                    backdrop-filter: blur(12px);
+                }
             `}</style>
+            </div>
         </div>
     );
 };
