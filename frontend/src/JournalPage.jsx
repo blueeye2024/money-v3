@@ -392,7 +392,7 @@ const JournalPage = () => {
                             </div>
                             <div>
                                 <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: '#1d1d1f', fontWeight: '600' }}>가격 ($)</label>
-                                <input type="number" step="0.01" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} required style={{ width: '100%', padding: '0.75rem 1rem', background: '#f5f5f7', border: 'none', borderRadius: '10px', fontSize: '0.95rem', outline: 'none', color: '#1d1d1f', fontWeight: '500' }} />
+                                <input type="number" step="0.0001" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} required style={{ width: '100%', padding: '0.75rem 1rem', background: '#f5f5f7', border: 'none', borderRadius: '10px', fontSize: '0.95rem', outline: 'none', color: '#1d1d1f', fontWeight: '500' }} />
                             </div>
                         </div>
                         <div>
@@ -461,7 +461,7 @@ const JournalPage = () => {
                                             <div style={{ fontWeight: '700', fontSize: '1.1rem', color: '#1e3a8a', marginBottom: '0.25rem' }}>{ticker}</div>
                                             <div style={{ fontSize: '0.85rem', color: '#64748b' }}>{h.name}</div>
                                         </td>
-                                        <td style={{ padding: '1.25rem 1.5rem', textAlign: 'right', fontSize: '0.95rem', color: '#1e3a8a', fontWeight: '500' }}>${h.avgPrice.toFixed(2)}</td>
+                                        <td style={{ padding: '1.25rem 1.5rem', textAlign: 'right', fontSize: '0.95rem', color: '#1e3a8a', fontWeight: '500' }}>${h.avgPrice.toFixed(4)}</td>
                                         <td style={{ padding: '1.25rem 1.5rem', textAlign: 'right', fontSize: '1rem', color: '#1e3a8a', fontWeight: '700' }}>{h.qty}</td>
                                         <td style={{ padding: '1.25rem 1.5rem', textAlign: 'right' }}>
                                             <div style={{ fontSize: '1rem', fontWeight: '700', color: '#1e40af', marginBottom: '0.25rem' }}>${h.currentValue.toFixed(2)}</div>
@@ -474,7 +474,7 @@ const JournalPage = () => {
                                                     fontWeight: '600',
                                                     color: h.isManualPrice ? '#f59e0b' : '#1e3a8a'
                                                 }}>
-                                                    ${h.currentPrice.toFixed(2)}
+                                                    ${h.currentPrice.toFixed(4)}
                                                 </div>
                                                 {h.isManualPrice && (
                                                     <span style={{ fontSize: '0.7rem', color: '#f59e0b' }} title="수동 입력값">✋</span>
