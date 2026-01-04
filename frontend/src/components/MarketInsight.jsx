@@ -342,22 +342,22 @@ const MarketInsight = ({ market, stocks, signalHistory }) => {
                     <TripleFilterStatus title="SOXS (BEAR TOWER)" status={regimeDetails?.soxs} isBear={true} />
                 </div>
 
-                {/* 2. Prime Guide : Action Plan (Renamed & Refined) */}
+                {/* 2. Prime Guide : Action Plan (V3.5 Comprehensive Score) */}
                 <div style={{ background: 'rgba(15, 23, 42, 0.9)', padding: '1.5rem', borderRadius: '20px', border: '1px solid rgba(56, 189, 248, 0.5)', boxShadow: '0 0 30px rgba(56, 189, 248, 0.1)', marginBottom: '24px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '1rem' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                             <div style={{ width: '12px', height: '12px', background: '#38bdf8', borderRadius: '50%', boxShadow: '0 0 15px #38bdf8' }} />
                             <h3 style={{ margin: 0, fontSize: '1.4rem', color: '#38bdf8', fontWeight: '900', letterSpacing: '-0.5px' }}>청안 Prime Guide : Action Plan</h3>
                         </div>
-                        <div style={{ fontSize: '0.8rem', color: '#64748b', background: '#0f172a', padding: '4px 10px', borderRadius: '20px' }}>V3.4 Cheongan Index</div>
+                        <div style={{ fontSize: '0.8rem', color: '#64748b', background: '#0f172a', padding: '4px 10px', borderRadius: '20px' }}>V3.5 Holding Score</div>
                     </div>
 
                     {/* Dual Guide Layout */}
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
                         {['SOXL', 'SOXS'].map(ticker => {
                             const guideData = regimeDetails?.prime_guide || {};
-                            const scoreObj = guideData.scores?.[ticker] || guideData?.[ticker.toLowerCase() + '_score'] || { score: 0, breakdown: {} };
-                            const guideText = guideData.guides?.[ticker] || guideData?.[ticker.toLowerCase() + '_guide'] || "분석 대기 중...";
+                            const scoreObj = guideData.scores?.[ticker] || { score: 0, breakdown: {} };
+                            const guideText = guideData.guides?.[ticker] || "분석 대기 중...";
                             const isSoxl = ticker === 'SOXL';
                             const color = isSoxl ? '#06b6d4' : '#a855f7';
 
@@ -375,17 +375,18 @@ const MarketInsight = ({ market, stocks, signalHistory }) => {
                                         </div>
                                     </div>
 
-                                    {/* Score Breakdown Bar */}
+                                    {/* Score Breakdown Bar (V3.5) */}
                                     <div style={{ marginBottom: '15px' }}>
-                                        <div style={{ width: '100%', height: '6px', background: '#334155', borderRadius: '3px', overflow: 'hidden', display: 'flex' }}>
-                                            <div style={{ width: `${(scoreObj.breakdown?.['30m'] || 0)}%`, background: color, opacity: 1 }} />
-                                            <div style={{ width: `${(scoreObj.breakdown?.['5m'] || 0)}%`, background: color, opacity: 0.7 }} />
-                                            <div style={{ width: `${(scoreObj.breakdown?.box || 0)}%`, background: color, opacity: 0.4 }} />
+                                        <div style={{ width: '100%', height: '8px', background: '#334155', borderRadius: '4px', overflow: 'hidden', display: 'flex' }}>
+                                            <div style={{ width: `${(scoreObj.breakdown?.cheongan || 0)}%`, background: color, opacity: 1 }} title="청안 프라임 지수" />
+                                            <div style={{ width: `${(scoreObj.breakdown?.tech || 0)}%`, background: color, opacity: 0.6 }} title="기술적 지표" />
+                                            {/* Penalty visualization (Red bar at end if exists, conceptually) */}
+                                            {(scoreObj.breakdown?.penalty || 0) > 0 && <div style={{ width: `${scoreObj.breakdown.penalty}%`, background: '#ef4444' }} title="감점 요인" />}
                                         </div>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: '#94a3b8', marginTop: '4px' }}>
-                                            <span>30m추세(50)</span>
-                                            <span>5m타이밍(30)</span>
-                                            <span>박스돌파(20)</span>
+                                            <span>청안지수({scoreObj.breakdown?.cheongan || 0}/60)</span>
+                                            <span>Tech({scoreObj.breakdown?.tech || 0}/40)</span>
+                                            <span style={{ color: (scoreObj.breakdown?.penalty || 0) > 0 ? '#ef4444' : '#94a3b8' }}>감점(-{scoreObj.breakdown?.penalty || 0})</span>
                                         </div>
                                     </div>
 
@@ -399,12 +400,12 @@ const MarketInsight = ({ market, stocks, signalHistory }) => {
                 </div>
 
                 {/* 3. Bottom Grid: Intelligence & History */}
-                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px' }}> {/* Changed layout: Intelligence Left (Big), History Right (Small) */}
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px' }}>
 
-                    {/* Col 1: Market Intelligence Center (Expanded) */}
+                    {/* Col 1: Market Intelligence Center (Detailed) */}
                     <div style={{ background: 'rgba(0,0,0,0.2)', padding: '1.5rem', borderRadius: '16px' }}>
                         <h4 style={{ margin: '0 0 16px 0', fontSize: '1.1rem', color: '#e2e8f0', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '10px' }}>
-                            🌐 Market Intelligence Center (청안 지수 심층 분석)
+                            🌐 Market Intelligence Center (심층 분석)
                         </h4>
 
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '20px' }}>
@@ -412,9 +413,9 @@ const MarketInsight = ({ market, stocks, signalHistory }) => {
                                 const guideData = regimeDetails?.prime_guide || {};
                                 const scoreObj = guideData.scores?.[ticker] || { score: 0, breakdown: {} };
                                 const tech = guideData.tech_summary?.[ticker] || {};
-                                const comment = guideData.tech_comments?.[ticker] || "분석 대기 중...";
+                                const comment = guideData.tech_comments?.[ticker] || "-";
 
-                                const color = ticker === 'SOXL' ? '#06b6d4' : ticker === 'SOXS' ? '#a855f7' : '#f59e0b'; // UPRO is Orange/Gold
+                                const color = ticker === 'SOXL' ? '#06b6d4' : ticker === 'SOXS' ? '#a855f7' : '#f59e0b';
 
                                 return (
                                     <div key={ticker} style={{ background: 'rgba(255,255,255,0.03)', padding: '15px', borderRadius: '12px', border: `1px solid ${color}22` }}>
@@ -423,20 +424,17 @@ const MarketInsight = ({ market, stocks, signalHistory }) => {
                                             <span style={{ fontWeight: 'bold', color: 'white', fontSize: '1.1rem' }}>{scoreObj.score} <span style={{ fontSize: '0.7rem', color: '#888' }}>점</span></span>
                                         </div>
 
-                                        {/* Cheongan Index Table */}
-                                        <div style={{ fontSize: '0.75rem', color: '#ccc', background: 'rgba(0,0,0,0.3)', padding: '8px', borderRadius: '6px', marginBottom: '12px' }}>
-                                            <div style={{ borderBottom: '1px dashed #444', paddingBottom: '4px', marginBottom: '4px', color: '#94a3b8', fontWeight: 'bold' }}>청안 지수 (Cheongan Index)</div>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>30분봉 추세</span> <span style={{ color: scoreObj.breakdown?.['30m'] ? '#4ade80' : '#555' }}>{scoreObj.breakdown?.['30m'] || 0}/50</span></div>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>5분봉 진입</span> <span style={{ color: scoreObj.breakdown?.['5m'] ? '#4ade80' : '#555' }}>{scoreObj.breakdown?.['5m'] || 0}/30</span></div>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>박스권 돌파</span> <span style={{ color: scoreObj.breakdown?.box ? '#4ade80' : '#555' }}>{scoreObj.breakdown?.box || 0}/20</span></div>
+                                        {/* Evaluation Summary */}
+                                        <div style={{ fontSize: '0.8rem', color: '#e2e8f0', background: 'rgba(0,0,0,0.3)', padding: '8px', borderRadius: '6px', marginBottom: '12px', textAlign: 'center', fontWeight: 'bold' }}>
+                                            {scoreObj.evaluation || "-"}
                                         </div>
 
-                                        {/* Tech Summary */}
+                                        {/* Tech Summary (2 decimals) */}
                                         <div style={{ fontSize: '0.8rem', color: '#aaa' }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>RSI(14)</span> <span style={{ color: 'white' }}>{tech.rsi}</span></div>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>MACD</span> <span style={{ color: 'white' }}>{tech.macd}</span></div>
-                                            <div style={{ marginTop: '6px', fontSize: '0.7rem', color: color, lineHeight: '1.3', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '4px' }}>
-                                                {comment}
+                                            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>RSI(14)</span> <span style={{ color: 'white' }}>{Number(tech.rsi || 0).toFixed(2)}</span></div>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>MACD</span> <span style={{ color: 'white' }}>{Number(tech.macd || 0).toFixed(2)}</span></div>
+                                            <div style={{ marginTop: '6px', fontSize: '0.75rem', color: color, lineHeight: '1.3', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '4px' }}>
+                                                "{comment}"
                                             </div>
                                         </div>
                                     </div>
@@ -469,12 +467,12 @@ const MarketInsight = ({ market, stocks, signalHistory }) => {
                         </div>
                     </div>
 
-                    {/* Col 2: History (Moved to Right) */}
+                    {/* Col 2: History (Filtered) */}
                     <div style={{ background: 'rgba(0,0,0,0.2)', padding: '1.5rem', borderRadius: '16px', display: 'flex', flexDirection: 'column' }}>
                         <div style={{ color: 'var(--accent-gold)', fontWeight: 'bold', fontSize: '1rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <div style={{ width: '6px', height: '6px', background: 'var(--accent-gold)', borderRadius: '50%' }} /> HISTORY
                         </div>
-                        {/* Active Stocks Ticker (Moved here) */}
+                        {/* Active Stocks Ticker */}
                         <div style={{ background: 'rgba(255,255,255,0.03)', padding: '10px', borderRadius: '8px', marginBottom: '15px' }}>
                             <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '6px' }}>MY ACTIVE STOCKS</div>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -491,31 +489,36 @@ const MarketInsight = ({ market, stocks, signalHistory }) => {
                         </div>
 
                         <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '400px' }}>
-                            {signalHistory && Array.isArray(signalHistory) && signalHistory.length > 0 ? (
-                                signalHistory.map(sig => {
-                                    const kstTime = sig.time_kst || (sig.signal_time || '').split('(')[0].trim();
-                                    const signalType = sig.signal_type || '';
-                                    let actionText = '';
-                                    let actionColor = '#888';
+                            {(() => {
+                                const historyList = regimeDetails?.prime_guide?.history || signalHistory || [];
+                                if (historyList.length > 0) {
+                                    return historyList.map(sig => {
+                                        const kstTime = sig.time_kst || (sig.signal_time || '').split('(')[0].trim();
+                                        const signalType = sig.signal_type || '';
+                                        let actionText = '';
+                                        let actionColor = '#888';
 
-                                    if (signalType.includes('BUY')) {
-                                        actionText = '매수'; actionColor = '#ef4444';
-                                    } else if (signalType.includes('SELL')) {
-                                        actionText = '매도'; actionColor = '#3b82f6';
-                                    } else if (signalType.includes('WARNING')) {
-                                        actionText = '경보'; actionColor = '#eab308';
-                                    }
+                                        if (signalType.includes('BUY')) {
+                                            actionText = '매수'; actionColor = '#ef4444';
+                                        } else if (signalType.includes('SELL')) {
+                                            actionText = '매도'; actionColor = '#3b82f6';
+                                        } else if (signalType.includes('WARNING')) {
+                                            actionText = '경보'; actionColor = '#eab308';
+                                        }
 
-                                    return (
-                                        <div key={sig.id} style={{ borderBottom: '1px dashed rgba(255,255,255,0.1)', paddingBottom: '6px' }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem' }}>
-                                                <span style={{ color: '#888' }}>{kstTime}</span>
-                                                <span style={{ color: actionColor, fontWeight: 'bold' }}>{sig.ticker} {actionText}</span>
+                                        return (
+                                            <div key={sig.id} style={{ borderBottom: '1px dashed rgba(255,255,255,0.1)', paddingBottom: '6px' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem' }}>
+                                                    <span style={{ color: '#888' }}>{kstTime}</span>
+                                                    <span style={{ color: actionColor, fontWeight: 'bold' }}>{sig.ticker} {actionText}</span>
+                                                </div>
                                             </div>
-                                        </div>
-                                    )
-                                })
-                            ) : <div style={{ color: '#666' }}>기록 없음</div>}
+                                        )
+                                    });
+                                } else {
+                                    return <div style={{ color: '#666' }}>기록 없음</div>;
+                                }
+                            })()}
                         </div>
                     </div>
                 </div>

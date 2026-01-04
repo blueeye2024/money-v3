@@ -1801,52 +1801,147 @@ def generate_expert_commentary(ticker, res, tech, regime):
 """
     return final_report.strip()
 
-def calculate_cheongan_index(res):
-    score = 0
-    breakdown = {"30m": 0, "5m": 0, "box": 0}
-    
-    # 1. 30분봉 기준 (50점) - 추세/골드크로스
-    # step1: 30분봉 정배열 여부
-    if res.get('step1'): 
-        score += 50
-        breakdown['30m'] = 50
-    
-    # 2. 5분봉 진입 신호 (30점)
-    # step3: 5분봉 타점
-    if res.get('step3'):
-        score += 30
-        breakdown['5m'] = 30
-    
-    # 3. 박스권 돌파 (20점)
-    # step2: 수급/박스권
-    if res.get('step2'):
-        score += 20
-        breakdown['box'] = 20
-    elif res.get('daily_change', 0) > 1.5:
-        score += 10
-        breakdown['box'] = 10 # 부분 점수 (강한 상승세)
-        
-    # Risk Factor (감점 요인)
-    if res.get('step3_color') == 'yellow': score -= 10
-    if res.get('step2_color') == 'orange': score -= 20
-    
-    return {"score": max(0, min(100, score)), "breakdown": breakdown}
+def calculate_holding_score(res, tech):
+    """
+    V3.5 Comprehensive Holding Score Algorithm
+    Weight: Cheongan Index (60%) + Tech/Risk (40%)
+    """
+    if not res: return {"score": 0, "breakdown": {}, "evaluation": "데이터 부족"}
 
-def get_tech_comment(rsi, macd):
-    comment = []
-    if rsi >= 70: comment.append("RSI 과매수(조정 주의)")
-    elif rsi <= 30: comment.append("RSI 과매도(반등 기대)")
-    else: comment.append(f"RSI {rsi:.1f} (중립)")
+    score = 0
+    breakdown = {"cheongan": 0, "tech": 0, "penalty": 0}
     
-    if macd > 0: comment.append("MACD 상승세")
-    else: comment.append("MACD 하락/조정")
+    # ----------------------------------------
+    # 1. Cheongan Index (Max 60)
+    # ----------------------------------------
+    cheongan_score = 0
+    # A. Trend (30분봉 정배열) - 30점
+    if res.get('step1'): 
+        cheongan_score += 30
     
-    return " / ".join(comment)
+    # B. Timing (5분봉 진입) - 20점
+    if res.get('step3'): 
+        cheongan_score += 20
+        
+    # C. Momentum (박스권/수급) - 10점
+    if res.get('step2'): 
+        cheongan_score += 10
+    elif res.get('daily_change', 0) > 2.0:
+        cheongan_score += 5 # 수급 대체 점수
+        
+    score += cheongan_score
+    breakdown['cheongan'] = cheongan_score
+
+    # ----------------------------------------
+    # 2. Technical & Risk (Max 40)
+    # ----------------------------------------
+    tech_score = 0
+    rsi = tech.get('rsi', 50)
+    macd = tech.get('macd', 0)
+    macd_sig = tech.get('macd_sig', 0)
+    
+    # A. RSI Stability (15점)
+    if 40 <= rsi <= 65: tech_score += 15     # 안정적 상승 구간
+    elif 30 <= rsi < 40: tech_score += 10    # 반등 초입
+    elif rsi < 30: tech_score += 10          # 과매도 메리트
+    elif 65 < rsi < 75: tech_score += 5      # 과열 진입 (주의)
+    else: tech_score += 0                    # 75 이상 과열 (위험)
+    
+    # B. MACD Trend (15점)
+    if macd > macd_sig: tech_score += 15
+    elif macd > 0: tech_score += 10          # 시그널은 깼지만 0선 위
+    
+    # C. Risk/Position (10점 - 전고점/저항)
+    # 약식: RSI가 70 미만이면 상승 여력 있다고 판단
+    if rsi < 70: tech_score += 10
+    
+    score += tech_score
+    breakdown['tech'] = tech_score
+    
+    # ----------------------------------------
+    # 3. Penalties & Filter
+    # ----------------------------------------
+    penalty = 0
+    if res.get('step3_color') == 'yellow': penalty += 15
+    if res.get('step2_color') == 'orange': penalty += 30
+    
+    score = max(0, min(100, score - penalty))
+    breakdown['penalty'] = penalty
+
+    # Evaluation Tag
+    if score >= 80: evaluation = "강력 매수 (Strong Buy)"
+    elif score >= 60: evaluation = "매수 관점 (Buy)"
+    elif score >= 40: evaluation = "중립/관망 (Hold)"
+    else: evaluation = "매도/리스크 관리 (Sell/Risk)"
+    
+    return {"score": score, "breakdown": breakdown, "evaluation": evaluation}
+
+def generate_expert_commentary_v2(ticker, score_data, res, tech, regime):
+    score = score_data['score']
+    breakdown = score_data['breakdown']
+    rsi = tech.get('rsi', 0)
+    
+    # Header
+    comment = f"[{score_data['evaluation']}] 현재 점수 {score}점\n\n"
+    
+    # Analysis
+    if score >= 80:
+        comment += f"🚀 [핵심 분석] 30분봉 추세와 5분봉 타점이 완벽하게 일치합니다. 청안 지수({breakdown['cheongan']}/60)가 만점에 가까우며, RSI({rsi:.1f}) 또한 안정적인 상승 구간에 위치해 추가 상승 여력이 충분합니다.\n"
+        comment += "💡 [전략] 비중을 적극 확대하되, 전고점 돌파 여부를 주시하십시오."
+    elif score >= 60:
+        comment += f"✅ [핵심 분석] 상승 추세는 유효하나, 일부 감점 요인이 있습니다(청안 {breakdown['cheongan']}/60, Tech {breakdown['tech']}/40). RSI나 MACD 중 하나가 조정을 받고 있을 수 있습니다.\n"
+        comment += "💡 [전략] 분할 매수로 접근하며, 확실한 거래량 동반 시 추가 진입하십시오."
+    elif score >= 40:
+        missing = []
+        if not res.get('step1'): missing.append("30분 추세 역배열")
+        if not res.get('step3'): missing.append("5분 진입신호 부재")
+        
+        comment += f"⏳ [핵심 분석] 현재 진입 근거가 다소 부족합니다({', '.join(missing)}). 기술적 지표 점수({breakdown['tech']}점)만으로는 추세 전환을 확신하기 어렵습니다.\n"
+        comment += "💡 [전략] 현금 비중을 유지하며 '청안 지수' 항목이 개선될 때까지 기다리십시오."
+    else:
+        reason = "단기 추세 붕괴" if breakdown['penalty'] > 0 else "하락 추세 지속"
+        comment += f"⚠️ [핵심 분석] {reason}로 인해 리스크가 높습니다. (패널티 적용: -{breakdown['penalty']}점). 현재 자리는 매수보다 리스크 관리가 최우선입니다.\n"
+        comment += "💡 [전략] 보유 물량 축소 및 관망을 권장합니다."
+        
+    return comment
+
+def get_filtered_history_v2():
+    # Fetch original history
+    try:
+        from db import get_recent_signals
+        raw_history = get_recent_signals(limit=50) # 가져와서 필터링
+    except:
+        return []
+
+    filtered = []
+    seen = {} # {ticker: last_time_obj}
+    
+    # raw_history는 최신순(내림차순)이라 가정
+    for sig in raw_history:
+        ticker = sig.get('ticker')
+        time_str = sig.get('signal_time') # '2025-01-05 02:40:00' format assumed
+        
+        try:
+            current_time = datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S")
+        except:
+            filtered.append(sig) # 포맷 에러나면 그냥 추가
+            continue
+
+        if ticker in seen:
+            last_time = seen[ticker]
+            # 30분 이내 중복이면 스킵
+            if abs((last_time - current_time).total_seconds()) < 1800:
+                continue
+        
+        seen[ticker] = current_time
+        filtered.append(sig)
+    
+    return filtered[:20] # Return top 20
 
 def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
     """
-    Cheongan V3.4 Master Signal Logic (Control Tower)
-    Validates UPRO, SOXL, SOXS with Cheongan Index
+    Cheongan V3.5 Master Signal Logic (Control Tower)
+    Validates UPRO, SOXL, SOXS with Comprehensive Holding Score
     """
     if data_5m is None:
         data_5m = _DATA_CACHE.get("5m")
@@ -1856,43 +1951,45 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
     techs = {}
     
     for t in tickers:
-        # Triple Filter Logic (Requires backend to have data for these tickers)
         results[t] = check_triple_filter(t, data_30m, data_5m)
-        
-        # Tech Indicators (5m)
         df_5m = data_5m.get(t) if data_5m else None
         techs[t] = calculate_tech_indicators(df_5m)
         
-    # Analyze Regime (Reference UPRO Daily Change)
     upro_chg = results["UPRO"].get("daily_change", 0)
     regime = "Bull" if upro_chg >= 1.0 else ("Bear" if upro_chg <= -1.0 else "Neutral")
     
-    # Calculate Scores & Guides
     scores = {}
     guides = {}
     tech_comments = {}
     
     for t in tickers:
-        scores[t] = calculate_cheongan_index(results[t])
-        guides[t] = generate_expert_commentary(t, results[t], techs[t], regime)
+        # 1. Calculate Score
+        score_model = calculate_holding_score(results[t], techs[t])
+        scores[t] = score_model
         
-        rsi = techs[t].get("rsi", 50)
-        macd = techs[t].get("macd", 0)
-        tech_comments[t] = get_tech_comment(rsi, macd)
+        # 2. Generate Guide
+        guides[t] = generate_expert_commentary_v2(t, score_model, results[t], techs[t], regime)
         
+        # 3. Simple Tech Comment
+        score_eval = score_model['evaluation'].split('(')[0].strip()
+        tech_comments[t] = score_eval # Use Evaluation as summary
+        
+    # Get Filtered History
+    recent_history = get_filtered_history_v2()
     recent_news = get_market_news_v2()
     
     details = {
-        "version": "3.4.0 (Cheongan Index)",
+        "version": "3.5.0 (Holding Score)",
         "prime_guide": {
             "scores": scores,
             "guides": guides,
-            "tech_summary": techs, # {ticker: {rsi, macd}}
-            "tech_comments": tech_comments, # {ticker: "comment"}
-            "news": recent_news
+            "tech_summary": techs, 
+            "tech_comments": tech_comments, 
+            "news": recent_news,
+            "history": recent_history  # Pass filtered history explicitly here if frontend uses it from details
         },
         "regime": regime,
-        "upro": results["UPRO"], # Signal Result
+        "upro": results["UPRO"], 
         "soxl": results["SOXL"],
         "soxs": results["SOXS"],
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
