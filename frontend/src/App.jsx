@@ -199,8 +199,10 @@ function Layout() {
 
     const handleLogout = () => {
         localStorage.removeItem('isAuthenticated');
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('userName');
         setIsAuthenticated(false);
-        navigate('/');
+        navigate('/login');
     };
 
     // Close menu when route changes
@@ -287,7 +289,7 @@ function Layout() {
                 textAlign: 'center', padding: '2rem', marginTop: '4rem',
                 borderTop: '1px solid var(--glass-border)', color: 'var(--text-secondary)'
             }}>
-                <p>&copy; 2026 Cheongan FinTech. All rights reserved. Ver 3.0.13 (Build: 2026-01-05 00:27)</p>
+                <p>&copy; 2026 Cheongan FinTech. All rights reserved. Ver 3.0.14 (Build: 2026-01-05 00:40)</p>
             </footer>
         </div>
     );
