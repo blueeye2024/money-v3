@@ -1224,3 +1224,27 @@ def get_stock_current_price(ticker):
     except Exception as e:
         print(f"현재가 조회 오류 ({ticker}): {e}")
         return None
+
+# --- User Management ---
+def create_user(email, password_hash, name):
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cursor:
+                sql = "INSERT INTO users (email, password_hash, name) VALUES (%s, %s, %s)"
+                cursor.execute(sql, (email, password_hash, name))
+                conn.commit()
+                return True
+    except Exception as e:
+        print(f"Error creating user: {e}")
+        return False
+
+def get_user_by_email(email):
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cursor:
+                sql = "SELECT * FROM users WHERE email = %s"
+                cursor.execute(sql, (email,))
+                return cursor.fetchone()
+    except Exception as e:
+        print(f"Error getting user by email: {e}")
+        return None

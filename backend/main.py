@@ -6,6 +6,12 @@ from datetime import datetime
 import pandas as pd
 import pytz
 import uvicorn
+from passlib.hash import pbkdf2_sha256
+import jwt
+from datetime import datetime, timedelta
+
+SECRET_KEY = "cheongan_fintech_secret_key_2026"
+ALGORITHM = "HS256"
 
 from analysis import run_analysis, fetch_data, analyze_ticker, TARGET_TICKERS
 from sms import send_sms
@@ -588,6 +594,71 @@ async def create_request(item: RequestItem):
     except Exception as e:
         print(f"Add Request Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# --- Auth APIs ---
+class UserRegister(BaseModel):
+    email: str
+    password: str
+    name: str
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
+@app.post("/api/auth/register")
+def register_api(user: UserRegister):
+    from db import create_user, get_user_by_email
+    try:
+        if get_user_by_email(user.email):
+            return {"status": "error", "message": "이미 존재하는 이메일입니다."}
+        
+        hashed_pw = pbkdf2_sha256.hash(user.password)
+        if create_user(user.email, hashed_pw, user.name):
+            return {"status": "success", "message": "회원가입 성공"}
+        return {"status": "error", "message": "회원가입 실패"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/api/auth/login")
+def login_api(user: UserLogin):
+    from db import get_user_by_email
+    try:
+        db_user = get_user_by_email(user.email)
+        if not db_user:
+            return {"status": "error", "message": "이메일 또는 비밀번호가 올바르지 않습니다."}
+        
+        if not pbkdf2_sha256.verify(user.password, db_user['password_hash']):
+            return {"status": "error", "message": "이메일 또는 비밀번호가 올바르지 않습니다."}
+        
+        # Create JWT
+        # UTC issue: datetime.utcnow() is deprecated in some versions but safe for JWT usually
+        exp = datetime.utcnow() + timedelta(days=30) # 30일 접속 유지 (요청사항)
+        
+        token_data = {
+            "sub": db_user['email'],
+            "name": db_user['name'],
+            "exp": exp
+        }
+        token = jwt.encode(token_data, SECRET_KEY, algorithm=ALGORITHM)
+        
+        return {
+            "status": "success",
+            "token": token,
+            "user": {"email": db_user['email'], "name": db_user['name']}
+        }
+    except Exception as e:
+        print(f"Login Error: {e}")
+        return {"status": "error", "message": "로그인 처리 중 오류 발생"}
+
+@app.get("/api/auth/me")
+def me_api(token: str):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return {"status": "success", "user": {"email": payload['sub'], "name": payload['name']}}
+    except jwt.ExpiredSignatureError:
+        return {"status": "error", "message": "Token expired"}
+    except jwt.InvalidTokenError:
+        return {"status": "error", "message": "Invalid token"}
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8080, reload=True)
