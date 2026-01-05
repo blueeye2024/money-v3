@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { User, Lock, ArrowRight, TrendingUp, ShieldCheck, Mail, Sparkles } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { TrendingUp, ArrowRight, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const LoginPage = () => {
@@ -56,171 +56,135 @@ const LoginPage = () => {
     };
 
     return (
-        <div className="relative min-h-screen w-full flex items-center justify-center overflow-hidden bg-black font-sans selection:bg-cyan-500/30">
-            {/* --- Background Effects --- */}
-            <div className="absolute inset-0 z-0">
-                {/* Deep Space Base */}
-                <div className="absolute inset-0 bg-[#050505]" />
+        <div className="min-h-screen w-full flex items-center justify-center bg-black font-sans selection:bg-[#0A84FF]/30">
+            <div className="w-full max-w-[380px] p-6 flex flex-col items-center">
 
-                {/* Aurora Gradients */}
-                <div className="absolute top-[-10%] left-[-10%] w-[40vw] h-[40vw] bg-blue-600/20 rounded-full blur-[120px] mix-blend-screen opacity-40 animate-pulse" style={{ animationDuration: '4s' }} />
-                <div className="absolute bottom-[-10%] right-[-10%] w-[40vw] h-[40vw] bg-cyan-600/20 rounded-full blur-[120px] mix-blend-screen opacity-40 animate-pulse" style={{ animationDuration: '7s' }} />
-
-                {/* Subtle Grid Texture */}
-                <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:3rem_3rem] [mask-image:radial-gradient(ellipse_60%_60%_at_50%_50%,#000_100%,transparent_100%)] opacity-20" />
-            </div>
-
-            {/* --- Main Content --- */}
-            <motion.div
-                initial={{ opacity: 0, scale: 0.95, y: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-                className="relative z-10 w-full max-w-[420px] p-6"
-            >
-                {/* Brand Logo Section */}
-                <div className="flex flex-col items-center mb-10 text-center">
-                    <motion.div
-                        initial={{ scale: 0 }} animate={{ scale: 1 }}
-                        transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
-                        div className="relative group mb-6"
-                    >
-                        <div className="absolute inset-0 bg-gradient-to-tr from-cyan-500 to-blue-600 rounded-2xl blur-lg opacity-40 group-hover:opacity-60 transition-opacity duration-500" />
-                        <div className="relative w-20 h-20 bg-gradient-to-tr from-[#1a1a1a] to-[#0a0a0a] rounded-2xl border border-white/10 flex items-center justify-center shadow-2xl">
-                            <TrendingUp className="w-10 h-10 text-cyan-400 drop-shadow-[0_0_10px_rgba(34,211,238,0.5)]" />
-                        </div>
-                        {/* Status Dot */}
-                        <div className="absolute -top-1 -right-1 w-4 h-4 bg-black rounded-full flex items-center justify-center">
-                            <div className="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse" />
-                        </div>
-                    </motion.div>
-
-                    <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-b from-white to-white/60 tracking-tight mb-2">
-                        Cheongan <span className="font-light text-cyan-400">Intelligence</span>
+                {/* 1. Header (Logo & Title) */}
+                <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="flex flex-col items-center mb-10 text-center"
+                >
+                    <div className="w-16 h-16 bg-[#1C1C1E] rounded-[18px] flex items-center justify-center mb-5 shadow-inner border border-[#2C2C2E]">
+                        <TrendingUp className="w-8 h-8 text-[#0A84FF]" />
+                    </div>
+                    <h1 className="text-[26px] font-semibold text-white tracking-tight">
+                        Cheongan ID
                     </h1>
-                    <p className="text-sm text-slate-500 font-medium tracking-wide">
-                        PREMIER AI TRADING SYSTEM V3.5
+                    <p className="text-[15px] text-[#86868B] mt-2 font-normal leading-relaxed">
+                        {isLogin ? '청안 인텔리전스에 로그인하세요.' : '새로운 계정을 생성하여 시작하세요.'}
                     </p>
-                </div>
+                </motion.div>
 
-                {/* Glass Card */}
-                <div className="bg-white/[0.03] backdrop-blur-2xl border border-white/10 rounded-3xl shadow-[0_0_40px_-10px_rgba(0,0,0,0.5)] overflow-hidden">
-                    {/* Top Highlight Line */}
-                    <div className="h-[1px] w-full bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent opacity-50" />
-
-                    <div className="p-8">
-                        {/* Toggle Tabs */}
-                        <div className="flex p-1 bg-black/40 rounded-xl mb-8 border border-white/5">
-                            {['로그인', '회원가입'].map((tab, idx) => {
-                                const isSignIn = idx === 0;
-                                const active = isLogin === isSignIn;
-                                return (
-                                    <button
-                                        key={tab}
-                                        onClick={() => { setIsLogin(isSignIn); setError(null); }}
-                                        className={`relative flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all duration-300 ${active ? 'text-white' : 'text-slate-500 hover:text-slate-300'
-                                            }`}
-                                    >
-                                        {active && (
-                                            <motion.div
-                                                layoutId="activeTab"
-                                                className="absolute inset-0 bg-[#1e293b] rounded-lg shadow-sm border border-white/10"
-                                                transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
-                                            />
-                                        )}
-                                        <span className="relative z-10">{tab}</span>
-                                    </button>
-                                );
-                            })}
-                        </div>
-
-                        <form onSubmit={handleSubmit} className="space-y-5">
-                            {!isLogin && (
-                                <div className="space-y-1.5">
-                                    <div className="relative group">
-                                        <User className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-cyan-400 transition-colors" size={18} />
-                                        <input
-                                            type="text"
-                                            value={name}
-                                            onChange={(e) => setName(e.target.value)}
-                                            required={!isLogin}
-                                            placeholder="이름 (Full Name)"
-                                            className="w-full h-12 bg-black/20 border border-white/10 rounded-xl pl-11 pr-4 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-cyan-500/50 focus:bg-white/5 transition-all"
-                                        />
-                                    </div>
-                                </div>
-                            )}
-
-                            <div className="space-y-1.5">
-                                <div className="relative group">
-                                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-cyan-400 transition-colors" size={18} />
-                                    <input
-                                        type="email"
-                                        value={email}
-                                        onChange={(e) => setEmail(e.target.value)}
-                                        required
-                                        placeholder="이메일 주소"
-                                        className="w-full h-12 bg-black/20 border border-white/10 rounded-xl pl-11 pr-4 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-cyan-500/50 focus:bg-white/5 transition-all"
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="space-y-1.5">
-                                <div className="relative group">
-                                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-cyan-400 transition-colors" size={18} />
-                                    <input
-                                        type="password"
-                                        value={password}
-                                        onChange={(e) => setPassword(e.target.value)}
-                                        required
-                                        placeholder="비밀번호"
-                                        className="w-full h-12 bg-black/20 border border-white/10 rounded-xl pl-11 pr-4 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-cyan-500/50 focus:bg-white/5 transition-all"
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Error Message */}
-                            {error && (
-                                <motion.div
-                                    initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }}
-                                    className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-semibold flex items-center justify-center gap-2"
-                                >
-                                    <ShieldCheck size={14} /> {error}
-                                </motion.div>
-                            )}
-
-                            {/* Submit Button */}
-                            <button
-                                type="submit"
-                                disabled={isLoading}
-                                className="group w-full h-12 mt-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-sm font-bold rounded-xl shadow-[0_4px_20px_-5px_rgba(6,182,212,0.4)] border border-transparent hover:border-white/20 transition-all duration-300 active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2 relative overflow-hidden"
+                {/* 2. Form Section */}
+                <motion.form
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.1 }}
+                    onSubmit={handleSubmit}
+                    className="w-full space-y-4"
+                >
+                    <AnimatePresence mode="popLayout">
+                        {!isLogin && (
+                            <motion.div
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: 'auto' }}
+                                exit={{ opacity: 0, height: 0 }}
+                                className="overflow-hidden"
                             >
-                                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
-                                {isLoading ? (
-                                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                ) : (
-                                    <>
-                                        {isLogin ? '시스템 접속' : '계정 생성'}
-                                        <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
-                                    </>
-                                )}
+                                <div className="space-y-1">
+                                    <input
+                                        type="text"
+                                        value={name}
+                                        onChange={(e) => setName(e.target.value)}
+                                        required={!isLogin}
+                                        placeholder="이름"
+                                        className="w-full h-[52px] bg-[#1C1C1E] rounded-xl px-4 text-[17px] text-white placeholder-[#58585C] border border-transparent focus:border-[#0A84FF] focus:ring-1 focus:ring-[#0A84FF] outline-none transition-all duration-200"
+                                    />
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+
+                    <div className="space-y-4">
+                        <input
+                            type="email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            required
+                            placeholder="이메일 주소"
+                            className="w-full h-[52px] bg-[#1C1C1E] rounded-xl px-4 text-[17px] text-white placeholder-[#58585C] border border-transparent focus:border-[#0A84FF] focus:ring-1 focus:ring-[#0A84FF] outline-none transition-all duration-200"
+                        />
+                        <input
+                            type="password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            required
+                            placeholder="비밀번호"
+                            className="w-full h-[52px] bg-[#1C1C1E] rounded-xl px-4 text-[17px] text-white placeholder-[#58585C] border border-transparent focus:border-[#0A84FF] focus:ring-1 focus:ring-[#0A84FF] outline-none transition-all duration-200"
+                        />
+                    </div>
+
+                    {/* Error Message */}
+                    {error && (
+                        <motion.div
+                            initial={{ opacity: 0, y: -5 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="text-[#FF453A] text-[13px] text-center font-medium py-1"
+                        >
+                            {error}
+                        </motion.div>
+                    )}
+
+                    {/* 3. Action Button (Below Inputs) */}
+                    <button
+                        type="submit"
+                        disabled={isLoading}
+                        className="w-full h-[52px] bg-[#0A84FF] hover:bg-[#0077ED] active:scale-[0.98] text-white text-[17px] font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2 mt-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                    >
+                        {isLoading ? (
+                            <Loader2 className="w-5 h-5 animate-spin text-white/80" />
+                        ) : (
+                            <>
+                                {isLogin ? '로그인' : '계정 생성'}
+                                <ArrowRight className="w-4 h-4 opacity-70" />
+                            </>
+                        )}
+                    </button>
+
+                    {/* Forgot Password Link (Login Only) */}
+                    {isLogin && (
+                        <div className="text-center">
+                            <button type="button" className="text-[13px] text-[#0A84FF] hover:underline font-medium">
+                                비밀번호를 잊으셨나요?
                             </button>
-                        </form>
-                    </div>
+                        </div>
+                    )}
+                </motion.form>
 
-                    {/* Footer Area inside Card */}
-                    <div className="px-8 py-5 bg-black/20 border-t border-white/5 text-center">
-                        <p className="text-[11px] text-slate-500 flex items-center justify-center gap-1.5 opacity-80">
-                            <Sparkles size={12} className="text-cyan-500" />
-                            Secured Intelligence Gateway
-                        </p>
-                    </div>
+                {/* 4. Toggle Link (Bottom, Centered) */}
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.2 }}
+                    className="mt-12 pt-6 border-t border-[#2C2C2E] w-full text-center"
+                >
+                    <p className="text-[15px] text-[#86868B]">
+                        {isLogin ? '계정이 없으신가요?' : '이미 계정이 있으신가요?'}
+                        <button
+                            onClick={() => { setIsLogin(!isLogin); setError(null); }}
+                            className="ml-2 text-[#0A84FF] hover:text-[#409CFF] font-medium transition-colors"
+                        >
+                            {isLogin ? '지금 가입하기' : '로그인'}
+                        </button>
+                    </p>
+                </motion.div>
+
+                {/* Footer Copy */}
+                <div className="mt-8 text-[11px] text-[#48484A] font-medium tracking-wide">
+                    COPYRIGHT © 2026 CHEONGAN. ALL RIGHTS RESERVED.
                 </div>
-
-                {/* Bottom Copyright */}
-                <p className="text-center text-[10px] text-slate-600 mt-8 tracking-wider uppercase font-medium">
-                    © 2026 Cheongan FinTech. All rights reserved.
-                </p>
-            </motion.div>
+            </div>
         </div>
     );
 };
