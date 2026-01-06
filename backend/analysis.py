@@ -161,6 +161,8 @@ def fetch_data(tickers=None, force=False, override_period=None):
             
             kst_tz = pytz.timezone('Asia/Seoul')
             
+            ny_tz = pytz.timezone('America/New_York')
+            
             for ticker in CORE_TICKERS:
                 try:
                     # 1. Patch 30m
@@ -168,14 +170,21 @@ def fetch_data(tickers=None, force=False, override_period=None):
                     if k_30:
                         records = []
                         for item in k_30:
-                            # Parse KST Time (YYYYMMDD HHMMSS) - Fields: kymd, khms
+                            # Parse KST Time (YYYYMMDD HHMMSS)
                             dt_str = f"{item['kymd']} {item['khms']}"
                             dt_kst = datetime.strptime(dt_str, "%Y%m%d %H%M%S")
                             dt_kst = kst_tz.localize(dt_kst)
-                            dt_utc = dt_kst.astimezone(timezone.utc)
+                            
+                            # Convert to NY Time
+                            dt_ny = dt_kst.astimezone(ny_tz)
+                            
+                            # SNAP to nearest 30m (Align with historical bars)
+                            # e.g. 09:12 -> 09:00, 09:45 -> 09:30
+                            minute_snap = dt_ny.minute - (dt_ny.minute % 30)
+                            dt_ny = dt_ny.replace(minute=minute_snap, second=0, microsecond=0)
                             
                             records.append({
-                                'candle_time': dt_utc,
+                                'candle_time': dt_ny,
                                 'Open': float(item['open']),
                                 'High': float(item['high']),
                                 'Low': float(item['low']),
@@ -184,7 +193,10 @@ def fetch_data(tickers=None, force=False, override_period=None):
                             })
                         
                         if records:
-                            df_k = pd.DataFrame(records).set_index('candle_time').sort_index()
+                            # Deduplicate by index (keep last update for same snap time)
+                            df_k = pd.DataFrame(records).set_index('candle_time')
+                            df_k = df_k[~df_k.index.duplicated(keep='last')].sort_index()
+                            
                             save_market_candles(ticker, '30m', df_k, 'kis_live')
                             print(f"  ✅ KIS 30m Patched: {ticker} ({len(records)} candles)")
 
@@ -196,10 +208,16 @@ def fetch_data(tickers=None, force=False, override_period=None):
                             dt_str = f"{item['kymd']} {item['khms']}"
                             dt_kst = datetime.strptime(dt_str, "%Y%m%d %H%M%S")
                             dt_kst = kst_tz.localize(dt_kst)
-                            dt_utc = dt_kst.astimezone(timezone.utc)
+                            
+                            # Convert to NY Time
+                            dt_ny = dt_kst.astimezone(ny_tz)
+                            
+                            # SNAP to nearest 5m
+                            minute_snap = dt_ny.minute - (dt_ny.minute % 5)
+                            dt_ny = dt_ny.replace(minute=minute_snap, second=0, microsecond=0)
                             
                             records.append({
-                                'candle_time': dt_utc,
+                                'candle_time': dt_ny,
                                 'Open': float(item['open']),
                                 'High': float(item['high']),
                                 'Low': float(item['low']),
@@ -208,7 +226,9 @@ def fetch_data(tickers=None, force=False, override_period=None):
                             })
                             
                         if records:
-                            df_k = pd.DataFrame(records).set_index('candle_time').sort_index()
+                            df_k = pd.DataFrame(records).set_index('candle_time')
+                            df_k = df_k[~df_k.index.duplicated(keep='last')].sort_index()
+                            
                             save_market_candles(ticker, '5m', df_k, 'kis_live')
                             print(f"  ✅ KIS 5m Patched: {ticker} ({len(records)} candles, Last: {records[-1]['candle_time']})")
 
