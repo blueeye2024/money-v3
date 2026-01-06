@@ -8,11 +8,12 @@ def test_api():
     # 1. 토큰 확인
     print(f"Token: {kis_client.access_token[:10]}... (Length: {len(kis_client.access_token)})")
     
-    tickers = ["SOXL", "SOXS", "UPRO"]
-    for t in tickers:
-        print(f"\n[Requesting AMS for {t}]")
-        res = kis_client._fetch_price_request("AMS", t)
-        print(json.dumps(res, indent=2))
+    print("\n[Testing Daily Price for SOXL]")
+    daily = kis_client.get_daily_price("SOXL", "AMS")
+    if daily:
+        print(json.dumps(daily[:2], indent=2))
+    else:
+        print("Failed to get daily price")
 
 if __name__ == "__main__":
     test_api()

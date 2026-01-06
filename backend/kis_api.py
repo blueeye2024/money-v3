@@ -103,6 +103,43 @@ class KisApi:
             pass
         return None
 
+    def get_daily_price(self, symbol, exchange=None):
+        """
+        Get daily price history (Yesterday Close etc).
+        Returns list of daily dictionaries.
+        """
+        if not exchange:
+            exchange = get_exchange_code(symbol)
+            
+        return self._fetch_daily_price_request(exchange, symbol)
+
+    def _fetch_daily_price_request(self, exchange, symbol):
+        headers = {
+            "content-type": "application/json; charset=utf-8",
+            "authorization": f"Bearer {self.access_token}",
+            "appkey": self.APP_KEY,
+            "appsecret": self.APP_SECRET,
+            "tr_id": "HHDFS76240000"  # Overseas Stock Daily Price
+        }
+        params = {
+            "AUTH": "",
+            "EXCD": exchange,
+            "SYMB": symbol,
+            "GUBN": "0", # 0: Daily, 1: Weekly, 2: Monthly
+            "BYMD": "",
+            "MODP": "1" # 1: Adjusted Price
+        }
+        try:
+            res = requests.get(f"{self.URL_BASE}/uapi/overseas-price/v1/quotations/dailyprice", headers=headers, params=params, timeout=1.5)
+            if res.status_code == 200:
+                data = res.json()
+                if data['rt_cd'] == '0':
+                    return data['output2'] # output2 usually contains the list
+        except Exception as e:
+            # print(f"KIS API Daily Request Error: {e}")
+            pass
+        return None
+
 # Singleton instance
 kis_client = KisApi()
 
