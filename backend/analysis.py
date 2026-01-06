@@ -1963,7 +1963,7 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
         
     # Get Filtered History
     recent_history = get_filtered_history_v2()
-    recent_news = get_market_news_v2()
+    # recent_news = get_market_news_v2()
     
     details = {
         "version": "3.5.0 (Holding Score)",
