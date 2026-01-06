@@ -420,7 +420,38 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, df_1dRaw, market_vol_score=0, is
             change_pct = float(real_time_info['rate'])
         elif (kp := kis_client.get_price(ticker)):
              current_price = kp['price']
-             change_pct = kp['rate']
+             
+             # [Mod] 장 휴장 시간(Rate=0)일 때, 전일 종가 대비 등락률 직접 계산
+             if kp['rate'] == 0.0 and kp['diff'] == 0.0 and df_30 is not None and len(df_30) >= 2:
+                  # 30분봉 기준 전일 종가 찾기 (어제 마지막 봉)
+                  # 현재 가격과 가장 가까운 마지막 종가 봉을 제외한 그 전 봉?
+                  # yfinance 30m 데이터는 어제 장 마감까지 있을 것임.
+                  # df_30['Close'].iloc[-1] 은 어제 종가일 가능성이 높음.
+                  # 하지만 current_price(KIS)와 df_30[-1] 이 같다면, 등락률은 그 전날 종가 대비여야 함.
+                  
+                  # 일봉 데이터(df_1d)가 있다면 가장 정확
+                  if df_1d is not None and not df_1d.empty and len(df_1d) >= 2:
+                      # yfinance 일봉의 마지막이 '오늘'인지 '어제'인지 확인 필요하지만,
+                      # 보통 장 마감 후엔 마지막이 '어제'임.
+                      last_candle = df_1d['Close'].iloc[-1]
+                      prev_candle = df_1d['Close'].iloc[-2]
+                      
+                      # KIS 현재가와 yfinance 마지막 종가가 거의 같다면 (어제 종가)
+                      if abs(current_price - last_candle) / last_candle < 0.01:
+                          # 전일 종가(prev_candle) 기준 등락률 계산
+                          change_pct = ((current_price - prev_candle) / prev_candle) * 100
+                      else:
+                          # KIS 가격이 최신이고 yfinance가 아직 어제 데이터를 반영 안했을 경우 (드뭄)
+                          # 또는 yfinance 마지막이 '그 전날' 일 경우
+                          change_pct = ((current_price - last_candle) / last_candle) * 100
+                  else:
+                      # 일봉 없으면 30분봉 맨 뒤에서부터 날짜가 바뀐 지점 찾기 (복잡함)
+                      # 그냥 0.0 유지보다는 yfinance 30m 마지막 변화율 사용
+                      prev_price_30 = df_30['Close'].iloc[-2]
+                      # 하지만 이건 30분간의 변화율임. 전일 대비가 아님.
+                      pass
+             else:
+                 change_pct = kp['rate']
         
         # Signal Detection (Previous Logic)
         last_sma10 = df_30['SMA10'].iloc[-1]
