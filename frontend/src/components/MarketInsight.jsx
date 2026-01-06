@@ -442,29 +442,7 @@ const MarketInsight = ({ market, stocks, signalHistory }) => {
                             })}
                         </div>
 
-                        {/* News Section */}
-                        <div style={{ background: 'rgba(255,255,255,0.02)', padding: '15px', borderRadius: '12px' }}>
-                            <h5 style={{ margin: '0 0 10px 0', color: '#94a3b8' }}>📰 Global Market News</h5>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                {(regimeDetails?.prime_guide?.news || []).slice(0, 3).map((n, i) => (
-                                    n.url ? (
-                                        <a key={i} href={n.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
-                                            <div style={{
-                                                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                                                padding: '8px', background: 'rgba(0,0,0,0.2)', borderRadius: '6px',
-                                                border: '1px solid rgba(255,255,255,0.05)', transition: 'all 0.2s'
-                                            }}
-                                                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
-                                                onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.2)'}
-                                            >
-                                                <span style={{ color: '#e2e8f0', fontSize: '0.85rem', fontWeight: '500' }}>{n.title}</span>
-                                                <span style={{ color: '#64748b', fontSize: '0.75rem', minWidth: '60px', textAlign: 'right' }}>{n.time}</span>
-                                            </div>
-                                        </a>
-                                    ) : null
-                                ))}
-                            </div>
-                        </div>
+
                     </div>
 
                     {/* Col 2: History (Filtered) */}

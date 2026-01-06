@@ -1634,7 +1634,7 @@ def check_triple_filter(ticker, data_30m, data_5m):
 
 # --- Antigravity V2.1 Helper Functions ---
 
-_NEWS_CACHE = {"data": [], "last_fetch": 0}
+
 
 # Helper: Calculate Cheongan Index (보유 매력도)
 def calculate_cheongan_index(res):
@@ -1691,41 +1691,7 @@ def get_tech_comment(rsi, macd):
     
     return comment
 
-def get_market_news_v2():
-    global _NEWS_CACHE
-    now = time.time()
-    if now - _NEWS_CACHE["last_fetch"] < 600: # Cache 10 min
-        return _NEWS_CACHE["data"]
-    
-    try:
-        news_items = []
-        # Fetch News from Lead Tickers
-        for t in ["SOXL", "NVDA", "SPY"]:
-            try:
-                tick = yf.Ticker(t)
-                news = tick.news
-                if news: news_items.extend(news[:2])
-            except: pass
-                
-        # Sort & Format
-        sorted_news = sorted(news_items, key=lambda x: x.get('providerPublishTime', 0), reverse=True)[:3]
-        formatted = []
-        for n in sorted_news:
-            # Convert timestamp to HH:MM (NY Time approx or just relative)
-            ts = n.get('providerPublishTime', 0)
-            dt = datetime.fromtimestamp(ts)
-            formatted.append({
-                "title": n.get('title', 'No Title'),
-                "publisher": n.get('publisher', 'Unknown'),
-                "url": n.get('link', '#'),
-                "time": dt.strftime('%H:%M')
-            })
-            
-        _NEWS_CACHE = {"data": formatted, "last_fetch": now}
-        return formatted
-    except Exception as e:
-        print(f"News Error: {e}")
-        return []
+
 
 def calculate_tech_indicators(df):
     if df is None or len(df) < 26: return {}
@@ -2006,7 +1972,7 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
             "guides": guides,
             "tech_summary": techs, 
             "tech_comments": tech_comments, 
-            "news": recent_news,
+            "news": [],
             "history": recent_history  # Pass filtered history explicitly here if frontend uses it from details
         },
         "regime": regime,
