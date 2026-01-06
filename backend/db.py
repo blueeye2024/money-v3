@@ -138,6 +138,23 @@ def init_db():
             )
             """
             cursor.execute(sql_ticker_settings)
+
+            # 6. Auto Trade History (Simulated)
+            sql_trade = """
+            CREATE TABLE IF NOT EXISTS trade_history (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                ticker VARCHAR(10) NOT NULL,
+                entry_time DATETIME NOT NULL,
+                entry_price DECIMAL(10, 4),
+                exit_time DATETIME,
+                exit_price DECIMAL(10, 4),
+                profit_pct DECIMAL(10, 2),
+                status VARCHAR(20) DEFAULT 'OPEN', -- OPEN, CLOSED
+                strategy_ver VARCHAR(20),
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+            cursor.execute(sql_trade)
             
             # 6. Cheongan 2.0: Market Status (Regime)
             sql_market = """
@@ -1387,3 +1404,66 @@ def get_user_by_email(email):
     except Exception as e:
         print(f"Error getting user by email: {e}")
         return None
+
+def create_trade(ticker, price, entry_time):
+    """Start a new trade"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            sql = """
+                INSERT INTO trade_history (ticker, entry_time, entry_price, status, strategy_ver)
+                VALUES (%s, %s, %s, 'OPEN', '3.5.0')
+            """
+            cursor.execute(sql, (ticker, entry_time, price))
+        conn.commit()
+    finally:
+        conn.close()
+
+def close_trade(ticker, exit_price, exit_time):
+    """Close an open trade"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            # Get Open Trade
+            cursor.execute("SELECT id, entry_price FROM trade_history WHERE ticker=%s AND status='OPEN' LIMIT 1", (ticker,))
+            trade = cursor.fetchone()
+            if trade:
+                entry_price = float(trade['entry_price'])
+                try:
+                    profit = ((float(exit_price) - entry_price) / entry_price) * 100
+                except: profit = 0
+                
+                sql = """
+                    UPDATE trade_history 
+                    SET exit_time=%s, exit_price=%s, profit_pct=%s, status='CLOSED'
+                    WHERE id=%s
+                """
+                cursor.execute(sql, (exit_time, exit_price, profit, trade['id']))
+                conn.commit()
+                return True
+    finally:
+        conn.close()
+    return False
+
+def check_open_trade(ticker):
+    """Check if there is an active trade for ticker"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            sql = "SELECT * FROM trade_history WHERE ticker=%s AND status='OPEN' LIMIT 1"
+            cursor.execute(sql, (ticker,))
+            return cursor.fetchone()
+    finally:
+        conn.close()
+
+def get_trade_history(limit=50):
+    """Get recent trades for UI"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            # Recent first
+            sql = "SELECT * FROM trade_history ORDER BY entry_time DESC LIMIT %s"
+            cursor.execute(sql, (limit,))
+            return cursor.fetchall()
+    finally:
+        conn.close()

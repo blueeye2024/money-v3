@@ -563,44 +563,60 @@ const MarketInsight = ({ market, stocks, signalHistory }) => {
 
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
 
-                                        {/* 1. 30m Golden Cross */}
-                                        <div>
-                                            <div style={{ fontSize: '0.75rem', color: '#ccc', fontWeight: 'bold', marginBottom: '6px', borderLeft: '3px solid #facc15', paddingLeft: '6px' }}>
-                                                ⚡ 30분봉 골든크로스 (추세 전환)
-                                            </div>
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                                {history.gold_30m && history.gold_30m.length > 0 ? (
-                                                    history.gold_30m.slice(0, 3).map((item, idx) => (
-                                                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.03)', padding: '6px 8px', borderRadius: '4px', fontSize: '0.7rem' }}>
-                                                            <div style={{ display: 'flex', flexDirection: 'column', color: '#888' }}>
-                                                                <span>🇺🇸 {item.time_ny}</span>
-                                                                <span style={{ fontSize: '0.65rem', color: '#555' }}>🇰🇷 {item.time_kr}</span>
-                                                            </div>
-                                                            <span style={{ color: '#facc15', fontWeight: 'bold' }}>${item.price}</span>
-                                                        </div>
-                                                    ))
-                                                ) : <div style={{ fontSize: '0.7rem', color: '#555', paddingLeft: '8px' }}>최근 기록 없음</div>}
-                                            </div>
-                                        </div>
+                                        {/* Auto Trade History List */}
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                            {regimeDetails?.prime_guide?.trade_history && regimeDetails.prime_guide.trade_history.filter(t => t.ticker === ticker).length > 0 ? (
+                                                regimeDetails.prime_guide.trade_history
+                                                    .filter(t => t.ticker === ticker)
+                                                    .map((trade, idx) => {
+                                                        const isOpen = trade.status === 'OPEN';
+                                                        const pnlColor = isOpen ? '#999' : (Number(trade.profit_pct) > 0 ? '#ef4444' : '#3b82f6');
 
-                                        {/* 2. 5m Golden Cross (Entry) */}
-                                        <div>
-                                            <div style={{ fontSize: '0.75rem', color: '#ccc', fontWeight: 'bold', marginBottom: '6px', borderLeft: '3px solid #fb923c', paddingLeft: '6px' }}>
-                                                🎯 5분봉 골든크로스 (진입 타점)
-                                            </div>
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                                {history.gold_5m && history.gold_5m.length > 0 ? (
-                                                    history.gold_5m.slice(0, 5).map((item, idx) => (
-                                                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.03)', padding: '6px 8px', borderRadius: '4px', fontSize: '0.7rem' }}>
-                                                            <div style={{ display: 'flex', flexDirection: 'column', color: '#888' }}>
-                                                                <span>🇺🇸 {item.time_ny}</span>
-                                                                <span style={{ fontSize: '0.65rem', color: '#555' }}>🇰🇷 {item.time_kr}</span>
+                                                        // Format Date
+                                                        const dateObj = new Date(trade.entry_time);
+                                                        const dateStr = `${dateObj.getMonth() + 1}/${dateObj.getDate()} ${dateObj.getHours()}:${dateObj.getMinutes().toString().padStart(2, '0')}`;
+
+                                                        return (
+                                                            <div key={idx} style={{
+                                                                background: isOpen ? `linear-gradient(90deg, ${mainColor}22, transparent)` : 'rgba(255,255,255,0.03)',
+                                                                padding: '10px',
+                                                                borderRadius: '8px',
+                                                                borderLeft: isOpen ? `3px solid ${mainColor}` : '3px solid #555',
+                                                                display: 'flex',
+                                                                justifyContent: 'space-between',
+                                                                alignItems: 'center'
+                                                            }}>
+                                                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                                    <div style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#e2e8f0' }}>
+                                                                        {isOpen ? <span className="animate-pulse">🟢 Active Trade</span> : <span>🔴 Closed</span>}
+                                                                    </div>
+                                                                    <div style={{ fontSize: '0.7rem', color: '#888' }}>
+                                                                        Entry: {dateStr} @ ${Number(trade.entry_price).toFixed(2)}
+                                                                    </div>
+                                                                </div>
+
+                                                                <div style={{ textAlign: 'right' }}>
+                                                                    {isOpen ? (
+                                                                        <span style={{ fontSize: '0.8rem', color: mainColor }}>Running...</span>
+                                                                    ) : (
+                                                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                                                                            <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: pnlColor }}>
+                                                                                {Number(trade.profit_pct) > 0 ? '+' : ''}{Number(trade.profit_pct).toFixed(2)}%
+                                                                            </span>
+                                                                            <span style={{ fontSize: '0.65rem', color: '#666' }}>
+                                                                                Exit: ${Number(trade.exit_price).toFixed(2)}
+                                                                            </span>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
                                                             </div>
-                                                            <span style={{ color: '#fb923c', fontWeight: 'bold' }}>${item.price}</span>
-                                                        </div>
-                                                    ))
-                                                ) : <div style={{ fontSize: '0.7rem', color: '#555', paddingLeft: '8px' }}>최근 기록 없음</div>}
-                                            </div>
+                                                        );
+                                                    })
+                                            ) : (
+                                                <div style={{ padding: '20px', textAlign: 'center', color: '#666', fontSize: '0.8rem', background: 'rgba(0,0,0,0.2)', borderRadius: '8px' }}>
+                                                    No recent auto-trades recorded.
+                                                </div>
+                                            )}
                                         </div>
 
                                     </div>

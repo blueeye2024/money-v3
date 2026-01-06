@@ -8,6 +8,15 @@ import time
 import re
 from concurrent.futures import ThreadPoolExecutor
 from kis_api import kis_client
+from db import (
+    load_market_candles, 
+    save_market_candles,
+    cleanup_old_candles,
+    create_trade,
+    close_trade,
+    check_open_trade,
+    get_trade_history
+)
 
 # Global Cache for Historical Data
 _DATA_CACHE = {
@@ -2128,6 +2137,36 @@ def get_filtered_history_v2():
     
     return filtered[:20] # Return top 20
 
+
+def process_auto_trading(ticker, result_info, current_price, current_time):
+    """
+    Process auto trading logic (Simulation)
+    - Entry: Final Signal == True AND No Open Trade
+    - Exit: 30m Trend (Step1) == Dead Cross AND Open Trade
+    """
+    try:
+        # Check current status
+        open_trade = check_open_trade(ticker)
+        
+        # 1. Entry Logic
+        if result_info['final'] and not open_trade:
+            # Only enter if signal time is recent (e.g. within 2 hours or same day)
+            # For simulation, we trust the 'final' flag which implies conditions are met NOW.
+            create_trade(ticker, current_price, current_time)
+            print(f"🚀 [AUTO BUY] {ticker} at {current_price}")
+            
+        # 2. Exit Logic (Trend Reversal)
+        elif open_trade:
+            # Exit if Step 1 is NOT met (i.e., Dead Cross or not confirmed)
+            # result_info['step1'] is True if Golden Cross maintained.
+            # If Step1 becomes False -> Trend broken.
+            if not result_info['step1']:
+                 close_trade(ticker, current_price, current_time)
+                 print(f"📉 [AUTO SELL] {ticker} at {current_price}")
+                 
+    except Exception as e:
+        print(f"Auto Trading Error ({ticker}): {e}")
+
 def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
     """
     Cheongan V3.5 Master Signal Logic (Control Tower)
@@ -2143,6 +2182,22 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
     for t in tickers:
         results[t] = check_triple_filter(t, data_30m, data_5m)
         results[t]['ticker'] = t # [FIX] Add Ticker for main.py iteration
+
+        # --- Auto Trading Simulation ---
+        try:
+            # Get current price
+            cur_price = 0
+            df_5m_target = data_5m.get(t) if data_5m else None
+            if df_5m_target is not None and not df_5m_target.empty:
+                cur_price = float(df_5m_target['Close'].iloc[-1])
+            
+            # Use signal time or current NY time
+            # Ideally use the timestamp of the latest candle
+            process_auto_trading(t, results[t], cur_price, datetime.now(timezone.utc))
+            
+        except Exception as e:
+            print(f"Auto trade processing failed for {t}: {e}")
+        # -------------------------------
         df_5m = data_5m.get(t) if data_5m else None
         techs[t] = calculate_tech_indicators(df_5m)
         
@@ -2201,7 +2256,10 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
             "tech_summary": techs, 
             "tech_comments": tech_comments, 
             "news": [],
-            "history": recent_history  # Pass filtered history explicitly here if frontend uses it from details
+            "tech_comments": tech_comments, 
+            "news": [],
+            "history": recent_history,
+            "trade_history": get_trade_history(limit=20) # [NEW] Auto Trade Logs
         },
         "regime": regime,
         "upro": results["UPRO"], 
