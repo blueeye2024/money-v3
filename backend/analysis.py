@@ -2127,6 +2127,10 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
         df_5m = data_5m.get(t) if data_5m else None
         techs[t] = calculate_tech_indicators(df_5m)
         
+        # [NEW] Inject Cross History for Frontend
+        df_30 = data_30m.get(t) if data_30m else None
+        results[t]['cross_history'] = get_cross_history(df_30, df_5m)
+        
     upro_chg = results["UPRO"].get("daily_change", 0)
     regime = "Bull" if upro_chg >= 1.0 else ("Bear" if upro_chg <= -1.0 else "Neutral")
     
