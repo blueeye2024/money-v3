@@ -2176,7 +2176,14 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
         update_market_status(regime, details)
     except: pass
     
-    return {"regime": regime, "details": details}
+    return {
+        "market_regime": {
+            "regime": regime, 
+            "details": details
+        },
+        "stocks": [results[t] for t in tickers],
+        "holdings": held_tickers
+    }
     
 
 
