@@ -614,6 +614,7 @@ const MarketInsight = ({ market, stocks, signalHistory }) => {
         });
     })()
 }
+                                        </div>
 
                                     </div>
                                 </div>
