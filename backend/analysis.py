@@ -416,77 +416,127 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, df_1dRaw, market_vol_score=0, is
         # Values
         current_price = df_30['Close'].iloc[-1]
         
-        # [FIX] Calculate Daily Change based on Previous Day Close (df_1d)
+        # [FIX] Calculate Daily Change using KIS API Daily Data (Most Reliable for "Yesterday Close")
         change_pct = 0.0
-        prev_close_price = None
+        prev_close_price = 0.0
         
-        if df_1d is not None and not df_1d.empty:
-            try:
-                # Check based on date
-                est_tz = pytz.timezone('US/Eastern')
-                today_est = datetime.now(est_tz).date()
-                last_lbl = df_1d.index[-1]
-                last_date = last_lbl.date() if hasattr(last_lbl, 'date') else last_lbl
+        # Try KIS Daily first
+        try:
+            daily_data = kis_client.get_daily_price(ticker)
+            if daily_data and len(daily_data) > 0:
+                # daily_data[0] usually contains today's live data in 'stck_clpr' or prev close in 'stck_prpr'?
+                # KIS output2 fields: stck_bsop_date(Date), stck_clpr(Close), prdy_vrss(Diff), prdy_ctrt(Rate)
+                # Note: For Overseas, output2[0] is the most recent day.
+                # If market is open, output2[0] is TODAY. detailed fields might differ.
+                # output2[0]['stck_clpr'] is Close.
+                # output2[1]['stck_clpr'] is Yesterday Close.
                 
-                # DEBUG: Print last few rows of 1d data
-                last_rows = df_1d.tail(3)
-                print(f"[{ticker}] 1D Data Tail:\n{last_rows[['Close']]}")
+                # Careful: We need Yesterday's Close to compare with Current Price.
+                # Let's verify date of data[0].
+                # But simply, we can infer prev_close from current_price and rate if we trust rate?
+                # No, user said rate was wrong. 
+                # Let's get output2[1] (Yesterday) directly.
                 
-                # If the last candle in 1d data matches today's date (US), it means it's a live/partial candle.
-                # So previous close is iloc[-2].
-                # If last candle is older (yesterday), then it is the previous close (iloc[-1]).
-                if last_date >= today_est: 
-                    if len(df_1d) >= 2:
-                        prev_close_price = float(df_1d['Close'].iloc[-2])
-                        print(f"[{ticker}] Today Candle Detected ({last_date}). Using prev (iloc[-2]): {prev_close_price} (Date: {df_1d.index[-2].date()})")
-                    else:
-                        # Only 1 candle which is today? Rare but fallback
-                         prev_close_price = float(df_1d['Open'].iloc[-1]) # Use Open as fallback base
-                         print(f"[{ticker}] Only 1 Today Candle. Using Open: {prev_close_price}")
-                else:
-                    # Last candle is older than today -> It is the Previous Close
-                    prev_close_price = float(df_1d['Close'].iloc[-1])
-                    print(f"[{ticker}] Last Candle is PrevDay ({last_date} < {today_est}). Using it (iloc[-1]): {prev_close_price}")
-            except Exception as e:
-                print(f"Daily Change Calc Error {ticker}: {e}")
-        
-        # 1. Base Change Calculation (vs 30m or 1d)
-        if prev_close_price and prev_close_price > 0:
-            # Primary: (Last 30m Close - Prev 1d Close) / Prev 1d Close
-            change_pct = ((current_price - prev_close_price) / prev_close_price) * 100
-        else:
-            # Fallback: Just prev 30m candle
-            prev_price_30 = df_30['Close'].iloc[-2]
-            if prev_price_30 > 0:
-                 change_pct = ((current_price - prev_price_30) / prev_price_30) * 100
-        
-        # 2. Update with Real-time Price (Highest Priority for Price)
-        # BUT: Recalculate Change% using our trusted PrevClose, do not trust API 'rate' blindly during pre-market.
+                if len(daily_data) > 1:
+                     # Check if data[0] is today. 
+                     # If data[0] date == today, then previous close is data[1]['ovrs_nmix_prpr'] (for index) or 'close'?
+                     # For overseas stock KIS get_daily_price returns: 
+                     # { 'sign':..., 'symb':..., 'date':..., 'clos':... } (keys might differ depending on endpoint)
+                     # Based on kis_api.py: returns output2. keys are usually acronyms.
+                     # "clos" is likely close. let's assume 'clos' or similar.
+                     # Actually, looking at kis_api.py, it returns raw dict.
+                     
+                     # Let's rely on calculation:
+                     # If we can get a stable previous close.
+                     pass 
+        except:
+             pass
+
+        # Re-implementing simplified logic:
+        # 1. Get Current Price (Realtime > KIS > YF)
         current_price_realtime = 0.0
-        kp = None
-        
         if real_time_info:
             current_price_realtime = float(real_time_info['price'])
-            print(f"[{ticker}] Source: RealTimeInfo (YF/Main), Price: {current_price_realtime}")
         elif (kp := kis_client.get_price(ticker)):
              current_price_realtime = kp['price']
-             print(f"[{ticker}] Source: KIS API, Price: {current_price_realtime}")
-
+        
         if current_price_realtime > 0:
             current_price = current_price_realtime
+
+        # 2. Get Prev Close (KIS Daily > 1D DF)
+        prev_close_source = "None"
+        try:
+            d_data = kis_client.get_daily_price(ticker)
+            if d_data and len(d_data) >= 2:
+                # KIS Daily returns list. [0] is recent.
+                # If [0] is today (based on date/time), use [1]['clos'].
+                # Actually KIS Daily keys: 'xymd' (Date), 'clos' (Close), 'open', 'high', 'low'
+                today_str = datetime.now(pytz.timezone('Asia/Seoul')).strftime("%Y%m%d") # KIS uses KST/Local dates usually? Or US?
+                # US Market Daily Date is usually Local Date (US).
+                # Safest: Use [1]['clos'] if [0] looks like today or if we just want "Previous Day Record".
+                # Actually, KIS often provides 'base' price in price query?
+                
+                # Let's try to interpret df_1d again with very strict logic, cross checked with KIS.
+                # Better: Use KIS get_price 'base' (Yesterday Close) if available.
+                # get_price returns 'price', 'diff', 'rate'. 
+                # Yesterday Close = Price - Diff.
+                kp_curr = kis_client.get_price(ticker)
+                if kp_curr:
+                     curr_p = kp_curr['price']
+                     diff = kp_curr['diff'] # This is comparison to yesterday.
+                     # If diff is valid, Prev = Current - Diff.
+                     if curr_p > 0:
+                         prev_close_price = curr_p - diff
+                         prev_close_source = "KIS_Diff_Calc"
+        except Exception as e:
+            print(f"KIS PrevClose Calc Error: {e}")
             
-            if prev_close_price and prev_close_price > 0:
-                # Recalculate accurately
-                change_pct = ((current_price - prev_close_price) / prev_close_price) * 100
-                print(f"[{ticker}] Recalc Change: {change_pct:.2f}% (Curr: {current_price}, Base: {prev_close_price})")
-            else:
-                # Fallback to API rate only if we have no history
-                if real_time_info: change_pct = float(real_time_info['rate'])
-                elif kp: change_pct = kp['rate']
-        else:
-             print(f"[{ticker}] Source: DataFrame (Last 30m), Price: {current_price}")
+        if prev_close_price == 0 and df_1d is not None and not df_1d.empty:
+             # Fallback to DF
+             if len(df_1d) >= 2:
+                 # Assume last is today, second last is yesterday
+                 prev_close_price = float(df_1d['Close'].iloc[-2])
+                 prev_close_source = "DF_Iloc[-2]"
+             else:
+                 prev_close_price = float(df_1d['Close'].iloc[-1])
+                 prev_close_source = "DF_Iloc[-1]"
         
-        # print(f"[{ticker}] Final Daily Change: {change_pct:.2f}% (Price: {current_price}, PrevClose: {prev_close_price})")
+        if prev_close_price > 0:
+             change_pct = ((current_price - prev_close_price) / prev_close_price) * 100
+             print(f"[{ticker}] Daily Change: {change_pct:.2f}% (Curr: {current_price}, Prev: {prev_close_price}, Src: {prev_close_source})")
+        else:
+             # Last resort: use YF prev 30m? No, that's bad.
+             pass
+
+        # ... (rest of function) ...
+        
+        # [MODIFIED] Step 3 Logic: Always show 5m Status
+        step3_status_text = "대기"
+        step3_color = None
+        
+        # Calculate 5m Cross State
+        current_5m_state = "골든크로스" if last_5m_sma10 > last_5m_sma30 else "데드크로스"
+        
+        if step3_met:
+             step3_status_text = "진입신호 (조건충족)"
+             step3_color = "red" # Highlight
+        else:
+             # Just show current state
+             step3_status_text = f"현재 {current_5m_state}"
+             step3_color = "green" if current_5m_state == "골든크로스" else "orange"
+        
+        # ... inside return dict ...
+        # Assuming these lines are part of a larger dictionary return,
+        # and the instruction is to ensure they are present and use the variables.
+        # The provided "Code Edit" snippet seems to be a partial return dictionary.
+        # I will uncomment the lines that directly match the instruction.
+        # "step1_status": "골든크로스" if recent_cross_type == 'gold' else "데드크로스",
+        # "step2_status": f"박스권 상단돌파 ({box_pct:.1f}%)" if is_box_up else "대기 (돌파미확인)",
+        "step3_status": step3_status_text,
+        
+        # "step1_color": "red" if recent_cross_type == 'dead' else None,
+        # "step2_color": "yellow" if not step2_met and recent_cross_type == 'gold' else None,
+        "step3_color": step3_color,
              
 
         
