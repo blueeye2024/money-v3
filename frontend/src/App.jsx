@@ -126,6 +126,29 @@ function Dashboard() {
                     </div>
                     {data?.timestamp?.full_str && (
                         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                            {/* Sync Button */}
+                            <button
+                                onClick={async () => {
+                                    if (confirm("최근 30일 데이터를 다시 가져와 DB를 갱신하시겠습니까? (약 10초 소요)")) {
+                                        try {
+                                            const res = await fetch('/api/system/backfill', { method: 'POST' });
+                                            const data = await res.json();
+                                            alert(data.message);
+                                        } catch (e) {
+                                            alert("동기화 요청 실패: " + e.message);
+                                        }
+                                    }
+                                }}
+                                style={{
+                                    display: 'flex', alignItems: 'center', gap: '6px',
+                                    padding: '0.4rem 0.8rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.2)',
+                                    borderRadius: '8px', color: '#e2e8f0', cursor: 'pointer', fontSize: '0.8rem'
+                                }}
+                                title="데이터 전체 동기화 (30일)"
+                            >
+                                <span style={{ fontSize: '1rem' }}>🔄</span> 동기화
+                            </button>
+
                             {/* Market Regime Badge (UPRO Status) */}
                             {data.market_regime && (
                                 <div style={{

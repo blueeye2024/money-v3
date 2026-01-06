@@ -254,6 +254,95 @@ const TripleFilterStatus = ({ title, status, isBear = false }) => {
     );
 };
 
+const SystemPerformanceReport = () => {
+    const [trades, setTrades] = React.useState([]);
+    const [stats, setStats] = React.useState(null);
+    const [loading, setLoading] = React.useState(true);
+
+    React.useEffect(() => {
+        fetch('/api/system/trades') // Need to create this endpoint in backend
+            .then(res => res.json())
+            .then(data => {
+                if (data.trades) setTrades(data.trades);
+                if (data.stats) setStats(data.stats);
+            })
+            .catch(err => console.error("System Trade Load Error", err))
+            .finally(() => setLoading(false));
+    }, []);
+
+    if (loading) return <div style={{ fontSize: '0.8rem', color: '#666', padding: '10px' }}>Loading Performance Data...</div>;
+
+    return (
+        <div>
+            {/* Top Stats */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '15px' }}>
+                <div style={{ background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '8px', textAlign: 'center' }}>
+                    <div style={{ fontSize: '0.7rem', color: '#888' }}>Win Rate</div>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#fff' }}>{stats?.win_rate?.toFixed(1) || 0}%</div>
+                    <div style={{ fontSize: '0.65rem', color: '#555' }}>({stats?.wins}/{stats?.total_trades} trades)</div>
+                </div>
+                <div style={{ background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '8px', textAlign: 'center' }}>
+                    <div style={{ fontSize: '0.7rem', color: '#888' }}>Avg Return</div>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: (stats?.avg_return > 0 ? '#4ade80' : stats?.avg_return < 0 ? '#f87171' : '#ccc') }}>
+                        {stats?.avg_return > 0 ? '+' : ''}{stats?.avg_return?.toFixed(2) || 0}%
+                    </div>
+                </div>
+                <div style={{ background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '8px', textAlign: 'center' }}>
+                    <div style={{ fontSize: '0.7rem', color: '#888' }}>Total Profit</div>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: (stats?.total_return > 0 ? '#4ade80' : stats?.total_return < 0 ? '#f87171' : '#ccc') }}>
+                        {stats?.total_return > 0 ? '+' : ''}{stats?.total_return?.toFixed(2) || 0}%
+                    </div>
+                </div>
+            </div>
+
+            {/* Trade List Table */}
+            <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', fontSize: '0.75rem', borderCollapse: 'collapse', color: '#ccc' }}>
+                    <thead>
+                        <tr style={{ background: 'rgba(255,255,255,0.05)', color: '#888' }}>
+                            <th style={{ padding: '6px', textAlign: 'left' }}>Time (KR)</th>
+                            <th style={{ padding: '6px', textAlign: 'center' }}>Ticker</th>
+                            <th style={{ padding: '6px', textAlign: 'center' }}>Type</th>
+                            <th style={{ padding: '6px', textAlign: 'right' }}>Price</th>
+                            <th style={{ padding: '6px', textAlign: 'right' }}>Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {trades.slice(0, 5).map((t, i) => (
+                            <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                <td style={{ padding: '6px' }}>{new Date(t.created_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}</td>
+                                <td style={{ padding: '6px', textAlign: 'center', fontWeight: 'bold' }}>{t.ticker}</td>
+                                <td style={{ padding: '6px', textAlign: 'center' }}>
+                                    <span style={{
+                                        padding: '2px 6px', borderRadius: '4px',
+                                        background: t.trade_type === 'BUY' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(59, 130, 246, 0.2)',
+                                        color: t.trade_type === 'BUY' ? '#f87171' : '#60a5fa',
+                                        fontWeight: 'bold', fontSize: '0.65rem'
+                                    }}>
+                                        {t.trade_type}
+                                    </span>
+                                </td>
+                                <td style={{ padding: '6px', textAlign: 'right' }}>
+                                    ${Number(t.price).toFixed(2)}
+                                    {t.profit_pct != null && (
+                                        <span style={{ marginLeft: '4px', color: t.profit_pct > 0 ? '#4ade80' : '#f87171', fontWeight: 'bold' }}>
+                                            ({t.profit_pct > 0 ? '+' : ''}{Number(t.profit_pct).toFixed(2)}%)
+                                        </span>
+                                    )}
+                                </td>
+                                <td style={{ padding: '6px', textAlign: 'right', color: '#666' }}>{new Date(t.trade_time).toLocaleDateString()}</td>
+                            </tr>
+                        ))}
+                        {trades.length === 0 && (
+                            <tr><td colSpan="5" style={{ padding: '10px', textAlign: 'center', color: '#555' }}>아직 거래 기록이 없습니다.</td></tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
+};
+
 const MarketInsight = ({ market, stocks, signalHistory }) => {
     if (!market) return <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>데이터 로딩 중...</div>;
 
@@ -442,6 +531,17 @@ const MarketInsight = ({ market, stocks, signalHistory }) => {
                             })}
                         </div>
 
+                        {/* [NEW] System Trading Performance Report (Virtual) */}
+                        <div style={{ background: 'rgba(16, 185, 129, 0.05)', padding: '15px', borderRadius: '12px', border: '1px solid rgba(16, 185, 129, 0.2)', marginTop: '20px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', borderBottom: '1px dashed rgba(16, 185, 129, 0.3)', paddingBottom: '8px' }}>
+                                <h4 style={{ margin: 0, fontSize: '1rem', color: '#10b981', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    🤖 System Auto-Trading Log (Virtual)
+                                </h4>
+                                <div style={{ fontSize: '0.75rem', color: '#6ee7b7' }}>청안 3중 필터 자동매매 시뮬레이션</div>
+                            </div>
+
+                            <SystemPerformanceReport />
+                        </div>
 
                     </div>
 
@@ -518,7 +618,7 @@ const MarketInsight = ({ market, stocks, signalHistory }) => {
                 }
             `}</style>
             </div>
-        </div>
+        </div >
     );
 };
 
