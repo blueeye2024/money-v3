@@ -165,8 +165,8 @@ def fetch_data(tickers=None, force=False, override_period=None):
         cache_5m = {}
         
         for ticker in target_list:
-            df30 = load_market_candles(ticker, "30m", limit=300)
-            df5 = load_market_candles(ticker, "5m", limit=300)
+            df30 = load_market_candles(ticker, "30m", limit=500) # Increased for better history
+            df5 = load_market_candles(ticker, "5m", limit=1000) # Increased to cover last 2-3 days
             if df30 is not None: cache_30m[ticker] = df30
             if df5 is not None: cache_5m[ticker] = df5
             
