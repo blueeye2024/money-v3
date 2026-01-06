@@ -364,18 +364,16 @@ def fetch_data(tickers=None, force=False, override_period=None):
     
     return d30, d5, d1, m, reg
 
+import pandas_ta as ta
+
 def calculate_sma(series, window):
-    return series.rolling(window=window).mean()
+    return ta.sma(series, length=window)
 
 def calculate_ema(series, span):
-    return series.ewm(span=span, adjust=False).mean()
+    return ta.ema(series, length=span)
 
 def calculate_rsi(series, window=14):
-    delta = series.diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
-    rs = gain / loss
-    return 100 - (100 / (1 + rs))
+    return ta.rsi(series, length=window)
 
 def get_score_interpretation(score, position):
     if "매수" in position:
@@ -1534,8 +1532,8 @@ def check_triple_filter(ticker, data_30m, data_5m):
     # --- CALCULATIONS ---
         # Filter 1: 30m Trend (SMA 10 > 30) - 골든크로스
         if df30 is not None and len(df30) > 0:
-            sma10_30 = float(df30['Close'].rolling(window=10).mean().iloc[-1])
-            sma30_30 = float(df30['Close'].rolling(window=30).mean().iloc[-1])
+            sma10_30 = float(calculate_sma(df30['Close'], 10).iloc[-1])
+            sma30_30 = float(calculate_sma(df30['Close'], 30).iloc[-1])
         else:
             sma10_30 = 0
             sma30_30 = 0
@@ -1623,8 +1621,8 @@ def check_triple_filter(ticker, data_30m, data_5m):
         # Filter 3: 5m Timing (Golden Cross SMA10 > SMA30)
         filter3_met = False
         if df5 is not None and not df5.empty and len(df5) > 30:
-             sma10_5 = float(df5['Close'].rolling(window=10).mean().iloc[-1])
-             sma30_5 = float(df5['Close'].rolling(window=30).mean().iloc[-1])
+             sma10_5 = float(calculate_sma(df5['Close'], 10).iloc[-1])
+             sma30_5 = float(calculate_sma(df5['Close'], 30).iloc[-1])
              filter3_met = bool(sma10_5 > sma30_5)  # 골든크로스
 
 
@@ -2258,8 +2256,8 @@ def get_cross_history(df_30, df_5):
     if df_30 is not None and not df_30.empty and len(df_30) > 30:
         d30 = df_30.copy()
         d30 = d30[~d30.index.duplicated(keep='last')]
-        d30['SMA10'] = d30['Close'].rolling(window=10).mean()
-        d30['SMA30'] = d30['Close'].rolling(window=30).mean()
+        d30['SMA10'] = ta.sma(d30['Close'], length=10)
+        d30['SMA30'] = ta.sma(d30['Close'], length=30)
         
         # Look back deeper
         scan_depth = len(d30) - 1
@@ -2283,8 +2281,8 @@ def get_cross_history(df_30, df_5):
     if df_5 is not None and not df_5.empty and len(df_5) > 30:
         d5 = df_5.copy()
         d5 = d5[~d5.index.duplicated(keep='last')]
-        d5['SMA10'] = d5['Close'].rolling(window=10).mean()
-        d5['SMA30'] = d5['Close'].rolling(window=30).mean()
+        d5['SMA10'] = ta.sma(d5['Close'], length=10)
+        d5['SMA30'] = ta.sma(d5['Close'], length=30)
         
         # Look back deeper
         scan_depth = len(d5) - 1

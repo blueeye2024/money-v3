@@ -13,3 +13,4 @@ DBUtils==3.1.2
 passlib
 pyjwt
 bcrypt
+pandas_ta
