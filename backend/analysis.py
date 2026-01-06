@@ -2310,4 +2310,9 @@ def get_cross_history(df_30, df_5):
                     "type": "골든크로스 (5분)"
                 })
 
+    # Limit to latest 1 (User Request)
+    history["gold_30m"] = history["gold_30m"][:1]
+    history["gold_5m"] = history["gold_5m"][:1]
+    history["dead_5m"] = history["dead_5m"][:1]
+
     return history
