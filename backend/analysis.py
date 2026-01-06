@@ -431,8 +431,10 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, df_1dRaw, market_vol_score=0, is
                 if last_date >= today_est: # Assuming index is Date
                     if len(df_1d) >= 2:
                         prev_close_price = float(df_1d['Close'].iloc[-2])
+                        print(f"[{ticker}] Using iloc[-2] date={df_1d.index[-2]} for prev_close (last={last_date}, today={today_est})")
                 else:
                     prev_close_price = float(df_1d['Close'].iloc[-1])
+                    print(f"[{ticker}] Using iloc[-1] date={df_1d.index[-1]} for prev_close (last={last_date} < today={today_est})")
             except Exception as e:
                 print(f"Daily Change Calc Error {ticker}: {e}")
         
@@ -444,35 +446,40 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, df_1dRaw, market_vol_score=0, is
             if prev_price_30 > 0:
                  change_pct = ((current_price - prev_price_30) / prev_price_30) * 100
         
-        # Override with Real-time Info if available
+        # Override with Real-time Info if available (HIGHEST PRIORITY)
+        kis_rate_used = False
         if real_time_info:
             current_price = float(real_time_info['price'])
-            # rate is percentage change
             change_pct = float(real_time_info['rate'])
+            kis_rate_used = True
         elif (kp := kis_client.get_price(ticker)):
              current_price = kp['price']
              change_pct = kp['rate']
+             kis_rate_used = True
+             # Explicit debug
+             # print(f"[{ticker}] Used KIS Realtime Rate: {change_pct}%")
+
+        # If KIS Rate looks suspicious (e.g. 0.0 during active market) or wasn't available, try KIS Daily
+        # User reported discrepancy, so let's verify with KIS Daily Base Price
+        if not kis_rate_used or (change_pct == 0.0 and current_price > 0):
+             try:
+                 daily_data = kis_client.get_daily_price(ticker)
+                 # data[0] is today (if market open) or last close. 
+                 # We need yesterday close to calc rate.
+                 # Actually data[0]['rate'] is today's rate if 'date' is today?
+                 if daily_data:
+                     # Calculate manually from base_price if possible, or use 'rate'
+                     # daily_data[0] example: {'stck_bsop_date': '20250106', 'stck_clpr': '...', 'prdy_vrss': '...', 'prdy_ctrt': '2.32'}
+                     # prdy_ctrt is rate.
+                     dr = float(daily_data[0].get('rate', 0.0))
+                     if dr != 0.0:
+                         change_pct = dr
+                         print(f"[{ticker}] Overwrote with KIS Daily Rate: {dr}%")
+             except Exception as e: print(f"KIS Daily Fallback Error: {e}")
              
-             # [Mod] 장 휴장(Gap) 시간(Rate=0)일 때, KIS 일별시세(Yesterday) 데이터 활용
-             if change_pct == 0.0 and kp['diff'] == 0.0:
-                 try:
-                     daily_data = kis_client.get_daily_price(ticker)
-                     if daily_data and len(daily_data) > 1:
-                         # today = daily_data[0] ("20260106")
-                         prev = daily_data[1]   ("20260105")
-                         
-                         # 오늘 거래량이 0이고 변동이 없으면, 어제 마감 기준 등락률 표시
-                         today_vol = int(daily_data[0].get('tvol', 0))
-                         today_rate = float(daily_data[0].get('rate', 0.0))
-                         
-                         if today_vol == 0 and today_rate == 0.0:
-                             change_pct = float(prev.get('rate', 0.0))
-                             # diff can be used if needed
-                             print(f"  [{ticker}] KIS Gap Correction: Using Prev Rate {change_pct}%")
-                 except Exception as e:
-                     print(f"KIS Daily Fetch Error: {e}")
-             else:
-                 pass
+        print(f"[{ticker}] Final Daily Change: {change_pct:.2f}% (Price: {current_price})")
+             
+
         
         # Signal Detection (Previous Logic)
         last_sma10 = df_30['SMA10'].iloc[-1]
