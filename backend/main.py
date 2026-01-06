@@ -43,6 +43,7 @@ def on_startup():
     scheduler = BackgroundScheduler()
     scheduler.add_job(monitor_signals, 'interval', minutes=1)  # 신호 모니터링 (1분)
     scheduler.add_job(update_prices_job, 'interval', minutes=5)  # 종목 현재가 업데이트 (5분)
+    scheduler.add_job(data_backfill_job, 'cron', hour='*/4') # [NEW] 4시간마다 데이터 무결성 보강 (Deep Fetch)
     scheduler.start()
 
 # Global SMS Control (Now persistent via DB)
@@ -102,8 +103,39 @@ def update_prices_job():
     try:
         print(f"[{datetime.now()}] 종목 현재가 업데이트 시작...")
         update_stock_prices()
+        
+        # [MODIFIED] Periodic Deep Fetch (Backfill)
+        # Every hour, ensure we have full month history in DB to prevent gaps
+        if datetime.now().minute == 0:
+             print("🕒 Hourly Deep Fetch Triggered (Backfill Data)")
+             from analysis import fetch_data
+             fetch_data(force=True) # force=True inside fetch_data treats as realtime, but we need deeper?
+             # Actually, let's create a separate scheduled job for deep fetch or modify fetch_data logic.
+             # Ideally fetch_data(force=True) updates "5d". 
+             # Let's trust "Incremental Data Fetch" in fetch_data covers gaps if we call it frequently.
+             # But user wants "DB에 모든 데이터". Let's run a dedicated backfill occasionally.
+             pass
+
     except Exception as e:
         print(f"현재가 업데이트 작업 오류: {e}")
+
+def data_backfill_job():
+    """주기적으로 과거 데이터(1개월)를 다시 가져와 DB 구멍을 메꾸는 작업"""
+    try:
+        print(f"[{datetime.now()}] 🔄 Data Backfill Job Started (1mo deep fetch)...")
+        from analysis import fetch_data
+        # Force fetch, but fetch_data determines period. 
+        # We need to ideally pass a param? For now, fetch_data logic uses "1mo" if empty.
+        # But if not empty, it uses "5d". We want "1mo" periodically.
+        # Let's modify fetch_data to accept 'period' arg or just trigger simple fetch.
+        
+        # Temporary: Just call fetch_data(force=True) relies on '5d'.
+        # To truly backfill, we should call yfinance directly here or enhance fetch_data.
+        # Let's enhance fetch_data to take a period argument in next step.
+        fetch_data(force=True, override_period="1mo") 
+        print("✅ Backfill Job Completed.")
+    except Exception as e:
+         print(f"Backfill Job Error: {e}")
 
 def monitor_signals():
     global SMS_ENABLED

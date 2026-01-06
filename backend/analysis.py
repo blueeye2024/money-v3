@@ -79,7 +79,7 @@ def is_market_open():
     
     return market_start <= now_est <= market_end
 
-def fetch_data(tickers=None, force=False):
+def fetch_data(tickers=None, force=False, override_period=None):
     global _DATA_CACHE
     
     target_list = tickers if tickers else TARGET_TICKERS
@@ -111,6 +111,11 @@ def fetch_data(tickers=None, force=False):
             if chk_df is None or chk_df.empty:
                 print("🚀 Initializing DB: Fetching 1 month of history...")
                 fetch_period = "1mo"
+            
+            # [Added] Manual Override
+            if override_period:
+                fetch_period = override_period
+                print(f"🔄 Forced Backfill Period: {fetch_period}")
             
             tickers_str = " ".join(target_list)
             print(f"Fetching Real-time (30m, 5m) Period={fetch_period}...")
@@ -455,7 +460,15 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, df_1dRaw, market_vol_score=0, is
         signal_time = ""
         cross_idx = -1
         
-        for i in range(1, 50):
+        # [MODIFIED] Persistent Signal Check:
+        # Check DB for the last known signal to maintain state even if app restarted or gaps exist.
+        last_db_signal = None
+        try:
+             from db import check_last_signal
+             last_db_signal = check_last_signal(ticker)
+        except: pass
+        
+        for i in range(1, 60): # Increased lookback to 60 for better coverage
             if i >= len(df_30): break
             c_sma10 = df_30['SMA10'].iloc[-i]
             # ... (Rest of cross detection logic)
