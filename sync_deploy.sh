@@ -5,7 +5,7 @@
 # ==========================================================
 
 # 설정
-NEW_VER="2.4.0"
+NEW_VER="2.4.1"
 TAG_NAME="v$NEW_VER"
 AUTO_DEPLOY_SCRIPT="./auto_deploy.sh"
 

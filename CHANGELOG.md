@@ -1,5 +1,18 @@
 # CHANGELOG
 
+## [Ver 2.4.1] - 2026-01-06
+
+### 시스템 최적화 (System Optimization)
+- **MCP 서버 최적화**: 
+  - 과부하 방지를 위해 **Context7**을 제외한 모든 MCP 서버(MySQL, Shell, Filesystem 등) 비활성화.
+  - 관련 문서(MCP_설정_완료_가이드, MCP_활용_최적화_지침, MCP_빠른참조) 전면 개편.
+
+### 수정 (Fixed)
+- **KIS API 거래소 매핑 오류 수정**: 
+  - `SOXL`, `SOXS`, `UPRO` 등 주요 레버리지 ETF의 거래소 코드를 `AMS` (AMEX)로 올바르게 수정.
+  - 기존에 가격이 `0`으로 표시되거나 갱신되지 않던 문제 해결.
+
+
 ## [Ver 3.0.19] - 2026-01-05
 
 ### 디자인 (Design)
