@@ -254,23 +254,31 @@ const TripleFilterStatus = ({ title, status, isBear = false }) => {
     );
 };
 
-const SystemPerformanceReport = () => {
-    const [trades, setTrades] = React.useState([]);
-    const [stats, setStats] = React.useState(null);
-    const [loading, setLoading] = React.useState(true);
+const SystemPerformanceReport = ({ trades = [] }) => {
+    // Calculate Stats on the fly
+    const stats = React.useMemo(() => {
+        if (!trades || trades.length === 0) return null;
 
-    React.useEffect(() => {
-        fetch('/api/system/trades') // Need to create this endpoint in backend
-            .then(res => res.json())
-            .then(data => {
-                if (data.trades) setTrades(data.trades);
-                if (data.stats) setStats(data.stats);
-            })
-            .catch(err => console.error("System Trade Load Error", err))
-            .finally(() => setLoading(false));
-    }, []);
+        const closedTrades = trades.filter(t => t.status === 'CLOSED');
+        const wins = closedTrades.filter(t => t.profit_pct > 0).length;
+        const totalClosed = closedTrades.length;
+        const win_rate = totalClosed > 0 ? (wins / totalClosed) * 100 : 0;
 
-    if (loading) return <div style={{ fontSize: '0.8rem', color: '#666', padding: '10px' }}>Loading Performance Data...</div>;
+        const total_return = closedTrades.reduce((acc, t) => acc + Number(t.profit_pct), 0);
+        const avg_return = totalClosed > 0 ? total_return / totalClosed : 0;
+
+        return {
+            win_rate,
+            wins,
+            total_trades: totalClosed,
+            avg_return,
+            total_return
+        };
+    }, [trades]);
+
+    if (!trades || trades.length === 0) return <div style={{ fontSize: '0.8rem', color: '#666', padding: '10px', textAlign: 'center' }}>No trading data available yet.</div>;
+
+
 
     return (
         <div>
@@ -540,7 +548,7 @@ const MarketInsight = ({ market, stocks, signalHistory }) => {
                                 <div style={{ fontSize: '0.75rem', color: '#6ee7b7' }}>청안 3중 필터 자동매매 시뮬레이션</div>
                             </div>
 
-                            <SystemPerformanceReport />
+                            <SystemPerformanceReport trades={regimeDetails?.prime_guide?.trade_history} />
                         </div>
 
                     </div>
