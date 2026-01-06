@@ -2130,8 +2130,28 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
         
         # [NEW] Inject Cross History for Frontend
         df_30 = data_30m.get(t) if data_30m else None
-        results[t]['cross_history'] = get_cross_history(df_30, df_5m)
+        history = get_cross_history(df_30, df_5m)
+        results[t]['cross_history'] = history
         
+        # [SYNC] Overwrite Step Times with REAL Candle Times from History
+        try:
+            # Sync Step 1 (30m Trend)
+            if results[t]['step1'] and history['gold_30m']:
+                latest_30 = history['gold_30m'][0]
+                results[t]['step_details']['step1'] = f"진입: {latest_30['time_ny']} (NY)"
+                
+            # Sync Step 3 (5m Timing)
+            if results[t]['step3'] and history['gold_5m']:
+                latest_5 = history['gold_5m'][0]
+                results[t]['step_details']['step3'] = f"진입: {latest_5['time_ny']} (NY)"
+                
+                # If Final Signal is ON, use the 5m Time as the primary Signal Time (Trigger)
+                if results[t]['final']:
+                     results[t]['signal_time'] = f"{latest_5['time_ny']} (NY)"
+                     
+        except Exception as e:
+            print(f"Time Sync Error {t}: {e}")
+            
     upro_chg = results["UPRO"].get("daily_change", 0)
     regime = "Bull" if upro_chg >= 1.0 else ("Bear" if upro_chg <= -1.0 else "Neutral")
     
