@@ -217,6 +217,82 @@ def fetch_data(tickers=None, force=False, override_period=None):
 
         except Exception as e:
             print(f"Incremental Fetch Error: {e}")
+
+def get_cross_history(df_30, df_5):
+    history = {
+        "gold_30m": [],
+        "dead_5m": [],
+        "gold_5m": []
+    }
+    
+    tz_kr = pytz.timezone('Asia/Seoul')
+    tz_ny = pytz.timezone('America/New_York')
+    
+    # helper
+    def fmt_time(dt):
+        if dt.tzinfo is None: dt = dt.replace(tzinfo=timezone.utc)
+        return {
+            "kr": dt.astimezone(tz_kr).strftime('%m-%d %H:%M'),
+            "ny": dt.astimezone(tz_ny).strftime('%m-%d %H:%M')
+        }
+
+    # 1. 30m Golden Crosses
+    if df_30 is not None and not df_30.empty and len(df_30) > 30:
+        d30 = df_30.copy()
+        d30 = d30[~d30.index.duplicated(keep='last')]
+        d30['SMA10'] = d30['Close'].rolling(window=10).mean()
+        d30['SMA30'] = d30['Close'].rolling(window=30).mean()
+        
+        # Look back deeper
+        for i in range(len(d30)-1, len(d30)-200, -1): 
+            if i < 1: break
+            c_10 = d30['SMA10'].iloc[i]
+            c_30 = d30['SMA30'].iloc[i]
+            p_10 = d30['SMA10'].iloc[i-1]
+            p_30 = d30['SMA30'].iloc[i-1]
+            
+            # Gold Cross
+            if p_10 <= p_30 and c_10 > c_30:
+                t = fmt_time(d30.index[i])
+                history["gold_30m"].append({
+                    "time_kr": t["kr"], "time_ny": t["ny"],
+                    "price": f"{float(d30['Close'].iloc[i]):.2f}",
+                    "type": "골든크로스 (30분)"
+                })
+    
+    # 2. 5m Crosses
+    if df_5 is not None and not df_5.empty and len(df_5) > 30:
+        d5 = df_5.copy()
+        d5 = d5[~d5.index.duplicated(keep='last')]
+        d5['SMA10'] = d5['Close'].rolling(window=10).mean()
+        d5['SMA30'] = d5['Close'].rolling(window=30).mean()
+        
+        # Look back deeper
+        for i in range(len(d5)-1, len(d5)-600, -1): 
+            if i < 1: break
+            c_10 = d5['SMA10'].iloc[i]
+            c_30 = d5['SMA30'].iloc[i]
+            p_10 = d5['SMA10'].iloc[i-1]
+            p_30 = d5['SMA30'].iloc[i-1]
+            
+            # Dead Cross
+            if p_10 >= p_30 and c_10 < c_30:
+                t = fmt_time(d5.index[i])
+                history["dead_5m"].append({
+                    "time_kr": t["kr"], "time_ny": t["ny"],
+                    "price": f"{float(d5['Close'].iloc[i]):.2f}",
+                    "type": "데드크로스 (5분)"
+                })
+            # Gold Cross
+            elif p_10 <= p_30 and c_10 > c_30:
+                t = fmt_time(d5.index[i])
+                history["gold_5m"].append({
+                    "time_kr": t["kr"], "time_ny": t["ny"],
+                    "price": f"{float(d5['Close'].iloc[i]):.2f}",
+                    "type": "골든크로스 (5분)"
+                })
+
+    return history
             
     # Always Load from DB (Single Source of Truth)
     # This acts as both Cache Hit and Fallback
