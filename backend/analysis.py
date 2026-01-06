@@ -2181,8 +2181,7 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
             "regime": regime, 
             "details": details
         },
-        "stocks": [results[t] for t in tickers],
-        "holdings": held_tickers
+        "stocks": [results[t] for t in tickers]
     }
     
 

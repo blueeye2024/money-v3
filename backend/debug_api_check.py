@@ -3,17 +3,31 @@ import requests
 import json
 
 try:
-    print("Fetching http://localhost:8000/api/report ...")
-    r = requests.get("http://localhost:8000/api/report", timeout=30)
+    print("Fetching http://localhost:9100/api/report ...")
+    r = requests.get("http://localhost:9100/api/report", timeout=30)
     print(f"Status: {r.status_code}")
     
     data = r.json()
+    if 'error' in data:
+        print(f"API ERROR: {data['error']}")
+    print(f"Top Keys: {list(data.keys())}")
     
+    mr = data.get('market_regime', {})
+    print(f"Market Regime Keys: {list(mr.keys())}")
+    
+    details = mr.get('details', {})
+    print(f"Details Keys: {list(details.keys())}")
+
     # Check Market Regime SOXL
-    soxl = data.get('market_regime', {}).get('details', {}).get('soxl', {})
+    soxl = details.get('soxl', {})
     history = soxl.get('cross_history', {})
     
     print("\n--- SOXL History Check ---")
+    if not soxl:
+        print("FAIL: SOXL object is empty")
+    else:
+        print(f"SOXL Keys: {list(soxl.keys())}")
+        
     if not history:
         print("FAIL: No cross_history found")
     else:
