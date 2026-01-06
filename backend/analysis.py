@@ -168,19 +168,19 @@ def fetch_data(tickers=None, force=False, override_period=None):
                     if k_30:
                         records = []
                         for item in k_30:
-                            # Parse KST Time (YYYYMMDD HHMMSS)
-                            dt_str = f"{item['stck_bsop_date']} {item['stck_cntg_hour']}"
+                            # Parse KST Time (YYYYMMDD HHMMSS) - Fields: kymd, khms
+                            dt_str = f"{item['kymd']} {item['khms']}"
                             dt_kst = datetime.strptime(dt_str, "%Y%m%d %H%M%S")
                             dt_kst = kst_tz.localize(dt_kst)
                             dt_utc = dt_kst.astimezone(timezone.utc)
                             
                             records.append({
                                 'candle_time': dt_utc,
-                                'Open': float(item['stck_oprc']),
-                                'High': float(item['stck_hgpr']),
-                                'Low': float(item['stck_lwpr']),
-                                'Close': float(item['stck_prpr']),
-                                'Volume': int(item['cntg_vol'])
+                                'Open': float(item['open']),
+                                'High': float(item['high']),
+                                'Low': float(item['low']),
+                                'Close': float(item['last']),
+                                'Volume': int(item['evol'])
                             })
                         
                         if records:
@@ -193,18 +193,18 @@ def fetch_data(tickers=None, force=False, override_period=None):
                     if k_5:
                         records = []
                         for item in k_5:
-                            dt_str = f"{item['stck_bsop_date']} {item['stck_cntg_hour']}"
+                            dt_str = f"{item['kymd']} {item['khms']}"
                             dt_kst = datetime.strptime(dt_str, "%Y%m%d %H%M%S")
                             dt_kst = kst_tz.localize(dt_kst)
                             dt_utc = dt_kst.astimezone(timezone.utc)
                             
                             records.append({
                                 'candle_time': dt_utc,
-                                'Open': float(item['stck_oprc']),
-                                'High': float(item['stck_hgpr']),
-                                'Low': float(item['stck_lwpr']),
-                                'Close': float(item['stck_prpr']),
-                                'Volume': int(item['cntg_vol'])
+                                'Open': float(item['open']),
+                                'High': float(item['high']),
+                                'Low': float(item['low']),
+                                'Close': float(item['last']),
+                                'Volume': int(item['evol'])
                             })
                             
                         if records:

@@ -13,8 +13,8 @@ if data_30:
     # Time is local (Exchange time? or KST?) Usually KIS provides KST in kymd/khms
     # Let's check the latest one
     latest = data_30[0] # List is usually reversed (recent first)? or standard? 
-    # Usually KIS lists are recent first (index 0 is latest).
     print(f"Latest 30m: {latest['kymd']} {latest['khms']} Price: {latest['last']}")
+    print(f"Keys: {list(latest.keys())}")
     
 else:
     print("Failed to fetch 30m")
