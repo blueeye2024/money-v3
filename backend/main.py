@@ -43,8 +43,22 @@ def on_startup():
     scheduler = BackgroundScheduler()
     scheduler.add_job(monitor_signals, 'interval', minutes=1)  # 신호 모니터링 (1분)
     scheduler.add_job(update_prices_job, 'interval', minutes=5)  # 종목 현재가 업데이트 (5분)
-    scheduler.add_job(data_backfill_job, 'cron', hour='*/4') # [NEW] 4시간마다 데이터 무결성 보강 (Deep Fetch)
+    scheduler.add_job(update_prices_job, 'interval', minutes=5)  # 종목 현재가 업데이트 (5분)
     scheduler.start()
+
+# ... (API endpoints)
+
+@app.post("/api/system/backfill")
+def api_trigger_backfill():
+    """Manually trigger deep data fetch (30 days)"""
+    try:
+        # Run in background to avoid timeout
+        import threading
+        t = threading.Thread(target=data_backfill_job)
+        t.start()
+        return {"status": "success", "message": "데이터 동기화(최근 30일) 작업이 백그라운드에서 시작되었습니다."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 # Global SMS Control (Now persistent via DB)
 SMS_ENABLED = True

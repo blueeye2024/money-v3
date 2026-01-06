@@ -178,6 +178,34 @@ const ManagedStocksPage = () => {
                 Cheongan 2.0 공식에 따라 관리되는 핵심 포트폴리오 및 전략 리스트입니다.
             </p>
 
+            {/* Admin Controls */}
+            <div style={{ marginBottom: '2rem', display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                <button
+                    onClick={async () => {
+                        if (confirm("최근 30일 데이터를 다시 가져와 DB를 갱신하시겠습니까? (약 10초 소요)")) {
+                            try {
+                                const res = await fetch('/api/system/backfill', { method: 'POST' });
+                                const data = await res.json();
+                                alert(data.message);
+                            } catch (e) {
+                                alert("동기화 요청 실패: " + e.message);
+                            }
+                        }
+                    }}
+                    style={{
+                        padding: '0.5rem 1rem',
+                        background: 'rgba(255,255,255,0.1)',
+                        color: 'var(--accent-gold)',
+                        border: '1px solid var(--accent-gold)',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '0.85rem'
+                    }}
+                >
+                    🔄 데이터 전체 동기화 (30일)
+                </button>
+            </div>
+
             {sortedGroupNames.map(groupName => (
                 <div key={groupName} style={{ marginBottom: '3rem' }}>
                     <h2 style={{
