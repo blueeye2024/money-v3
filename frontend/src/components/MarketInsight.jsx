@@ -584,7 +584,9 @@ const MarketInsight = ({ market, stocks, signalHistory }) => {
                                                         // Backend sends 'entry_time' (likely NY naive from DB) OR ISO
                                                         let dateStr = "Invalid Date";
                                                         try {
-                                                            const d = new Date(trade.entry_time);
+                                                            let timeStr = String(trade.entry_time);
+                                                            if (!timeStr.endsWith('Z')) timeStr += 'Z';
+                                                            const d = new Date(timeStr);
                                                             if (!isNaN(d.getTime())) {
                                                                 // Explicitly format to NY and KR
                                                                 const toTimeStr = (date, tz) => new Intl.DateTimeFormat('en-US', {
@@ -613,7 +615,7 @@ const MarketInsight = ({ market, stocks, signalHistory }) => {
                                                                         <span style={{ fontSize: '0.65rem', color: '#aaa', border: '1px solid rgba(255,255,255,0.1)', padding: '0px 4px', borderRadius: '3px' }}>LONG</span>
                                                                     </div>
                                                                     <div style={{ fontSize: '0.75rem', color: '#888', marginTop: '3px' }}>
-                                                                        {dateStr} <span style={{ margin: '0 4px' }}>@</span> <b style={{ color: '#fff' }}>${Number(trade.entry_price).toFixed(2)}</b>
+                                                                        {dateStr} <span style={{ margin: '0 4px' }}>@</span> <b style={{ color: '#fff' }}>${(Number(trade.entry_price) || 0).toFixed(2)}</b>
                                                                     </div>
                                                                 </div>
 
