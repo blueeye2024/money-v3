@@ -2124,6 +2124,7 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
     
     for t in tickers:
         results[t] = check_triple_filter(t, data_30m, data_5m)
+        results[t]['ticker'] = t # [FIX] Add Ticker for main.py iteration
         df_5m = data_5m.get(t) if data_5m else None
         techs[t] = calculate_tech_indicators(df_5m)
         
