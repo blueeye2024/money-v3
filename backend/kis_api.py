@@ -138,10 +138,51 @@ class KisApi:
         except Exception as e:
             # print(f"KIS API Daily Request Error: {e}")
             pass
-        return None
+    def get_minute_candles(self, symbol, interval_min=30, exchange=None, next_key=""):
+        """
+        Get minute candle data.
+        Returns list of candles.
+        interval_min: 1, 3, 5, 10, 15, 30, 60, 120
+        """
+        if not exchange:
+            exchange = get_exchange_code(symbol)
+            
+        return self._fetch_minute_candles_request(exchange, symbol, str(interval_min), next_key)
 
-# Singleton instance
-kis_client = KisApi()
+    def _fetch_minute_candles_request(self, exchange, symbol, interval, next_key=""):
+        headers = {
+            "content-type": "application/json; charset=utf-8",
+            "authorization": f"Bearer {self.access_token}",
+            "appkey": self.APP_KEY,
+            "appsecret": self.APP_SECRET,
+            "tr_id": "HHDFS76950200"
+        }
+        
+        # Current Time for End? KIS usually returns recent from now.
+        import datetime
+        now_str = datetime.datetime.now().strftime("%H%M%S") # Not used in param but good to know
+        
+        params = {
+            "AUTH": "",
+            "EXCD": exchange,
+            "SYMB": symbol,
+            "NMIN": interval, 
+            "PINC": "1", # 1: Includes gap correction? or 0. Usually 1.
+            "NEXT": next_key, # Next Key
+            "NREC": "120", # Number of records (120 max)
+            "KEYB": "" # Key value?
+        }
+        
+        try:
+            res = requests.get(f"{self.URL_BASE}/uapi/overseas-price/v1/quotations/inquire-time-itemchartprice", headers=headers, params=params, timeout=2.0)
+            if res.status_code == 200:
+                data = res.json()
+                if data['rt_cd'] == '0':
+                    return data['output2'] # output2 is the list
+        except Exception as e:
+            # print(f"KIS Minute Chart Error: {e}")
+            pass
+        return None
 
 def get_exchange_code(ticker):
     """
@@ -193,3 +234,14 @@ def get_current_price(ticker, exchange=None):
         }
     
     return None
+
+def get_minute_candles(ticker, interval, exchange=None):
+    """
+    해외 주식 분봉 조회 Wrapper
+    """
+    if not exchange:
+        exchange = get_exchange_code(ticker)
+    return kis_client.get_minute_candles(ticker, interval, exchange)
+
+# Final Singleton
+kis_client = KisApi()

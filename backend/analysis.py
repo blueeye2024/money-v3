@@ -154,6 +154,67 @@ def fetch_data(tickers=None, force=False, override_period=None):
             
             _DATA_CACHE["last_fetch_realtime"] = now
             
+            # [NEW] KIS Real-time Patch (Overwrite recent candles with live broker data)
+            print("🚀 Patching with KIS Real-time Data...")
+            from kis_api import kis_client
+            import pytz
+            
+            kst_tz = pytz.timezone('Asia/Seoul')
+            
+            for ticker in CORE_TICKERS:
+                try:
+                    # 1. Patch 30m
+                    k_30 = kis_client.get_minute_candles(ticker, 30)
+                    if k_30:
+                        records = []
+                        for item in k_30:
+                            # Parse KST Time (YYYYMMDD HHMMSS)
+                            dt_str = f"{item['stck_bsop_date']} {item['stck_cntg_hour']}"
+                            dt_kst = datetime.strptime(dt_str, "%Y%m%d %H%M%S")
+                            dt_kst = kst_tz.localize(dt_kst)
+                            dt_utc = dt_kst.astimezone(timezone.utc)
+                            
+                            records.append({
+                                'candle_time': dt_utc,
+                                'Open': float(item['stck_oprc']),
+                                'High': float(item['stck_hgpr']),
+                                'Low': float(item['stck_lwpr']),
+                                'Close': float(item['stck_prpr']),
+                                'Volume': int(item['cntg_vol'])
+                            })
+                        
+                        if records:
+                            df_k = pd.DataFrame(records).set_index('candle_time').sort_index()
+                            save_market_candles(ticker, '30m', df_k, 'kis_live')
+                            print(f"  ✅ KIS 30m Patched: {ticker} ({len(records)} candles)")
+
+                    # 2. Patch 5m
+                    k_5 = kis_client.get_minute_candles(ticker, 5)
+                    if k_5:
+                        records = []
+                        for item in k_5:
+                            dt_str = f"{item['stck_bsop_date']} {item['stck_cntg_hour']}"
+                            dt_kst = datetime.strptime(dt_str, "%Y%m%d %H%M%S")
+                            dt_kst = kst_tz.localize(dt_kst)
+                            dt_utc = dt_kst.astimezone(timezone.utc)
+                            
+                            records.append({
+                                'candle_time': dt_utc,
+                                'Open': float(item['stck_oprc']),
+                                'High': float(item['stck_hgpr']),
+                                'Low': float(item['stck_lwpr']),
+                                'Close': float(item['stck_prpr']),
+                                'Volume': int(item['cntg_vol'])
+                            })
+                            
+                        if records:
+                            df_k = pd.DataFrame(records).set_index('candle_time').sort_index()
+                            save_market_candles(ticker, '5m', df_k, 'kis_live')
+                            print(f"  ✅ KIS 5m Patched: {ticker} ({len(records)} candles, Last: {records[-1]['candle_time']})")
+
+                except Exception as e:
+                    print(f"KIS Patch Error ({ticker}): {e}")
+
         except Exception as e:
             print(f"Incremental Fetch Error: {e}")
             
