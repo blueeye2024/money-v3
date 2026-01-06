@@ -2203,7 +2203,12 @@ def get_cross_history(df_30, df_5):
     
     # helper
     def fmt_time(dt):
-        if dt.tzinfo is None: dt = dt.replace(tzinfo=timezone.utc)
+        if dt.tzinfo is None: 
+            # DB & YFinance data is naive NY Time. Localize it correctly.
+            try:
+                dt = tz_ny.localize(dt)
+            except:
+                dt = dt.replace(tzinfo=tz_ny)
         return {
             "kr": dt.astimezone(tz_kr).strftime('%m-%d %H:%M'),
             "ny": dt.astimezone(tz_ny).strftime('%m-%d %H:%M')
