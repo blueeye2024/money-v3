@@ -573,70 +573,47 @@ const MarketInsight = ({ market, stocks, signalHistory }) => {
 
                                         {/* Auto Trade History List */}
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                            {regimeDetails?.prime_guide?.trade_history && regimeDetails.prime_guide.trade_history.filter(t => t.ticker === ticker).length > 0 ? (
-                                                regimeDetails.prime_guide.trade_history
-                                                    .filter(t => t.ticker === ticker)
-                                                    .map((trade, idx) => {
-                                                        const isOpen = trade.status === 'OPEN';
-                                                        const pnlColor = isOpen ? '#999' : (Number(trade.profit_pct) > 0 ? '#ef4444' : '#3b82f6');
+{
+    (() => {
+        const signals = [
+            ...(history?.gold_30m || []),
+            ...(history?.gold_5m || []),
+            ...(history?.dead_5m || [])
+        ];
 
-                                                        // Fix: Handle Timezone. 
-                                                        // Backend sends 'entry_time' (likely NY naive from DB) OR ISO
-                                                        let dateStr = "Invalid Date";
-                                                        try {
-                                                            const tStr = String(trade.entry_time || "");
-                                                            if (tStr.length >= 16) {
-                                                                const mm = tStr.substring(5, 7);
-                                                                const dd = tStr.substring(8, 10);
-                                                                const hh = tStr.substring(11, 13);
-                                                                const min = tStr.substring(14, 16);
-                                                                dateStr = `${mm}/${dd} ${hh}:${min} (NY)`;
-                                                            } else { dateStr = tStr; }
-                                                        } catch (e) { dateStr = String(trade.entry_time); }
+        if (signals.length === 0) {
+            return (
+                <div style={{ padding: '20px', textAlign: 'center', color: '#666', fontSize: '0.8rem', background: 'rgba(0,0,0,0.2)', borderRadius: '8px' }}>
+                    Waiting for signals...
+                </div>
+            );
+        }
 
-                                                        return (
-                                                            <div key={idx} style={{
-                                                                background: isOpen ? `linear-gradient(90deg, ${mainColor}22, transparent)` : 'rgba(255,255,255,0.03)',
-                                                                padding: '10px',
-                                                                borderRadius: '8px',
-                                                                borderLeft: isOpen ? `3px solid ${mainColor}` : '3px solid #555',
-                                                                display: 'flex',
-                                                                justifyContent: 'space-between',
-                                                                alignItems: 'center'
-                                                            }}>
-                                                                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                                                    <div style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#e2e8f0', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                                        {isOpen ? <span className="animate-pulse">🟢 Active</span> : <span>🔴 Closed</span>}
-                                                                        <span style={{ fontSize: '0.65rem', color: '#aaa', border: '1px solid rgba(255,255,255,0.1)', padding: '0px 4px', borderRadius: '3px' }}>LONG</span>
-                                                                    </div>
-                                                                    <div style={{ fontSize: '0.75rem', color: '#888', marginTop: '3px' }}>
-                                                                        {dateStr} <span style={{ margin: '0 4px' }}>@</span> <b style={{ color: '#fff' }}>${(Number(trade.entry_price) || 0).toFixed(2)}</b>
-                                                                    </div>
-                                                                </div>
-
-                                                                <div style={{ textAlign: 'right' }}>
-                                                                    {isOpen ? (
-                                                                        <span style={{ fontSize: '0.8rem', color: mainColor }}>Running...</span>
-                                                                    ) : (
-                                                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                                                                            <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: pnlColor }}>
-                                                                                {Number(trade.profit_pct) > 0 ? '+' : ''}{Number(trade.profit_pct).toFixed(2)}%
-                                                                            </span>
-                                                                            <span style={{ fontSize: '0.65rem', color: '#666' }}>
-                                                                                Exit: ${Number(trade.exit_price).toFixed(2)}
-                                                                            </span>
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-                                                            </div>
-                                                        );
-                                                    })
-                                            ) : (
-                                                <div style={{ padding: '20px', textAlign: 'center', color: '#666', fontSize: '0.8rem', background: 'rgba(0,0,0,0.2)', borderRadius: '8px' }}>
-                                                    No recent auto-trades recorded.
-                                                </div>
-                                            )}
-                                        </div>
+        return signals.map((sig, idx) => {
+            const isGold = sig.type && sig.type.includes('골든');
+            return (
+                <div key={idx} style={{
+                    background: 'rgba(255,255,255,0.03)',
+                    padding: '10px',
+                    borderRadius: '8px',
+                    borderLeft: isGold ? `3px solid ${mainColor}` : '3px solid #777',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                }}>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: isGold ? mainColor : '#ccc', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            {isGold ? '⚡ SIGNAL' : '💤 EXIT'} <span style={{ fontSize: '0.8rem', color: '#888' }}>| {sig.type}</span>
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: '#888', marginTop: '3px' }}>
+                            {sig.time_ny} (NY) <span style={{ margin: '0 4px' }}>@</span> <b style={{ color: '#fff' }}>${sig.price}</b>
+                        </div>
+                    </div>
+                </div>
+            );
+        });
+    })()
+}
 
                                     </div>
                                 </div>
