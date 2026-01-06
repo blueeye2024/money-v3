@@ -591,19 +591,7 @@ const MarketInsight = ({ market, stocks, signalHistory }) => {
                                                                 const hh = tStr.substring(11, 13);
                                                                 const min = tStr.substring(14, 16);
                                                                 dateStr = `${mm}/${dd} ${hh}:${min} (NY)`;
-                                                                throw "Done"; // Skip rest
-                                                            }
-                                                            const d = new Date(timeStr);
-                                                            if (!isNaN(d.getTime())) {
-                                                                // Explicitly format to NY and KR
-                                                                const toTimeStr = (date, tz) => new Intl.DateTimeFormat('en-US', {
-                                                                    timeZone: tz, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false
-                                                                }).format(date);
-
-                                                                dateStr = `${toTimeStr(d, 'America/New_York')} (NY)`;
-                                                            } else {
-                                                                dateStr = String(trade.entry_time).substring(5, 16);
-                                                            }
+                                                            } else { dateStr = tStr; }
                                                         } catch (e) { dateStr = String(trade.entry_time); }
 
                                                         return (
