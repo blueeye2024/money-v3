@@ -228,8 +228,15 @@ def fetch_data(tickers=None, force=False, override_period=None):
         for ticker in target_list:
             df30 = load_market_candles(ticker, "30m", limit=500) # Increased for better history
             df5 = load_market_candles(ticker, "5m", limit=1000) # Increased to cover last 2-3 days
-            if df30 is not None: cache_30m[ticker] = df30
-            if df5 is not None: cache_5m[ticker] = df5
+            
+            # Robust Cleaning: Drop rows with missing Close price (YFinance artifact)
+            if df30 is not None and not df30.empty:
+                df30 = df30.dropna(subset=['Close'])
+                cache_30m[ticker] = df30
+                
+            if df5 is not None and not df5.empty:
+                df5 = df5.dropna(subset=['Close'])
+                cache_5m[ticker] = df5
             
         if cache_30m: _DATA_CACHE["30m"] = cache_30m
         if cache_5m: _DATA_CACHE["5m"] = cache_5m
