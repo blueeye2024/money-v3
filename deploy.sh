@@ -25,6 +25,11 @@ echo "blueeye0037!" | sudo -S systemctl restart cheongan-backend
 echo "⚛️ 프론트엔드 새 파일 빌드 중..."
 cd $FRONTEND_DIR
 
+# 빌드 시간 주입
+BUILD_TIME=$(date '+%Y-%m-%d %H:%M:%S')
+echo "VITE_BUILD_TIME='$BUILD_TIME'" > .env
+echo "📅 빌드 시간 설정: $BUILD_TIME"
+
 # 의존성 설치 및 정적 파일 생성
 npm install
 npm run build

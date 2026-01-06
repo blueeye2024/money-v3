@@ -293,7 +293,7 @@ function Layout() {
                 textAlign: 'center', padding: '2rem', marginTop: '4rem',
                 borderTop: '1px solid var(--glass-border)', color: 'var(--text-secondary)'
             }}>
-                <p>&copy; 2026 Cheongan FinTech. All rights reserved. Ver 3.5.0 (Holding Score System)</p>
+                <p>&copy; 2026 Cheongan FinTech. All rights reserved. Ver {packageJson.version} (Updated: {import.meta.env.VITE_BUILD_TIME || 'Local'}) (Holding Score System)</p>
             </footer>
         </div>
     );
