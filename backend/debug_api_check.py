@@ -10,7 +10,9 @@ try:
     data = r.json()
     if 'error' in data:
         print(f"API ERROR: {data['error']}")
-    print(f"Top Keys: {list(data.keys())}")
+    import json
+    # Print a snippet of the json to understand structure
+    print(json.dumps(data, indent=2)[:1000])
     
     mr = data.get('market_regime', {})
     print(f"Market Regime Keys: {list(mr.keys())}")

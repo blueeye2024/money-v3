@@ -1308,12 +1308,12 @@ def run_analysis(held_tickers=[], force_update=False):
 
     return {
         "timestamp": get_current_time_str(),
-        "stocks": final_results,
+        "stocks": final_regime.get('stocks', []),
         "market": final_indicators,
         "insight": insight_text,
         "strategy_list": clean_nan(strategy_list),
         "total_assets": clean_nan(total_assets),
-        "market_regime": final_regime
+        "market_regime": final_regime.get('market_regime', {})
     }
 
 # --- 2026 Project: New Regime Logic V2 ---
