@@ -545,59 +545,68 @@ const MarketInsight = ({ market, stocks, signalHistory }) => {
 
                     </div>
 
-                    {/* Col 2: History (Filtered) */}
-                    <div style={{ background: 'rgba(0,0,0,0.2)', padding: '1.5rem', borderRadius: '16px', display: 'flex', flexDirection: 'column' }}>
-                        <div style={{ color: 'var(--accent-gold)', fontWeight: 'bold', fontSize: '1rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <div style={{ width: '6px', height: '6px', background: 'var(--accent-gold)', borderRadius: '50%' }} /> HISTORY
-                        </div>
-                        {/* Active Stocks Ticker */}
-                        <div style={{ background: 'rgba(255,255,255,0.03)', padding: '10px', borderRadius: '8px', marginBottom: '15px' }}>
-                            <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '6px' }}>MY ACTIVE STOCKS</div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                {stocks && stocks.filter(s => s.is_active).map(s => (
-                                    <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem' }}>
-                                        <span style={{ fontWeight: 'bold', color: 'white' }}>{s.symbol}</span>
-                                        <span style={{ color: (s.change_rate > 0 ? '#4ade80' : s.change_rate < 0 ? '#f87171' : '#ccc') }}>
-                                            ${s.current_price} ({s.change_rate}%)
-                                        </span>
-                                    </div>
-                                ))}
-                                {(!stocks || stocks.filter(s => s.is_active).length === 0) && <span style={{ color: '#666', fontSize: '0.7rem' }}>보유 종목 없음</span>}
-                            </div>
-                        </div>
+                    {/* Col 2: Recent Cross History (SOXL / SOXS) */}
+                    <div style={{ padding: '0', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
-                        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '400px' }}>
-                            {(() => {
-                                const historyList = regimeDetails?.prime_guide?.history || signalHistory || [];
-                                if (historyList.length > 0) {
-                                    return historyList.map(sig => {
-                                        const kstTime = sig.time_kst || (sig.signal_time || '').split('(')[0].trim();
-                                        const signalType = sig.signal_type || '';
-                                        let actionText = '';
-                                        let actionColor = '#888';
+                        {['SOXL', 'SOXS'].map(ticker => {
+                            // Extract History from regime details
+                            const tickData = ticker === 'SOXL' ? regimeDetails?.soxl : regimeDetails?.soxs;
+                            const history = tickData?.cross_history || { gold_30m: [], gold_5m: [] };
+                            const mainColor = ticker === 'SOXL' ? '#06b6d4' : '#a855f7';
+                            const title = ticker === 'SOXL' ? 'SOXL (BULL)' : 'SOXS (BEAR)';
 
-                                        if (signalType.includes('BUY')) {
-                                            actionText = '매수'; actionColor = '#ef4444';
-                                        } else if (signalType.includes('SELL')) {
-                                            actionText = '매도'; actionColor = '#3b82f6';
-                                        } else if (signalType.includes('WARNING')) {
-                                            actionText = '경보'; actionColor = '#eab308';
-                                        }
+                            return (
+                                <div key={ticker} style={{ background: 'rgba(0,0,0,0.25)', padding: '1.2rem', borderRadius: '16px', border: `1px solid ${mainColor}33` }}>
+                                    <h4 style={{ margin: '0 0 12px 0', fontSize: '1rem', color: mainColor, display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '8px' }}>
+                                        <span style={{ fontSize: '1.2rem' }}>{ticker === 'SOXL' ? '🚀' : '🛡️'}</span> {title} Signal History
+                                    </h4>
 
-                                        return (
-                                            <div key={sig.id} style={{ borderBottom: '1px dashed rgba(255,255,255,0.1)', paddingBottom: '6px' }}>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem' }}>
-                                                    <span style={{ color: '#888' }}>{kstTime}</span>
-                                                    <span style={{ color: actionColor, fontWeight: 'bold' }}>{sig.ticker} {actionText}</span>
-                                                </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+
+                                        {/* 1. 30m Golden Cross */}
+                                        <div>
+                                            <div style={{ fontSize: '0.75rem', color: '#ccc', fontWeight: 'bold', marginBottom: '6px', borderLeft: '3px solid #facc15', paddingLeft: '6px' }}>
+                                                ⚡ 30분봉 골든크로스 (추세 전환)
                                             </div>
-                                        )
-                                    });
-                                } else {
-                                    return <div style={{ color: '#666' }}>기록 없음</div>;
-                                }
-                            })()}
-                        </div>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                {history.gold_30m && history.gold_30m.length > 0 ? (
+                                                    history.gold_30m.slice(0, 3).map((item, idx) => (
+                                                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.03)', padding: '6px 8px', borderRadius: '4px', fontSize: '0.7rem' }}>
+                                                            <div style={{ display: 'flex', flexDirection: 'column', color: '#888' }}>
+                                                                <span>🇺🇸 {item.time_ny}</span>
+                                                                <span style={{ fontSize: '0.65rem', color: '#555' }}>🇰🇷 {item.time_kr}</span>
+                                                            </div>
+                                                            <span style={{ color: '#facc15', fontWeight: 'bold' }}>${item.price}</span>
+                                                        </div>
+                                                    ))
+                                                ) : <div style={{ fontSize: '0.7rem', color: '#555', paddingLeft: '8px' }}>최근 기록 없음</div>}
+                                            </div>
+                                        </div>
+
+                                        {/* 2. 5m Golden Cross (Entry) */}
+                                        <div>
+                                            <div style={{ fontSize: '0.75rem', color: '#ccc', fontWeight: 'bold', marginBottom: '6px', borderLeft: '3px solid #fb923c', paddingLeft: '6px' }}>
+                                                🎯 5분봉 골든크로스 (진입 타점)
+                                            </div>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                {history.gold_5m && history.gold_5m.length > 0 ? (
+                                                    history.gold_5m.slice(0, 5).map((item, idx) => (
+                                                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.03)', padding: '6px 8px', borderRadius: '4px', fontSize: '0.7rem' }}>
+                                                            <div style={{ display: 'flex', flexDirection: 'column', color: '#888' }}>
+                                                                <span>🇺🇸 {item.time_ny}</span>
+                                                                <span style={{ fontSize: '0.65rem', color: '#555' }}>🇰🇷 {item.time_kr}</span>
+                                                            </div>
+                                                            <span style={{ color: '#fb923c', fontWeight: 'bold' }}>${item.price}</span>
+                                                        </div>
+                                                    ))
+                                                ) : <div style={{ fontSize: '0.7rem', color: '#555', paddingLeft: '8px' }}>최근 기록 없음</div>}
+                                            </div>
+                                        </div>
+
+                                    </div>
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
 
