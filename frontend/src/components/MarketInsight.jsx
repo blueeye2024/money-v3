@@ -584,8 +584,15 @@ const MarketInsight = ({ market, stocks, signalHistory }) => {
                                                         // Backend sends 'entry_time' (likely NY naive from DB) OR ISO
                                                         let dateStr = "Invalid Date";
                                                         try {
-                                                            let timeStr = String(trade.entry_time);
-                                                            if (!timeStr.endsWith('Z')) timeStr += 'Z';
+                                                            const tStr = String(trade.entry_time || "");
+                                                            if (tStr.length >= 16) {
+                                                                const mm = tStr.substring(5, 7);
+                                                                const dd = tStr.substring(8, 10);
+                                                                const hh = tStr.substring(11, 13);
+                                                                const min = tStr.substring(14, 16);
+                                                                dateStr = `${mm}/${dd} ${hh}:${min} (NY)`;
+                                                                throw "Done"; // Skip rest
+                                                            }
                                                             const d = new Date(timeStr);
                                                             if (!isNaN(d.getTime())) {
                                                                 // Explicitly format to NY and KR
