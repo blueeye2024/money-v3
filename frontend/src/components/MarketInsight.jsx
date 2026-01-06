@@ -580,9 +580,22 @@ const MarketInsight = ({ market, stocks, signalHistory }) => {
                                                         const isOpen = trade.status === 'OPEN';
                                                         const pnlColor = isOpen ? '#999' : (Number(trade.profit_pct) > 0 ? '#ef4444' : '#3b82f6');
 
-                                                        // Format Date
-                                                        const dateObj = new Date(trade.entry_time);
-                                                        const dateStr = `${dateObj.getMonth() + 1}/${dateObj.getDate()} ${dateObj.getHours()}:${dateObj.getMinutes().toString().padStart(2, '0')}`;
+                                                        // Fix: Handle Timezone. 
+                                                        // Backend sends 'entry_time' (likely NY naive from DB) OR ISO
+                                                        let dateStr = "Invalid Date";
+                                                        try {
+                                                            const d = new Date(trade.entry_time);
+                                                            if (!isNaN(d.getTime())) {
+                                                                // Explicitly format to NY and KR
+                                                                const toTimeStr = (date, tz) => new Intl.DateTimeFormat('en-US', {
+                                                                    timeZone: tz, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false
+                                                                }).format(date);
+
+                                                                dateStr = `${toTimeStr(d, 'America/New_York')} (NY)`;
+                                                            } else {
+                                                                dateStr = String(trade.entry_time).substring(5, 16);
+                                                            }
+                                                        } catch (e) { dateStr = String(trade.entry_time); }
 
                                                         return (
                                                             <div key={idx} style={{
@@ -595,11 +608,12 @@ const MarketInsight = ({ market, stocks, signalHistory }) => {
                                                                 alignItems: 'center'
                                                             }}>
                                                                 <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                                                    <div style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#e2e8f0' }}>
-                                                                        {isOpen ? <span className="animate-pulse">🟢 Active Trade</span> : <span>🔴 Closed</span>}
+                                                                    <div style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#e2e8f0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                                        {isOpen ? <span className="animate-pulse">🟢 Active</span> : <span>🔴 Closed</span>}
+                                                                        <span style={{ fontSize: '0.65rem', color: '#aaa', border: '1px solid rgba(255,255,255,0.1)', padding: '0px 4px', borderRadius: '3px' }}>LONG</span>
                                                                     </div>
-                                                                    <div style={{ fontSize: '0.7rem', color: '#888' }}>
-                                                                        Entry: {dateStr} @ ${Number(trade.entry_price).toFixed(2)}
+                                                                    <div style={{ fontSize: '0.75rem', color: '#888', marginTop: '3px' }}>
+                                                                        {dateStr} <span style={{ margin: '0 4px' }}>@</span> <b style={{ color: '#fff' }}>${Number(trade.entry_price).toFixed(2)}</b>
                                                                     </div>
                                                                 </div>
 

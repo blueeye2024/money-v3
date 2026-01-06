@@ -56,133 +56,141 @@ const LoginPage = () => {
     };
 
     return (
-        <div className="min-h-screen w-full flex items-center justify-center bg-black font-sans selection:bg-[#0A84FF]/30">
-            <div className="w-full max-w-[380px] p-6 flex flex-col items-center">
+        <div className="min-h-screen w-full flex items-center justify-center bg-[#050505] font-sans selection:bg-[#0A84FF]/30 relative overflow-hidden">
+            {/* Background Gradients */}
+            <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] bg-purple-600/20 rounded-full blur-[120px] mix-blend-screen animate-pulse" style={{ animationDuration: '4s' }} />
+            <div className="absolute bottom-[-20%] right-[-10%] w-[500px] h-[500px] bg-blue-600/10 rounded-full blur-[100px] mix-blend-screen" />
 
-                {/* 1. Header (Logo & Title) */}
-                <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="flex flex-col items-center mb-10 text-center"
-                >
-                    <div className="w-16 h-16 bg-[#1C1C1E] rounded-[18px] flex items-center justify-center mb-5 shadow-inner border border-[#2C2C2E]">
-                        <TrendingUp className="w-8 h-8 text-[#0A84FF]" />
-                    </div>
-                    <h1 className="text-[26px] font-semibold text-white tracking-tight">
-                        Cheongan ID
-                    </h1>
-                    <p className="text-[15px] text-[#86868B] mt-2 font-normal leading-relaxed">
-                        {isLogin ? '청안 인텔리전스에 로그인하세요.' : '새로운 계정을 생성하여 시작하세요.'}
-                    </p>
-                </motion.div>
+            <div className="w-full max-w-[400px] p-8 flex flex-col items-center relative z-10">
+                {/* Glass Card Container */}
+                <div className="absolute inset-0 bg-white/[0.02] backdrop-blur-xl rounded-3xl border border-white/[0.05] shadow-2xl" />
 
-                {/* 2. Form Section */}
-                <motion.form
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.1 }}
-                    onSubmit={handleSubmit}
-                    className="w-full space-y-4"
-                >
-                    <AnimatePresence mode="popLayout">
-                        {!isLogin && (
+                <div className="relative z-20 w-full flex flex-col items-center py-6">
+                    {/* 1. Header (Logo & Title) */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="flex flex-col items-center mb-8 text-center"
+                    >
+                        <div className="w-16 h-16 bg-gradient-to-br from-[#1C1C1E] to-[#2c2c2e] rounded-2xl flex items-center justify-center mb-5 shadow-lg border border-white/10 group">
+                            <TrendingUp className="w-8 h-8 text-[#0A84FF] group-hover:scale-110 transition-transform duration-300" />
+                        </div>
+                        <h1 className="text-[28px] font-bold text-white tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-white/60">
+                            Cheongan ID
+                        </h1>
+                        <p className="text-[14px] text-[#86868B] mt-2 font-medium">
+                            {isLogin ? 'Welcome back, Commander.' : 'Join the Intelligence Network.'}
+                        </p>
+                    </motion.div>
+
+                    {/* 2. Form Section */}
+                    <motion.form
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: 0.1 }}
+                        onSubmit={handleSubmit}
+                        className="w-full space-y-5"
+                    >
+                        <AnimatePresence mode="popLayout">
+                            {!isLogin && (
+                                <motion.div
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: 'auto' }}
+                                    exit={{ opacity: 0, height: 0 }}
+                                    className="overflow-hidden"
+                                >
+                                    <div className="space-y-1">
+                                        <input
+                                            type="text"
+                                            value={name}
+                                            onChange={(e) => setName(e.target.value)}
+                                            required={!isLogin}
+                                            placeholder="User Name"
+                                            className="w-full h-[50px] bg-white/5 rounded-xl px-4 text-[15px] text-white placeholder-white/20 border border-white/5 focus:border-[#0A84FF]/50 focus:bg-white/10 focus:ring-1 focus:ring-[#0A84FF]/50 outline-none transition-all duration-200"
+                                        />
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+
+                        <div className="space-y-4">
+                            <input
+                                type="email"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                required
+                                placeholder="Email Access"
+                                className="w-full h-[50px] bg-white/5 rounded-xl px-4 text-[15px] text-white placeholder-white/20 border border-white/5 focus:border-[#0A84FF]/50 focus:bg-white/10 focus:ring-1 focus:ring-[#0A84FF]/50 outline-none transition-all duration-200"
+                            />
+                            <input
+                                type="password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                required
+                                placeholder="Security Token (Password)"
+                                className="w-full h-[50px] bg-white/5 rounded-xl px-4 text-[15px] text-white placeholder-white/20 border border-white/5 focus:border-[#0A84FF]/50 focus:bg-white/10 focus:ring-1 focus:ring-[#0A84FF]/50 outline-none transition-all duration-200"
+                            />
+                        </div>
+
+                        {/* Error Message */}
+                        {error && (
                             <motion.div
-                                initial={{ opacity: 0, height: 0 }}
-                                animate={{ opacity: 1, height: 'auto' }}
-                                exit={{ opacity: 0, height: 0 }}
-                                className="overflow-hidden"
+                                initial={{ opacity: 0, y: -5 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className="text-[#ff5b5b] text-[13px] text-center font-medium py-1 bg-red-500/10 rounded-lg border border-red-500/20"
                             >
-                                <div className="space-y-1">
-                                    <input
-                                        type="text"
-                                        value={name}
-                                        onChange={(e) => setName(e.target.value)}
-                                        required={!isLogin}
-                                        placeholder="이름"
-                                        className="w-full h-[52px] bg-[#1C1C1E] rounded-xl px-4 text-[17px] text-white placeholder-[#58585C] border border-transparent focus:border-[#0A84FF] focus:ring-1 focus:ring-[#0A84FF] outline-none transition-all duration-200"
-                                    />
-                                </div>
+                                {error}
                             </motion.div>
                         )}
-                    </AnimatePresence>
 
-                    <div className="space-y-4">
-                        <input
-                            type="email"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            required
-                            placeholder="이메일 주소"
-                            className="w-full h-[52px] bg-[#1C1C1E] rounded-xl px-4 text-[17px] text-white placeholder-[#58585C] border border-transparent focus:border-[#0A84FF] focus:ring-1 focus:ring-[#0A84FF] outline-none transition-all duration-200"
-                        />
-                        <input
-                            type="password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            required
-                            placeholder="비밀번호"
-                            className="w-full h-[52px] bg-[#1C1C1E] rounded-xl px-4 text-[17px] text-white placeholder-[#58585C] border border-transparent focus:border-[#0A84FF] focus:ring-1 focus:ring-[#0A84FF] outline-none transition-all duration-200"
-                        />
-                    </div>
-
-                    {/* Error Message */}
-                    {error && (
-                        <motion.div
-                            initial={{ opacity: 0, y: -5 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            className="text-[#FF453A] text-[13px] text-center font-medium py-1"
-                        >
-                            {error}
-                        </motion.div>
-                    )}
-
-                    {/* 3. Action Button (Below Inputs) */}
-                    <button
-                        type="submit"
-                        disabled={isLoading}
-                        className="w-full h-[52px] bg-[#0A84FF] hover:bg-[#0077ED] active:scale-[0.98] text-white text-[17px] font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2 mt-2 disabled:opacity-70 disabled:cursor-not-allowed"
-                    >
-                        {isLoading ? (
-                            <Loader2 className="w-5 h-5 animate-spin text-white/80" />
-                        ) : (
-                            <>
-                                {isLogin ? '로그인' : '계정 생성'}
-                                <ArrowRight className="w-4 h-4 opacity-70" />
-                            </>
-                        )}
-                    </button>
-
-                    {/* Forgot Password Link (Login Only) */}
-                    {isLogin && (
-                        <div className="text-center">
-                            <button type="button" className="text-[13px] text-[#0A84FF] hover:underline font-medium">
-                                비밀번호를 잊으셨나요?
-                            </button>
-                        </div>
-                    )}
-                </motion.form>
-
-                {/* 4. Toggle Link (Bottom, Centered) */}
-                <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.2 }}
-                    className="mt-12 pt-6 border-t border-[#2C2C2E] w-full text-center"
-                >
-                    <p className="text-[15px] text-[#86868B]">
-                        {isLogin ? '계정이 없으신가요?' : '이미 계정이 있으신가요?'}
+                        {/* 3. Action Button */}
                         <button
-                            onClick={() => { setIsLogin(!isLogin); setError(null); }}
-                            className="ml-2 text-[#0A84FF] hover:text-[#409CFF] font-medium transition-colors"
+                            type="submit"
+                            disabled={isLoading}
+                            className="w-full h-[50px] bg-gradient-to-r from-[#0A84FF] to-[#0077ED] hover:from-[#0077ED] hover:to-[#0066CC] active:scale-[0.98] text-white text-[16px] font-semibold rounded-xl shadow-lg shadow-blue-500/20 transition-all duration-200 flex items-center justify-center gap-2 mt-4"
                         >
-                            {isLogin ? '지금 가입하기' : '로그인'}
+                            {isLoading ? (
+                                <Loader2 className="w-5 h-5 animate-spin text-white/80" />
+                            ) : (
+                                <>
+                                    {isLogin ? 'Access System' : 'Create Credential'}
+                                    <ArrowRight className="w-4 h-4 opacity-70" />
+                                </>
+                            )}
                         </button>
-                    </p>
-                </motion.div>
 
-                {/* Footer Copy */}
-                <div className="mt-8 text-[11px] text-[#48484A] font-medium tracking-wide">
-                    COPYRIGHT © 2026 CHEONGAN. ALL RIGHTS RESERVED.
+                        {/* Forgot Password Link */}
+                        {isLogin && (
+                            <div className="text-center">
+                                <button type="button" className="text-[12px] text-white/40 hover:text-white/60 transition-colors">
+                                    Lost your access key?
+                                </button>
+                            </div>
+                        )}
+                    </motion.form>
+
+                    {/* 4. Toggle Link */}
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: 0.2 }}
+                        className="mt-8 pt-6 border-t border-white/5 w-full text-center"
+                    >
+                        <p className="text-[13px] text-[#86868B]">
+                            {isLogin ? 'Need clearance?' : 'Already have credentials?'}
+                            <button
+                                onClick={() => { setIsLogin(!isLogin); setError(null); }}
+                                className="ml-2 text-[#0A84FF] hover:text-[#409CFF] font-medium transition-colors"
+                            >
+                                {isLogin ? 'Register' : 'Login'}
+                            </button>
+                        </p>
+                    </motion.div>
+
+                    {/* Footer */}
+                    <div className="mt-6 text-[10px] text-white/20 tracking-wider">
+                        SECURE CONNECTION ESTABLISHED
+                    </div>
                 </div>
             </div>
         </div>
