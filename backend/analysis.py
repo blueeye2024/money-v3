@@ -428,16 +428,25 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, df_1dRaw, market_vol_score=0, is
                 last_lbl = df_1d.index[-1]
                 last_date = last_lbl.date() if hasattr(last_lbl, 'date') else last_lbl
                 
+                # DEBUG: Print last few rows of 1d data
+                last_rows = df_1d.tail(3)
+                print(f"[{ticker}] 1D Data Tail:\n{last_rows[['Close']]}")
+                
                 # If the last candle in 1d data matches today's date (US), it means it's a live/partial candle.
                 # So previous close is iloc[-2].
                 # If last candle is older (yesterday), then it is the previous close (iloc[-1]).
                 if last_date >= today_est: 
                     if len(df_1d) >= 2:
                         prev_close_price = float(df_1d['Close'].iloc[-2])
-                        # print(f"[{ticker}] PrevClose(Loc-2): {prev_close_price} (Date: {df_1d.index[-2]})")
+                        print(f"[{ticker}] Today Candle Detected ({last_date}). Using prev (iloc[-2]): {prev_close_price} (Date: {df_1d.index[-2].date()})")
+                    else:
+                        # Only 1 candle which is today? Rare but fallback
+                         prev_close_price = float(df_1d['Open'].iloc[-1]) # Use Open as fallback base
+                         print(f"[{ticker}] Only 1 Today Candle. Using Open: {prev_close_price}")
                 else:
+                    # Last candle is older than today -> It is the Previous Close
                     prev_close_price = float(df_1d['Close'].iloc[-1])
-                    # print(f"[{ticker}] PrevClose(Loc-1): {prev_close_price} (Date: {df_1d.index[-1]})")
+                    print(f"[{ticker}] Last Candle is PrevDay ({last_date} < {today_est}). Using it (iloc[-1]): {prev_close_price}")
             except Exception as e:
                 print(f"Daily Change Calc Error {ticker}: {e}")
         
@@ -458,8 +467,10 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, df_1dRaw, market_vol_score=0, is
         
         if real_time_info:
             current_price_realtime = float(real_time_info['price'])
+            print(f"[{ticker}] Source: RealTimeInfo (YF/Main), Price: {current_price_realtime}")
         elif (kp := kis_client.get_price(ticker)):
              current_price_realtime = kp['price']
+             print(f"[{ticker}] Source: KIS API, Price: {current_price_realtime}")
 
         if current_price_realtime > 0:
             current_price = current_price_realtime
@@ -467,10 +478,13 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, df_1dRaw, market_vol_score=0, is
             if prev_close_price and prev_close_price > 0:
                 # Recalculate accurately
                 change_pct = ((current_price - prev_close_price) / prev_close_price) * 100
+                print(f"[{ticker}] Recalc Change: {change_pct:.2f}% (Curr: {current_price}, Base: {prev_close_price})")
             else:
                 # Fallback to API rate only if we have no history
                 if real_time_info: change_pct = float(real_time_info['rate'])
                 elif kp: change_pct = kp['rate']
+        else:
+             print(f"[{ticker}] Source: DataFrame (Last 30m), Price: {current_price}")
         
         # print(f"[{ticker}] Final Daily Change: {change_pct:.2f}% (Price: {current_price}, PrevClose: {prev_close_price})")
              
