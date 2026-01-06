@@ -903,6 +903,7 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, df_1dRaw, market_vol_score=0, is
             "ticker": ticker,
             "name": stock_name,
             "current_price": float(current_price) if pd.notnull(current_price) else None,
+            "daily_change": float(change_pct) if pd.notnull(change_pct) else 0.0, # [ADDED] Explicit Daily Change %
             "change_pct": float(change_pct) if pd.notnull(change_pct) else 0.0,
             "position": position,
             "last_cross_type": recent_cross_type,
