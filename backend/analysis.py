@@ -415,8 +415,34 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, df_1dRaw, market_vol_score=0, is
         
         # Values
         current_price = df_30['Close'].iloc[-1]
-        prev_price = df_30['Close'].iloc[-2]
-        change_pct = ((current_price - prev_price) / prev_price) * 100
+        
+        # [FIX] Calculate Daily Change based on Previous Day Close (df_1d)
+        change_pct = 0.0
+        prev_close_price = None
+        
+        if df_1d is not None and not df_1d.empty:
+            try:
+                # Check based on date
+                est_tz = pytz.timezone('US/Eastern')
+                today_est = datetime.now(est_tz).date()
+                last_lbl = df_1d.index[-1]
+                last_date = last_lbl.date() if hasattr(last_lbl, 'date') else last_lbl
+                
+                if last_date >= today_est: # Assuming index is Date
+                    if len(df_1d) >= 2:
+                        prev_close_price = float(df_1d['Close'].iloc[-2])
+                else:
+                    prev_close_price = float(df_1d['Close'].iloc[-1])
+            except Exception as e:
+                print(f"Daily Change Calc Error {ticker}: {e}")
+        
+        if prev_close_price and prev_close_price > 0:
+            change_pct = ((current_price - prev_close_price) / prev_close_price) * 100
+        else:
+            # Fallback: Just prev 30m candle (Last Resort)
+            prev_price_30 = df_30['Close'].iloc[-2]
+            if prev_price_30 > 0:
+                 change_pct = ((current_price - prev_price_30) / prev_price_30) * 100
         
         # Override with Real-time Info if available
         if real_time_info:
