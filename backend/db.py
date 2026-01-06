@@ -229,6 +229,23 @@ def init_db():
             """
             cursor.execute(sql_candle)
 
+            # 12. System Auto-Trading Log
+            sql_sys_trade = """
+            CREATE TABLE IF NOT EXISTS system_trades (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                ticker VARCHAR(10) NOT NULL,
+                trade_type VARCHAR(10) NOT NULL, -- BUY or SELL
+                price DECIMAL(10, 4) NOT NULL,
+                qty DECIMAL(10, 4) DEFAULT 1,
+                trade_time DATETIME NOT NULL,
+                profit_pct DECIMAL(6, 2) DEFAULT NULL, -- Only for SELL
+                realized_pl DECIMAL(10, 2) DEFAULT NULL, -- Only for SELL
+                strategy_note VARCHAR(255),
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+            cursor.execute(sql_sys_trade)
+
             # --- Seed Initial Data ---
             # Seed Managed Stocks
             initial_stocks = [
@@ -1091,8 +1108,8 @@ def load_market_candles(ticker, timeframe, limit=300):
         print(f"Error loading market candles: {e}")
         return None
 
-def cleanup_old_candles(ticker, days=90):
-    """Delete candles older than N days to save space"""
+def cleanup_old_candles(ticker, days=30):
+    """Delete candles older than N days (Default 30)"""
     try:
         with get_connection() as conn:
             with conn.cursor() as cursor:
@@ -1103,6 +1120,128 @@ def cleanup_old_candles(ticker, days=90):
     except Exception as e:
         print(f"Error cleaning up old candles ({ticker}): {e}")
         return False
+
+# --- System Auto-Trading Log (Simulation) ---
+def init_system_trade_table():
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            sql = """
+            CREATE TABLE IF NOT EXISTS system_trades (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                ticker VARCHAR(10) NOT NULL,
+                trade_type VARCHAR(10) NOT NULL, -- BUY or SELL
+                price DECIMAL(10, 4) NOT NULL,
+                qty DECIMAL(10, 4) DEFAULT 1,
+                trade_time DATETIME NOT NULL,
+                profit_pct DECIMAL(6, 2) DEFAULT NULL, -- Only for SELL
+                realized_pl DECIMAL(10, 2) DEFAULT NULL, -- Only for SELL
+                strategy_note VARCHAR(255),
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+            cursor.execute(sql)
+        conn.commit()
+    finally:
+        conn.close()
+
+def log_system_trade(trade_data):
+    """
+    Log a system trade (Buy/Sell)
+    trade_data: {ticker, trade_type, price, trade_time, strategy_note}
+    Atomic transaction to ensure Buy/Sell sequence? 
+    Logic handled in app layer, this just inserts.
+    """
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            # If SELL, calculate profit based on last BUY
+            profit_pct = None
+            realized_pl = None
+            
+            if trade_data['trade_type'] == 'SELL':
+                # Find last OPEN BUY
+                # Simple logic: Find last transaction. If BUY, calculate.
+                cursor.execute("SELECT price FROM system_trades WHERE ticker=%s AND trade_type='BUY' ORDER BY trade_time DESC LIMIT 1", (trade_data['ticker'],))
+                last_buy = cursor.fetchone()
+                if last_buy:
+                    buy_price = float(last_buy['price'])
+                    sell_price = float(trade_data['price'])
+                    profit_pct = ((sell_price - buy_price) / buy_price) * 100
+                    realized_pl = sell_price - buy_price # Per unit
+            
+            sql = """
+            INSERT INTO system_trades (ticker, trade_type, price, trade_time, profit_pct, realized_pl, strategy_note)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """
+            cursor.execute(sql, (
+                trade_data['ticker'],
+                trade_data['trade_type'],
+                trade_data['price'],
+                trade_data['trade_time'],
+                profit_pct,
+                realized_pl,
+                trade_data.get('strategy_note', '')
+            ))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Log System Trade Error: {e}")
+        return False
+    finally:
+        conn.close()
+
+def get_system_trade_history(limit=50):
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            sql = "SELECT * FROM system_trades ORDER BY trade_time DESC LIMIT %s"
+            cursor.execute(sql, (limit,))
+            return cursor.fetchall()
+    finally:
+        conn.close()
+
+def get_last_system_trade(ticker):
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            sql = "SELECT * FROM system_trades WHERE ticker=%s ORDER BY trade_time DESC LIMIT 1"
+            cursor.execute(sql, (ticker,))
+            return cursor.fetchone()
+    finally:
+        conn.close()
+
+def get_system_performance_summary():
+    """Calculate Win Rate and Total Return from system_trades"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            # Win Rate
+            sql_win = """
+            SELECT 
+                COUNT(*) as total_trades,
+                SUM(CASE WHEN profit_pct > 0 THEN 1 ELSE 0 END) as wins
+            FROM system_trades 
+            WHERE trade_type = 'SELL'
+            """
+            cursor.execute(sql_win)
+            win_stats = cursor.fetchone()
+            
+            # Avg Return & Total
+            sql_ret = "SELECT AVG(profit_pct) as avg_return, SUM(profit_pct) as total_return FROM system_trades WHERE trade_type = 'SELL'"
+            cursor.execute(sql_ret)
+            ret_stats = cursor.fetchone()
+            
+            return {
+                "total_trades": win_stats['total_trades'],
+                "wins": win_stats['wins'],
+                "win_rate": (win_stats['wins'] / win_stats['total_trades'] * 100) if win_stats['total_trades'] > 0 else 0,
+                "avg_return": ret_stats['avg_return'] or 0,
+                "total_return": ret_stats['total_return'] or 0
+            }
+    finally:
+        conn.close()
+
 
 def update_stock_prices():
     """

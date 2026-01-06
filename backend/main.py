@@ -151,6 +151,59 @@ def data_backfill_job():
     except Exception as e:
          print(f"Backfill Job Error: {e}")
 
+def process_system_trading(ticker, result):
+    """
+    Check analysis result and log virtual system trades.
+    Only for SOXL, SOXS as requested.
+    """
+    if ticker not in ["SOXL", "SOXS"]: return
+    
+    try:
+        from db import get_last_system_trade, log_system_trade
+        
+        # 1. Get Current Analysis State
+        # 'final' is True if all 3 filters are MET. This is our entry signal.
+        is_buy_signal = result.get('final') 
+        
+        # Determine Sell Signal (Dead Cross or Stop Loss)
+        # analysis.py sets 'is_sell_signal' based on tech analysis (Dead Cross etc)
+        is_sell_signal = result.get('is_sell_signal', False)
+        
+        # 2. Get Last Trade State
+        last_trade = get_last_system_trade(ticker)
+        # Default to 'SELL' (Closed) if no history
+        last_type = last_trade['trade_type'] if last_trade else 'SELL' 
+        
+        current_price = result.get('current_price', 0)
+        if current_price <= 0: return # Invalid price
+        
+        # A. Buy Entry
+        # Condition: Signal is BUY AND We are currently NOT holding (Last was SELL)
+        if is_buy_signal and last_type != 'BUY':
+             print(f"🤖 SYSTEM TRADE: {ticker} BUY SIGNAL detected at {current_price}")
+             log_system_trade({
+                 'ticker': ticker,
+                 'trade_type': 'BUY',
+                 'price': current_price,
+                 'trade_time': datetime.now(),
+                 'strategy_note': 'Cheongan Triple Filter Met'
+             })
+             
+        # B. Sell Exit
+        # Condition: Signal is SELL AND We are currently HOLDING (Last was BUY)
+        elif is_sell_signal and last_type == 'BUY':
+             print(f"🤖 SYSTEM TRADE: {ticker} SELL SIGNAL detected at {current_price}")
+             log_system_trade({
+                 'ticker': ticker,
+                 'trade_type': 'SELL',
+                 'price': current_price,
+                 'trade_time': datetime.now(),
+                 'strategy_note': 'Dead Cross / Stop Loss'
+             })
+             
+    except Exception as e:
+        print(f"System Trading Logic Error ({ticker}): {e}")
+
 def monitor_signals():
     global SMS_ENABLED
     print(f"[{datetime.now()}] Monitoring Signals... SMS Enabled: {SMS_ENABLED}")
@@ -164,6 +217,9 @@ def monitor_signals():
         for stock_res in stocks_data:
             ticker = stock_res['ticker']
             res = stock_res # Use the result from run_analysis
+            
+            # [NEW] System Auto-Trading Log (Virtual Portfolio)
+            process_system_trading(ticker, res)
             
             # Skip if analysis failed
             if 'error' in res or 'position' not in res:
