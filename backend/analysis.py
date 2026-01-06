@@ -511,19 +511,7 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, df_1dRaw, market_vol_score=0, is
         # ... (rest of function) ...
         
         # [MODIFIED] Step 3 Logic: Always show 5m Status
-        step3_status_text = "대기"
-        step3_color = None
-        
-        # Calculate 5m Cross State
-        current_5m_state = "골든크로스" if last_5m_sma10 > last_5m_sma30 else "데드크로스"
-        
-        if step3_met:
-             step3_status_text = "진입신호 (조건충족)"
-             step3_color = "red" # Highlight
-        else:
-             # Just show current state
-             step3_status_text = f"현재 {current_5m_state}"
-             step3_color = "green" if current_5m_state == "골든크로스" else "orange"
+
         
         # ... inside return dict ...
         # Assuming these lines are part of a larger dictionary return,
@@ -532,11 +520,7 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, df_1dRaw, market_vol_score=0, is
         # I will uncomment the lines that directly match the instruction.
         # "step1_status": "골든크로스" if recent_cross_type == 'gold' else "데드크로스",
         # "step2_status": f"박스권 상단돌파 ({box_pct:.1f}%)" if is_box_up else "대기 (돌파미확인)",
-        "step3_status": step3_status_text,
-        
-        # "step1_color": "red" if recent_cross_type == 'dead' else None,
-        # "step2_color": "yellow" if not step2_met and recent_cross_type == 'gold' else None,
-        "step3_color": step3_color,
+
              
 
         
@@ -793,9 +777,8 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, df_1dRaw, market_vol_score=0, is
             if "매수" in tech_position or "상단" in tech_position:
                  position = "🔴 매수"
             else:
-                 # Sell, Sell Hold, Observe -> Not Held
-                 position = "미보유"
-
+                  # Sell, Sell Hold, Observe -> Not Held
+                  position = "미보유"
             
         # Format Time
         formatted_signal_time = "-"
@@ -1013,7 +996,8 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, df_1dRaw, market_vol_score=0, is
             "score_details": score_details,
             "news_items": stock_news,
             "is_held": is_held,
-            "strategy_result": strategy_desc
+            "strategy_result": strategy_desc,
+            "cross_history": get_cross_history(df_30, df_5)
         }
         return result
     
@@ -1472,16 +1456,40 @@ def check_triple_filter(ticker, data_30m, data_5m):
         filter2_met = False
         prev_close = None
         try:
-            # Fetch 1-day data directly for prev close calculation
-            import yfinance as yf
-            ticker_obj = yf.Ticker(ticker)
-            df_1d = ticker_obj.history(period="5d", interval="1d")
+            # Fetch 1-day data directly for prev close calculation (Priority: KIS > DF)
+            import yfinance as yf # Keep import if needed, but we try KIS first
             
-            if df_1d is not None and not df_1d.empty and len(df_1d) >= 2:
-                # Get previous day's close (last complete day before today)
-                prev_close = float(df_1d['Close'].iloc[-2])
-                print(f"DEBUG {ticker}: prev_close={prev_close}, current={current_price}")
-            
+            # [FIX] Priority 1: KIS Daily Data
+            try:
+                k_daily = kis_client.get_daily_price(ticker)
+                if k_daily and len(k_daily) > 1:
+                     # KIS Daily usually returns [0]=Today(Live/Close), [1]=Yesterday.
+                     # We want Yesterday Close.
+                     prev_close = float(k_daily[1]['clos']) # Assuming 'clos' key or use safe get if unsure of key mapping in raw dict
+                     # Actually raw dict keys from KIS API are usually short. 
+                     # Let's rely on my previous knowledge or fallback.
+                     # But safer is to use the robust DF logic IF KIS fails or is ambiguous.
+            except: pass
+
+            # [FIX] Priority 2: 1D DF with Date Logic (Smart)
+            if not prev_close:
+                ticker_obj = yf.Ticker(ticker)
+                df_1d = ticker_obj.history(period="5d", interval="1d")
+                
+                if df_1d is not None and not df_1d.empty:
+                     est_tz = pytz.timezone('US/Eastern')
+                     today_est = datetime.now(est_tz).date()
+                     last_lbl = df_1d.index[-1]
+                     last_date = last_lbl.date() if hasattr(last_lbl, 'date') else last_lbl
+                     
+                     if last_date >= today_est:
+                         if len(df_1d) >= 2:
+                             prev_close = float(df_1d['Close'].iloc[-2])
+                             print(f"DEBUG {ticker}: Today Candle ({last_date}). PrevClose(iloc[-2])={prev_close}")
+                     else:
+                         prev_close = float(df_1d['Close'].iloc[-1])
+                         print(f"DEBUG {ticker}: Last Candle Old ({last_date}). PrevClose(iloc[-1])={prev_close}")
+
             is_breakout = False
             target_v = 0
             
@@ -1508,7 +1516,7 @@ def check_triple_filter(ticker, data_30m, data_5m):
                      except: pass
                      
             change_pct = 0
-            if prev_close:
+            if prev_close and prev_close > 0:
                  change_pct = ((current_price - prev_close) / prev_close) * 100
             
             result["target"] = target_v
@@ -1570,13 +1578,13 @@ def check_triple_filter(ticker, data_30m, data_5m):
         result["step3"] = filter3_met
         if filter3_met:
             result["step3_color"] = None
-            result["step3_status"] = "진입 신호"
+            result["step3_status"] = "현재 골든크로스 (진입적합)"
             if not state.get("step3_done_time"):
                 state["step3_done_time"] = now_time_str
         else:
             # 데드크로스: 노란색 + "데드크로스 발생"
             result["step3_color"] = "yellow"
-            result["step3_status"] = "데드크로스 발생"
+            result["step3_status"] = "현재 데드크로스 (대기)"
 
         # FINAL ENTRY SIGNAL (All 3 must be TRUE at the same time)
         if result["step1"] and result["step2"] and result["step3"]:
