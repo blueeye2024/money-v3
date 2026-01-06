@@ -229,8 +229,8 @@ def fetch_data(tickers=None, force=False, override_period=None):
         cache_5m = {}
         
         for ticker in target_list:
-            df30 = load_market_candles(ticker, "30m", limit=500) # Increased for better history
-            df5 = load_market_candles(ticker, "5m", limit=1000) # Increased to cover last 2-3 days
+            df30 = load_market_candles(ticker, "30m", limit=1000) # Increased to ~20 days
+            df5 = load_market_candles(ticker, "5m", limit=2000) # Increased to ~7 days
             
             # Robust Cleaning: Drop rows with missing Close price (YFinance artifact)
             if df30 is not None and not df30.empty:
@@ -2206,7 +2206,8 @@ def get_cross_history(df_30, df_5):
         d30['SMA30'] = d30['Close'].rolling(window=30).mean()
         
         # Look back deeper
-        for i in range(len(d30)-1, len(d30)-200, -1): 
+        scan_depth = len(d30) - 1
+        for i in range(len(d30)-1, 1, -1): 
             if i < 1: break
             c_10 = d30['SMA10'].iloc[i]
             c_30 = d30['SMA30'].iloc[i]
@@ -2230,7 +2231,8 @@ def get_cross_history(df_30, df_5):
         d5['SMA30'] = d5['Close'].rolling(window=30).mean()
         
         # Look back deeper
-        for i in range(len(d5)-1, len(d5)-600, -1): 
+        scan_depth = len(d5) - 1
+        for i in range(len(d5)-1, 1, -1): 
             if i < 1: break
             c_10 = d5['SMA10'].iloc[i]
             c_30 = d5['SMA30'].iloc[i]

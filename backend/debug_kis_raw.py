@@ -2,30 +2,21 @@
 from kis_api import kis_client
 import json
 
-def test_api():
-    print("Testing KIS API for SOXS...")
-    
-    # 1. 토큰 확인
-    print(f"Token: {kis_client.access_token[:10]}... (Length: {len(kis_client.access_token)})")
-    
-    tickers = ["SOXL", "SOXS", "UPRO"]
-    for t in tickers:
-        print(f"\n[{t}]")
-        # 1. Current Price
-        # Exchange is AMS for all these based on previous fixes
-        kp = kis_client.get_price(t, "AMS")
-        if kp:
-            print(f"  Current: {kp['price']} (Rate: {kp['rate']}%)")
-        else:
-            print("  Current: Failed")
-            
-        # 2. Daily Price (Yesterday)
-        daily = kis_client.get_daily_price(t, "AMS")
-        if daily and len(daily) > 1:
-            prev = daily[1]
-            print(f"  Yesterday({prev['xymd']}): Close {prev['clos']} (Rate {prev['rate']}%)")
-        else:
-            print("  Daily: Failed")
+print("--- Fetching KIS Raw Minute Data (30m) for SOXL ---")
+data = kis_client.get_minute_candles("SOXL", 30)
+if data:
+    print(f"Count: {len(data)}")
+    print("First item:", data[0])
+    print("Last item:", data[-1])
+else:
+    print("No data returned for 30m")
 
-if __name__ == "__main__":
-    test_api()
+print("\n--- Fetching KIS Raw Minute Data (5m) for SOXL ---")
+data = kis_client.get_minute_candles("SOXL", 5)
+if data:
+    print(f"Count: {len(data)}")
+    print("Last 3 items:")
+    for d in data[-3:]:
+        print(d)
+else:
+    print("No data returned for 5m")
