@@ -65,6 +65,10 @@ class KisApi:
             res = self._fetch_price_request(excd, symbol)
             if res and res.get('rt_cd') == '0':
                 out = res['output']
+                # If 'last' price is empty, it means this exchange has no data for this ticker. Try next.
+                if not out.get('last'):
+                    continue
+                    
                 try:
                     return {
                         'price': float(out['last']) if out.get('last') else 0.0,
@@ -115,11 +119,11 @@ def get_exchange_code(ticker):
     # 나스닥 주요 종목
     nasdaq_tickers = [
         'TSLA', 'GOOGL', 'GOOG', 'AAPL', 'MSFT', 'AMZN', 'META', 'NVDA',
-        'IONQ', 'SOXL', 'SOXS', 'TQQQ', 'SQQQ', 'QQQ', 'PLTR', 'AMD', 'UFO'
+        'IONQ', 'TQQQ', 'SQQQ', 'QQQ', 'PLTR', 'AMD', 'UFO'
     ]
     
-    # 아멕스 ETF
-    amex_tickers = ['TMF', 'TLT', 'GLD', 'SLV', 'AAAU']
+    # 아멕스 ETF (SOXL, SOXS, UPRO 등 주요 ETF 포함)
+    amex_tickers = ['TMF', 'TLT', 'GLD', 'SLV', 'AAAU', 'SOXL', 'SOXS', 'UPRO']
     
     if ticker in nasdaq_tickers:
         return 'NAS'
