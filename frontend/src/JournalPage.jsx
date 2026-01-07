@@ -375,8 +375,8 @@ const JournalPage = () => {
                 <div className="section-panel">
                     <h2 style={{ fontSize: '1.5rem', fontWeight: '700', marginBottom: '1.5rem', color: '#1e3a8a' }}>종목 관리</h2>
                     <form onSubmit={handleAddStock} style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
-                        <input className="form-input" type="text" value={stockForm.code} onChange={(e) => setStockForm({ ...stockForm, code: e.target.value.toUpperCase() })} placeholder="종목 코드 (예: SOXL)" required style={{ flex: 1 }} />
-                        <input className="form-input" type="text" value={stockForm.name} onChange={(e) => setStockForm({ ...stockForm, name: e.target.value })} placeholder="종목명" required style={{ flex: 2 }} />
+                        <input className="form-input" type="text" value={stockForm.code} onChange={(e) => setStockForm({ code: e.target.value.toUpperCase(), name: e.target.value.toUpperCase() })} placeholder="종목 코드 (예: SOXL)" required style={{ flex: 1 }} />
+                        <input className="form-input" type="text" value={stockForm.name} readOnly placeholder="종목명 (티커와 동일)" style={{ flex: 1, background: '#e8e8ed', color: '#666' }} />
                         <button type="submit" className="btn-update" style={{ justifyContent: 'center' }}>추가</button>
                     </form>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '1rem' }}>
