@@ -160,16 +160,22 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
 
         if (modal.type === 'MANUAL_SIGNAL') {
             endpoint = '/api/v2/manual-signal';
-            // Use existing ID or generate NEW format matching backend standard (Ticker + YYYYMMDD_HHMM)
-            // Or simpler: let user use SOXL_MANUAL + random? 
-            // Better to let backend generate standard ID if missing? 
-            // Or frontend generates: SOXL + timestamp
-            const nowStr = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 12); // YYYYMMDDHHMM
-            const newId = title + nowStr;
+
+            // [FIX] Clean Ticker from Title (remove extra text like "(BULL TOWER)")
+            const cleanTicker = title.toUpperCase().includes('SOXL') ? 'SOXL' : (title.toUpperCase().includes('SOXS') ? 'SOXS' : title);
+
+            // Generate New ID matching Backend Format: Ticker + YYYYMMDD_HHMM
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const hour = String(now.getHours()).padStart(2, '0');
+            const min = String(now.getMinutes()).padStart(2, '0');
+            const newId = `${cleanTicker}${year}${month}${day}_${hour}${min}`;
 
             payload = {
                 manage_id: activeData?.manage_id || newId,
-                ticker: title, // Send Ticker Explicitly
+                ticker: cleanTicker, // Send Clean Ticker
                 signal_key: modal.key,
                 price: parseFloat(formData.price),
                 status: 'Y'
