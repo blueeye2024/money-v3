@@ -471,32 +471,30 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
                                             ${(parseFloat(formData.price || 0) * parseFloat(formData.qty || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                         </div>
                                     </div>
-
-                                    {/* Termination Checkbox (SELL ONLY) */}
-                                    {modal.type === 'SELL' && (
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px', background: 'rgba(239, 68, 68, 0.1)', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.3)', marginBottom: '15px' }}>
-                                            <input
-                                                type="checkbox"
-                                                id="chk_terminate"
-                                                checked={formData.is_end || false}
-                                                onChange={(e) => setFormData({ ...formData, is_end: e.target.checked })}
-                                                style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: '#ef4444' }}
-                                            />
-                                            <label htmlFor="chk_terminate" style={{ cursor: 'pointer', flex: 1, color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>
-                                                종결/청산 확정
-                                            </label>
-                                        </div>
-                                    )}
                                 </>
                             )}
 
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                                <button
-                                    onClick={() => handleConfirm(formData.is_end)}
-                                    style={{ padding: '12px', background: modal.type === 'BUY' ? '#10b981' : '#ef4444', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer' }}
-                                >
-                                    {formData.is_end ? '최종 종결 (End)' : '저장 (Save)'}
-                                </button>
+                            {/* Action Buttons */}
+                            <div style={{ display: 'grid', gridTemplateColumns: modal.type === 'SELL' ? '1fr 1fr 1fr' : '1fr 1fr', gap: '8px' }}>
+                                {/* Left Button: Save or Confirm (Hide during Manual Signal) */}
+                                {modal.type !== 'MANUAL_SIGNAL' && (
+                                    <button
+                                        onClick={() => handleConfirm(false)}
+                                        style={{ padding: '12px', background: modal.type === 'BUY' ? '#10b981' : '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer' }}
+                                    >
+                                        {modal.type === 'BUY' ? '실매수 확정' : '중간 저장 (Save)'}
+                                    </button>
+                                )}
+
+                                {/* Middle Button: Terminate (Sell Only) */}
+                                {modal.type === 'SELL' && (
+                                    <button
+                                        onClick={() => handleConfirm(true)}
+                                        style={{ padding: '12px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '0.9rem', cursor: 'pointer' }}
+                                    >
+                                        최종 종결 (End)
+                                    </button>
+                                )}
 
                                 {/* Cancel Signal Button (Only Manual) */}
                                 {modal.type === 'MANUAL_SIGNAL' && (
@@ -508,6 +506,7 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
                                     </button>
                                 )}
 
+                                {/* Close Button */}
                                 <button
                                     onClick={() => setModal({ type: null, isOpen: false, key: null })}
                                     style={{ padding: '10px', background: '#334155', color: '#cbd5e1', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
