@@ -2700,6 +2700,23 @@ def run_v2_signal_analysis():
                          print(f"📉 {ticker} V2 Sell Signal 1 (5m DC) Detected!")
                          log_history(manage_id, ticker, "1차청산신호", "5분봉 DC", curr_price)
                          send_sms(f"[청안V2] {ticker} 1차청산(5분봉) 발생\n가격:{curr_price}")
+
+                # Sig 2: Stop Loss / Profit Taking (Real Price Support)
+                if sell_record['sell_sig2_yn'] == 'N':
+                    # Determine Entry Price
+                    base_price = 0
+                    if buy_record and buy_record.get('real_buy_yn') == 'Y' and buy_record.get('real_buy_price'):
+                        base_price = float(buy_record['real_buy_price'])
+                        # print(f"  🔍 {ticker} Stop Loss Check: Based on Real Buy Price ${base_price}")
+                    else:
+                        base_price = float(buy_record['final_buy_price']) if buy_record and buy_record.get('final_buy_price') else 0
+                    
+                    if base_price > 0 and curr_price < base_price:
+                         if save_v2_sell_signal(manage_id, 'sig2', curr_price):
+                             print(f"📉 {ticker} V2 Sell Signal 2 (Stop Loss) Detected! (Entry: {base_price})")
+                             log_history(manage_id, ticker, "2차청산신호", "손절/익절", curr_price)
+                             send_sms(f"[청안V2] {ticker} 2차청산(손절) 발생\n진입: {base_price}\n현재: {curr_price}")
+
                          
                 # Sig 3: 30m DC
                 is_30m_dc = (prev_ma10_30 >= prev_ma30_30) and (ma10_30 < ma30_30)

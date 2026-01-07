@@ -31,6 +31,59 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
         }
     }, [modal.isOpen, current_price]);
 
+    // --- Audio Alert Logic (Ver 3.9) ---
+    const prevBuyRef = React.useRef(null);
+    const prevSellRef = React.useRef(null);
+    const isFirstLoad = React.useRef(true);
+
+    // Determine Ticker Prefix (C=SOXL, P=SOXS)
+    // Derived from title: "SOXL (BULL TOWER)" -> "C", "SOXS (BEAR TOWER)" -> "P"
+    const tickerPrefix = title.includes('SOXL') ? 'C' : (title.includes('SOXS') ? 'P' : null);
+
+    const playSound = (filename) => {
+        try {
+            const audio = new Audio(`/sounds/${filename}`);
+            audio.play().catch(e => console.log("Audio Play Error:", e));
+        } catch (e) {
+            console.error("Audio setup error:", e);
+        }
+    };
+
+    React.useEffect(() => {
+        // Skip audio on first load / mount (prevent symphony on refresh)
+        if (isFirstLoad.current) {
+            if (buyStatus || sellStatus) {
+                prevBuyRef.current = buyStatus;
+                prevSellRef.current = sellStatus;
+                isFirstLoad.current = false;
+            }
+            return;
+        }
+
+        if (!tickerPrefix) return;
+
+        // Check Buy Signals
+        if (buyStatus) {
+            const prev = prevBuyRef.current || {};
+            if (buyStatus.buy_sig1_yn === 'Y' && prev.buy_sig1_yn !== 'Y') playSound(`${tickerPrefix}B1.mp3`);
+            if (buyStatus.buy_sig2_yn === 'Y' && prev.buy_sig2_yn !== 'Y') playSound(`${tickerPrefix}B2.mp3`);
+            if (buyStatus.buy_sig3_yn === 'Y' && prev.buy_sig3_yn !== 'Y') playSound(`${tickerPrefix}B3.mp3`);
+        }
+
+        // Check Sell Signals
+        if (sellStatus) {
+            const prev = prevSellRef.current || {};
+            if (sellStatus.sell_sig1_yn === 'Y' && prev.sell_sig1_yn !== 'Y') playSound(`${tickerPrefix}S1.mp3`);
+            if (sellStatus.sell_sig2_yn === 'Y' && prev.sell_sig2_yn !== 'Y') playSound(`${tickerPrefix}S2.mp3`);
+            if (sellStatus.sell_sig3_yn === 'Y' && prev.sell_sig3_yn !== 'Y') playSound(`${tickerPrefix}S3.mp3`);
+        }
+
+        // Update Refs
+        prevBuyRef.current = buyStatus;
+        prevSellRef.current = sellStatus;
+
+    }, [buyStatus, sellStatus, tickerPrefix]);
+
     const handleConfirm = async () => {
         if (!formData.price) return Swal.fire('Error', "가격을 입력해주세요.", 'error');
         setSubmitting(true);
