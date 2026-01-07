@@ -2437,7 +2437,7 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
     # recent_news = get_market_news_v2()
     
     details = {
-        "version": "3.5.0 (Holding Score)",
+        "version": "3.8.0 (V2 Integration)",
         "prime_guide": {
             "scores": scores,
             "guides": guides,
