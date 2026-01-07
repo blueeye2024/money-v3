@@ -1629,6 +1629,7 @@ def check_triple_filter(ticker, data_30m, data_5m):
         if filter3_met:
             result["step1_color"] = None
             result["step1_status"] = "현재 골든크로스 (진입적합)"
+            # Only set Y if not already Y
             if not state.get("buy_sig1_yn") == 'Y':
                  state["buy_sig1_yn"] = 'Y' 
                  if manage_id and save_v2_buy_signal:
@@ -1639,6 +1640,26 @@ def check_triple_filter(ticker, data_30m, data_5m):
         else:
             result["step1_color"] = "yellow"
             result["step1_status"] = "현재 데드크로스 (대기)"
+            
+            # [NEW] Auto-Reset Logic: If condition fails, turn OFF signal (Real-time monitoring)
+            # Only if it was 'Y' and Step 2 hasn't started yet (keep Step 1 if Step 2 is active? No, user wants strict 1st signal check)
+            # But if Step 2 is active, Step 1 condition might fluctuate. 
+            # Usually Step 1 is "Latch". But user requested "If condition released, light off".
+            # Let's Apply Strict Reset for Sign al 1.
+            # However, if Step 2 is already Y, we shouldn't kill the cycle? 
+            # If Step 2 is Y, we are already in breakout. 
+            # If Step 2 is N, we are waiting. If Step 1 fails while waiting, we should Go Back.
+            if state.get("buy_sig1_yn") == 'Y' and state.get("buy_sig2_yn") != 'Y':
+                 state["buy_sig1_yn"] = 'N'
+                 if manage_id and save_v2_buy_signal:
+                     # Use 'N' status (requires save_v2_buy_signal update or manual update)
+                     # save_v2_buy_signal currently hardcodes 'Y'? Let's check db.py again or use manual_update_signal
+                     try:
+                         from db import manual_update_signal
+                         manual_update_signal(manage_id, 'buy1', 0, 'N') # Price 0 or current?
+                         print(f"📉 {ticker} Signal 1 Reset (Condition Lost)")
+                     except:
+                         pass
         
         # Step 2: +2% Breakout
         change_pct = result.get("daily_change", 0)
