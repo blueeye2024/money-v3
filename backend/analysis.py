@@ -2108,6 +2108,33 @@ def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None):
         if v2_sell.get('sell_sig1_yn') == 'Y': penalty += 15 # 5m DC
         if v2_sell.get('sell_sig3_yn') == 'Y': penalty += 30 # 30m DC (Major Exit)
 
+    # [Ver 3.9] Market Intelligence - Policy Adjustment
+    # Extract new_metrics from results (res)
+    new_metrics = res.get('new_metrics', {})
+    atr = new_metrics.get('atr', 0)
+    vol_ratio = new_metrics.get('vol_ratio', 1.0)
+    pivot_r1 = new_metrics.get('pivot_r1', 0)
+    current_price = res.get('current_price', 0)
+    
+    # Policy 1: High Volatility Protection
+    # If ATR is very high (>3% of price) AND we are in Sell Signal zone, apply extra penalty
+    if atr > (current_price * 0.03) and v2_sell:
+        if v2_sell.get('sell_sig1_yn') == 'Y': penalty += 5
+        
+    # Policy 2: Volume Spike Boost
+    # If Volume Ratio > 2.0 AND Trend is UP, it's a strong signal -> Reduce Penalty or Boost
+    if vol_ratio > 2.0 and breakdown['cheongan'] > 30:
+        score += 5
+        
+    # Policy 3: Resistance Proximity
+    # If Price is very close to Pivot R1 (within 0.5%) AND we are holding -> Warning (No score change but maybe use in commentary)
+    dist_to_r1 = 0
+    if pivot_r1 > 0:
+        dist_to_r1 = (pivot_r1 - current_price) / pivot_r1
+        if 0 < dist_to_r1 < 0.005: # < 0.5% left to R1
+             # Resistance ahead, limit max score?
+             score = min(score, 88) # Cap at 88 (prevent 90+ Strong Buy right at resistance)
+
     score = max(0, min(100, score - penalty))
     
     # [V3.8] Holding Boost (존버 모드)
@@ -2119,14 +2146,13 @@ def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None):
             score = max(score, 45) # Holding w/ warning -> At least Hold state
 
     breakdown['penalty'] = penalty
-
-    # Evaluation Tag
-    if score >= 80: evaluation = "강력 매수 (Strong Buy)"
-    elif score >= 60: evaluation = "매수 관점 (Buy)"
-    elif score >= 40: evaluation = "중립/관망 (Hold)"
-    else: evaluation = "매도/리스크 관리 (Sell/Risk)"
     
-    return {"score": score, "breakdown": breakdown, "evaluation": evaluation}
+    return {
+        "score": int(score),
+        "breakdown": breakdown,
+        "evaluation": get_evaluation_label(score),
+        "new_metrics": new_metrics # [FIX] Pass this through!
+    }
 
 def generate_expert_commentary_v2(ticker, score_data, res, tech, regime, v2_buy=None, v2_sell=None):
     score = score_data['score']
@@ -2141,6 +2167,12 @@ def generate_expert_commentary_v2(ticker, score_data, res, tech, regime, v2_buy=
         elif v2_buy.get('buy_sig2_yn') == 'Y': v2_stage = "2차 진입완료"
         elif v2_buy.get('buy_sig1_yn') == 'Y': v2_stage = "1차 진입완료"
         
+    # [Ver 3.9] Intelligence Data
+    new_metrics = res.get('new_metrics', {})
+    vol_ratio = new_metrics.get('vol_ratio', 1.0)
+    pivot_r1 = new_metrics.get('pivot_r1', 0)
+    current_price = res.get('current_price', 0)
+
     # Header
     comment = f"[{score_data['evaluation']}] 현재 점수 {score}점"
     if is_v2_active:
@@ -2152,12 +2184,23 @@ def generate_expert_commentary_v2(ticker, score_data, res, tech, regime, v2_buy=
         comment += f"🚀 [핵심 분석] "
         if is_v2_active: comment += f"V2 시스템이 강력한 상승 추세를 타고 있습니다({v2_stage}). "
         comment += f"청안 지수({breakdown['cheongan']}/60)가 견고하며, RSI({rsi:.1f}) 또한 이상적입니다.\n"
+        
+        if vol_ratio >= 1.5:
+             comment += f"특히 거래량이 평소의 {vol_ratio:.1f}배로 증가하며 상승 신뢰도를 높이고 있습니다. "
+        
         comment += "💡 [전략] 수익을 극대화(Let profits run)하십시오. 섣부른 매도보다 추세 끝까지 동행하는 것이 유리합니다."
+        
+        if pivot_r1 > current_price and (pivot_r1 - current_price)/current_price < 0.01:
+            comment += f" 단, 1차 저항선({pivot_r1:.2f})이 머지 않았으니 돌파 여부를 주시하십시오."
+            
     elif score >= 60:
-        comment += f"✅ [핵심 분석] "
-        if is_v2_active: comment += f"보유 포지션은 안정적입니다. "
-        comment += f"다만 일부 기술적 조정 가능성이 있습니다(Tech {breakdown['tech']}/40). RSI 과열 여부를 체크하십시오.\n"
-        comment += "💡 [전략] 신규 진입은 분할로 접근하고, 기존 보유자는 홀딩 관점을 유지하십시오."
+        comment += f"✅ [핵심 분석] 상승 모멘텀이 살아있습니다. "
+        if breakdown['tech'] > 30: comment += "기술적 지표들이 매수 우위를 가리키고 있습니다. "
+        else: comment += "추세는 긍정적이나 과열권 진입을 경계해야 합니다. "
+        
+        comment += f"\n💡 [전략] 신규 진입/추가 매수가 가능한 구간입니다. 분할 매수로 접근하십시오."
+        if vol_ratio < 0.8:
+            comment += " 다만 거래량이 다소 부족하므로(평소 대비 감소), 공격적인 베팅보다는 눌림목을 확인하십시오."
     elif score >= 40:
         comment += f"⏳ [핵심 분석] "
         if is_v2_active: 
