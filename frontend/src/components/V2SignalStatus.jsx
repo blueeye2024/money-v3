@@ -24,11 +24,17 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
     // Initial Load of Real Data if available
     React.useEffect(() => {
         if (modal.isOpen) {
-            // Pre-fill if editing existing Real Buy
+            // Pre-fill if editing existing Real Buy or Selling
             if (modal.type === 'BUY' && buyStatus?.real_buy_yn === 'Y') {
                 setFormData({
                     price: buyStatus.real_buy_price || current_price || '',
                     qty: buyStatus.real_buy_qn || ''
+                });
+            } else if (modal.type === 'SELL') {
+                // Auto-fill quantity for Sell (Simplify UI)
+                setFormData({
+                    price: current_price || '',
+                    qty: buyStatus?.real_buy_qn || ''
                 });
             } else {
                 setFormData({
@@ -503,7 +509,7 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
                     }}>
                         <div style={{ background: '#1e293b', padding: '20px', borderRadius: '12px', width: '100%', maxWidth: '300px', border: '1px solid #334155' }}>
                             <h5 style={{ margin: '0 0 15px 0', color: '#fff', fontSize: '1.1rem' }}>
-                                {modal.type === 'MANUAL_SIGNAL' ? '수동 신호 발생' : (modal.type === 'BUY' ? '실매수 확정' : '종결(청산) 처리')}
+                                {modal.type === 'MANUAL_SIGNAL' ? '수동 신호 발생' : (modal.type === 'BUY' ? '실매수 확정' : '종결처리')}
                             </h5>
 
                             <div style={{ marginBottom: '10px' }}>
@@ -518,7 +524,7 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
                                 />
                             </div>
 
-                            {modal.type !== 'MANUAL_SIGNAL' && (
+                            {modal.type !== 'MANUAL_SIGNAL' && modal.type !== 'SELL' && (
                                 <>
                                     <div style={{ marginBottom: '15px' }}>
                                         <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.8rem', marginBottom: '4px' }}>총 수량 (개)</label>
@@ -541,9 +547,9 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
                             )}
 
                             {/* Action Buttons */}
-                            <div style={{ display: 'grid', gridTemplateColumns: modal.type === 'SELL' ? '1fr 1fr 1fr' : '1fr 1fr', gap: '8px' }}>
-                                {/* Left Button: Save or Confirm (Hide during Manual Signal) */}
-                                {modal.type !== 'MANUAL_SIGNAL' && (
+                            <div style={{ display: 'grid', gridTemplateColumns: modal.type === 'SELL' ? '1fr 1fr' : '1fr 1fr', gap: '8px' }}>
+                                {/* Left Button: Save or Confirm (Hide during Manual Signal or Sell) */}
+                                {modal.type !== 'MANUAL_SIGNAL' && modal.type !== 'SELL' && (
                                     <button
                                         onClick={() => handleConfirm(false)}
                                         style={{ padding: '12px', background: modal.type === 'BUY' ? '#10b981' : '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer' }}
@@ -552,13 +558,13 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
                                     </button>
                                 )}
 
-                                {/* Middle Button: Terminate (Sell Only) */}
+                                {/* Middle Button: Terminate (Sell Only - Main Action) */}
                                 {modal.type === 'SELL' && (
                                     <button
                                         onClick={() => handleConfirm(true)}
                                         style={{ padding: '12px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '0.9rem', cursor: 'pointer' }}
                                     >
-                                        최종 종결 (End)
+                                        최종 종결
                                     </button>
                                 )}
 
