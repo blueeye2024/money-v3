@@ -139,7 +139,7 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
                     showConfirmButton: false
                 });
                 setModal({ type: null, isOpen: false, key: null });
-                onConfirm();
+                if (onRefresh) onRefresh();
             } else {
                 Swal.fire('Error', data.message || "설정 실패", 'error');
             }
