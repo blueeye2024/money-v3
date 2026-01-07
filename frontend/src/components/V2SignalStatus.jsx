@@ -45,6 +45,20 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
         }
     }, [modal.isOpen, current_price, buyStatus]);
 
+    React.useEffect(() => {
+        if (modal.isOpen && modal.type === 'SET_TARGET') {
+            // Pre-fill target price if exists
+            let initialPrice = '';
+            if (activeData?.target_box_price && modal.key === 'buy_sig2_yn') initialPrice = activeData.target_box_price;
+            if (activeData?.target_stop_price && modal.key === 'sell_sig2_yn') initialPrice = activeData.target_stop_price;
+
+            setFormData({
+                price: initialPrice || '',
+                qty: ''
+            });
+        }
+    }, [modal.isOpen, modal.type, activeData]);
+
     // --- Audio Alert Logic (Ver 3.9) ---
     const prevBuyRef = React.useRef(null);
     const prevSellRef = React.useRef(null);
@@ -101,9 +115,14 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
 
     }, [buyStatus, sellStatus, tickerPrefix]);
 
-    const handleUpdateTarget = async (manageId, type, price) => {
+    const handleUpdateTarget = async () => {
+        const manageId = activeData?.manage_id;
+        const type = modal.key === 'buy_sig2_yn' ? 'box' : 'stop';
+        const price = formData.price;
+
         if (!price || price <= 0) return Swal.fire('Error', "유효한 가격을 입력해주세요.", 'error');
 
+        setSubmitting(true);
         try {
             const res = await fetch('/api/v2/update-target', {
                 method: 'POST',
@@ -119,13 +138,16 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
                     timer: 1500,
                     showConfirmButton: false
                 });
-                onConfirm(); // Refresh Signal Status
+                setModal({ type: null, isOpen: false, key: null });
+                onConfirm();
             } else {
                 Swal.fire('Error', data.message || "설정 실패", 'error');
             }
         } catch (e) {
             console.error("Update Target Error:", e);
             Swal.fire('Error', "서버 통신 오류", 'error');
+        } finally {
+            setSubmitting(false);
         }
     };
 
@@ -341,38 +363,30 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
                                     </div>
                                 )}
 
-                                {/* Custom Target Input for Step 2 */}
+                                {/* Custom Target Badge (Click to Open Modal) */}
                                 {isActiveMode && (
                                     (stepType === 'BUY' && step.key === 'buy_sig2_yn') ||
                                     (stepType === 'SELL' && step.key === 'sell_sig2_yn')
                                 ) && !isActive && (
-                                        <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '2px', justifyContent: 'center' }}>
-                                            <input
-                                                type="number"
-                                                step="0.01"
-                                                placeholder={data?.[stepType === 'BUY' ? 'target_box_price' : 'target_stop_price'] ? formatPrice(data[stepType === 'BUY' ? 'target_box_price' : 'target_stop_price']) : "목표가"}
-                                                value={targetInputs[`${manageId}_${step.key}`] || ''}
-                                                onChange={(e) => setTargetInputs({ ...targetInputs, [`${manageId}_${step.key}`]: e.target.value })}
-                                                style={{ width: '50px', fontSize: '0.65rem', padding: '1px', background: 'rgba(0,0,0,0.3)', border: '1px solid #444', color: '#fff', textAlign: 'center' }}
-                                                onClick={(e) => e.stopPropagation()}
-                                            />
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleUpdateTarget(manageId, stepType === 'BUY' ? 'box' : 'stop', targetInputs[`${manageId}_${step.key}`]);
-                                                }}
-                                                style={{ padding: '0 3px', fontSize: '0.65rem', background: '#3b82f6', border: 'none', borderRadius: '3px', cursor: 'pointer', color: '#fff' }}
-                                            >
-                                                💾
-                                            </button>
-                                        </div>
-                                    )}
-                                {isActiveMode && (
-                                    (stepType === 'BUY' && step.key === 'buy_sig2_yn' && data?.target_box_price) ||
-                                    (stepType === 'SELL' && step.key === 'sell_sig2_yn' && data?.target_stop_price)
-                                ) && !isActive && !targetInputs[`${manageId}_${step.key}`] && (
-                                        <div style={{ fontSize: '0.6rem', color: '#fbbf24', marginTop: '1px' }}>
-                                            🎯 ${formatPrice(stepType === 'BUY' ? data.target_box_price : data.target_stop_price)}
+                                        <div
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (!activeData?.manage_id) return;
+                                                setModal({ type: 'SET_TARGET', isOpen: true, key: step.key });
+                                            }}
+                                            style={{
+                                                marginTop: '4px', cursor: 'pointer',
+                                                background: 'rgba(0,0,0,0.3)', padding: '2px 6px', borderRadius: '4px',
+                                                border: '1px solid rgba(255,255,255,0.1)',
+                                                display: 'flex', alignItems: 'center', gap: '4px'
+                                            }}
+                                        >
+                                            <span style={{ fontSize: '0.7rem' }}>🎯</span>
+                                            <span style={{ fontSize: '0.65rem', color: '#fbbf24', fontWeight: 'bold' }}>
+                                                {data?.[stepType === 'BUY' ? 'target_box_price' : 'target_stop_price']
+                                                    ? formatPrice(data[stepType === 'BUY' ? 'target_box_price' : 'target_stop_price'])
+                                                    : '목표가 설정'}
+                                            </span>
                                         </div>
                                     )}
                             </div>
@@ -509,12 +523,16 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
                     }}>
                         <div style={{ background: '#1e293b', padding: '20px', borderRadius: '12px', width: '100%', maxWidth: '300px', border: '1px solid #334155' }}>
                             <h5 style={{ margin: '0 0 15px 0', color: '#fff', fontSize: '1.1rem' }}>
-                                {modal.type === 'MANUAL_SIGNAL' ? '수동 신호 발생' : (modal.type === 'BUY' ? '실매수 확정' : '종결처리')}
+                                {modal.type === 'MANUAL_SIGNAL' ? '수동 신호 발생' : (
+                                    modal.type === 'SET_TARGET' ? '2차 목표가 설정' : (
+                                        modal.type === 'BUY' ? '실매수 확정' : '종결처리'
+                                    )
+                                )}
                             </h5>
 
                             <div style={{ marginBottom: '10px' }}>
                                 <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.8rem', marginBottom: '4px' }}>
-                                    {modal.type === 'MANUAL_SIGNAL' ? '신호 발생 가격 ($)' : '실행 가격 ($)'}
+                                    {modal.type === 'MANUAL_SIGNAL' ? '신호 발생 가격 ($)' : (modal.type === 'SET_TARGET' ? '설정 목표가 ($)' : '실행 가격 ($)')}
                                 </label>
                                 <input
                                     type="number" step="0.01"
@@ -524,7 +542,7 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
                                 />
                             </div>
 
-                            {modal.type !== 'MANUAL_SIGNAL' && modal.type !== 'SELL' && (
+                            {modal.type !== 'MANUAL_SIGNAL' && modal.type !== 'SELL' && modal.type !== 'SET_TARGET' && (
                                 <>
                                     <div style={{ marginBottom: '15px' }}>
                                         <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.8rem', marginBottom: '4px' }}>총 수량 (개)</label>
@@ -547,14 +565,24 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
                             )}
 
                             {/* Action Buttons */}
-                            <div style={{ display: 'grid', gridTemplateColumns: modal.type === 'SELL' ? '1fr 1fr' : '1fr 1fr', gap: '8px' }}>
-                                {/* Left Button: Save or Confirm (Hide during Manual Signal or Sell) */}
-                                {modal.type !== 'MANUAL_SIGNAL' && modal.type !== 'SELL' && (
+                            <div style={{ display: 'grid', gridTemplateColumns: (modal.type === 'SELL' || modal.type === 'SET_TARGET') ? '1fr 1fr' : '1fr 1fr', gap: '8px' }}>
+                                {/* Left Button: Save or Confirm */}
+                                {modal.type !== 'MANUAL_SIGNAL' && modal.type !== 'SELL' && modal.type !== 'SET_TARGET' && (
                                     <button
                                         onClick={() => handleConfirm(false)}
                                         style={{ padding: '12px', background: modal.type === 'BUY' ? '#10b981' : '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer' }}
                                     >
                                         {modal.type === 'BUY' ? '실매수 확정' : '중간 저장 (Save)'}
+                                    </button>
+                                )}
+
+                                {/* Save Target Button */}
+                                {modal.type === 'SET_TARGET' && (
+                                    <button
+                                        onClick={handleUpdateTarget}
+                                        style={{ padding: '12px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '0.9rem', cursor: 'pointer' }}
+                                    >
+                                        저장 (Save)
                                     </button>
                                 )}
 
