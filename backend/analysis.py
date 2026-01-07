@@ -2200,6 +2200,36 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
     for t in tickers:
         results[t] = check_triple_filter(t, data_30m, data_5m)
         results[t]['ticker'] = t # [FIX] Add Ticker for main.py iteration
+        
+        # [NEW] Inject Cheongan V2 Status
+        if t in ['SOXL', 'SOXS']:
+            try:
+                # Convert dates/decimals to serializable format if needed, 
+                # but run_analysis usually does this at the end or FastAPI handles it via custom encoder?
+                # Actually, main.py's get_v2_status uses a helper serialize().
+                # We should do similar or rely on results being dicts.
+                # DB returns Decimals/Datetimes. JSON response will fail if not handled.
+                # check_triple_filter likely handles its own.
+                # Let's add them as is, but we might need to handle serialization in main.py or here.
+                # Ideally, we convert them here to be safe.
+                
+                v2_buy = get_v2_buy_status(t)
+                v2_sell = get_v2_sell_status(t)
+                
+                def serialize_v2(obj):
+                    if not obj: return None
+                    new = dict(obj)
+                    for k, v in new.items():
+                        if isinstance(v, (datetime, pd.Timestamp)):
+                             new[k] = v.strftime('%Y-%m-%d %H:%M:%S')
+                        elif hasattr(v, '__float__'): # Decimal
+                             new[k] = float(v)
+                    return new
+
+                results[t]['v2_buy'] = serialize_v2(v2_buy)
+                results[t]['v2_sell'] = serialize_v2(v2_sell)
+            except Exception as e:
+                print(f"V2 Injection Error {t}: {e}")
 
         # --- Auto Trading Simulation ---
         try:
