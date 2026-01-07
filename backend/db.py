@@ -1937,6 +1937,13 @@ def manual_update_signal(manage_id, signal_key, price, status='Y', ticker=None):
                 """
                 cursor.execute(sql, (status, price, manage_id))
             
+            # [FIX] Clear Custom Targets when Resetting Signal 2
+            if status == 'N':
+                if signal_key == 'buy2':
+                    cursor.execute(f"UPDATE {table} SET target_box_price = NULL WHERE manage_id=%s", (manage_id,))
+                elif signal_key == 'sell2':
+                    cursor.execute(f"UPDATE {table} SET target_stop_price = NULL WHERE manage_id=%s", (manage_id,))
+
             # Logic for final_buy only if status is 'Y'
             if status == 'Y' and signal_key == 'buy3':
                  cursor.execute("UPDATE buy_stock SET final_buy_yn='Y', final_buy_price=%s, final_buy_dt=NOW() WHERE manage_id=%s", (price, manage_id))
