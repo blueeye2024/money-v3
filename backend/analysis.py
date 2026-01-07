@@ -1026,57 +1026,8 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, df_1dRaw, market_vol_score=0, is
             if current_price < bb_low:
                 pnl_impact += 10
 
-        # [Ver 3.9] Market Intelligence - Advanced Metrics
-        # 1. ATR (Average True Range) - Volatility
-        atr_14 = 0.0
-        try:
-            # Calculate True Range manually or use pandas_ta if possible
-            # We used 'ta' before. df_30['ATR'] = ta.atr(df_30['High'], df_30['Low'], df_30['Close'], length=14)
-            # Since we iterate, let's look at the last value if 'ATR' column exists, if not calc on fly
-            # Assuming 'ta' imported as pandas_ta
-            # For simplicity, calculate TR for last candle
-            h = float(df_30['High'].iloc[-1])
-            l = float(df_30['Low'].iloc[-1])
-            c_prev = float(df_30['Close'].iloc[-2])
-            tr = max(h-l, abs(h-c_prev), abs(l-c_prev))
-            # Just approximation for now or use the library
-            # Let's try to see if ATR is already computed in earlier steps or add it
-            # Actually, standard logic:
-            if 'ATR_14' not in df_30.columns:
-                df_30['ATR_14'] = ta.atr(df_30['High'], df_30['Low'], df_30['Close'], length=14)
-            atr_14 = float(df_30['ATR_14'].iloc[-1])
-        except:
-             atr_14 = 0.0
-
-        # 2. Volume Analysis
-        vol_curr = float(df_30['Volume'].iloc[-1])
-        vol_avg_5d = 0.0 # 30m candles for 5 days? ~5 days * 13 candles/day = 65
-        vol_ratio = 1.0
-        try:
-            vol_avg = df_30['Volume'].rolling(window=65).mean().iloc[-1]
-            if vol_avg > 0:
-                vol_ratio = vol_curr / vol_avg
-        except:
-            pass
-
-        # 3. Pivot Points (Standard)
-        # P = (H + L + C) / 3
-        # R1 = 2*P - L, S1 = 2*P - H
-        pivot_p = (float(df_30['High'].iloc[-1]) + float(df_30['Low'].iloc[-1]) + float(df_30['Close'].iloc[-1])) / 3
-        pivot_r1 = 2 * pivot_p - float(df_30['Low'].iloc[-1])
-        pivot_s1 = 2 * pivot_p - float(df_30['High'].iloc[-1])
-        
-        # 4. AI Analyst Tags
-        ai_tags = []
-        if vol_ratio >= 3.0: ai_tags.append({"text": "Volume Spike", "color": "#ef4444" if vol_curr < 0 else "#22c55e"}) # Spike
-        elif vol_ratio >= 1.5: ai_tags.append({"text": "거래량 증가", "color": "#fbbf24"})
-        
-        if atr_14 > (current_price * 0.02): ai_tags.append({"text": "High Volatility", "color": "#f97316"})
-        
-        if rsi_val > 75: ai_tags.append({"text": "Overbought", "color": "#ef4444"})
-        elif rsi_val < 25: ai_tags.append({"text": "Oversold", "color": "#22c55e"})
-        
-        if is_box: ai_tags.append({"text": "Squeeze (Box)", "color": "#a855f7"})
+        # [Ver 3.9] Market Intelligence (Refactored)
+        new_metrics = calculate_market_intelligence(df_30)
         
         # 6. Total Score
         final_score = base_score + trend_score + reliability_score + breakout_score + market_score + pnl_impact
@@ -1103,14 +1054,7 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, df_1dRaw, market_vol_score=0, is
             "prob_up": float(news_prob),
             "score": final_score,
             "score_interpretation": score_interpretation,
-            "new_metrics": { # [Ver 3.9]
-                "atr": round(atr_14, 2),
-                "vol_ratio": round(vol_ratio, 2),
-                "pivot_p": round(pivot_p, 2),
-                "pivot_r1": round(pivot_r1, 2),
-                "pivot_s1": round(pivot_s1, 2),
-                "ai_tags": ai_tags
-            },
+            "new_metrics": new_metrics,
             "score_details": score_details,
             "news_items": stock_news,
             "is_held": is_held,
@@ -1867,6 +1811,12 @@ def check_triple_filter(ticker, data_30m, data_5m):
         result["current_price"] = float(current_price)
 
         print(f"DEBUG: {ticker} current_price={result.get('current_price')}, daily_change={result.get('daily_change')}")
+
+        # [Ver 3.9] Market Intelligence - Advanced Metrics (Optimization)
+        if df30 is not None and not df30.empty:
+            result['new_metrics'] = calculate_market_intelligence(df30)
+            print(f"DEBUG: {ticker} New Metrics: {result.get('new_metrics')}")
+
 
     except Exception as e:
         print(f"Triple Filter Error ({ticker}): {e}")
