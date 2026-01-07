@@ -1941,8 +1941,10 @@ def manual_update_signal(manage_id, signal_key, price, status='Y', ticker=None):
             if status == 'N':
                 if signal_key == 'buy2':
                     cursor.execute(f"UPDATE {table} SET target_box_price = NULL WHERE manage_id=%s", (manage_id,))
+                    log_history(manage_id, ticker, 'SYSTEM', '목표가 초기화(Buy)', 0)
                 elif signal_key == 'sell2':
                     cursor.execute(f"UPDATE {table} SET target_stop_price = NULL WHERE manage_id=%s", (manage_id,))
+                    log_history(manage_id, ticker, 'SYSTEM', '목표가 초기화(Sell)', 0)
 
             # Logic for final_buy only if status is 'Y'
             if status == 'Y' and signal_key == 'buy3':
