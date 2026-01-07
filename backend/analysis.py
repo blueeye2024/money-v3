@@ -1687,7 +1687,12 @@ def check_triple_filter(ticker, data_30m, data_5m):
             result["step3_status"] = "주의 (데드크로스)"
 
         # FINAL ENTRY SIGNAL
-        if result["step1"] and result["step2"] and result["step3"]:
+        # [FIX] Use Latched DB Status for Strict "All Done" Check
+        all_met = (state.get("buy_sig1_yn") == 'Y' and 
+                   state.get("buy_sig2_yn") == 'Y' and 
+                   state.get("buy_sig3_yn") == 'Y')
+
+        if all_met:
             result["final"] = True
             if not state.get("final_met"):
                 state["final_met"] = True
@@ -2711,6 +2716,31 @@ def run_v2_signal_analysis():
                         sms_time = get_current_time_str_sms()
                         send_sms(ticker, "3차매수(30분봉/V2)", curr_price, sms_time, "30분봉 추세확정")
 
+                # [FIX] Check for Final Signal Completion (All 3 Met)
+                # Must re-read record or rely on variables
+                # Ideally, check if all flags are 'Y' now
+                
+                # Reload to be sure? Or check logic vars?
+                # Logic vars:
+                # Sig1 = (buy_record['buy_sig1_yn']=='Y') or (just set)
+                # But safer to check DB or memory state. 
+                # Let's perform a lightweight check based on what we processed.
+                
+                # Check DB for current status to ensure atomic finalization
+                # We can use get_v2_buy_status(ticker) again or rely on flow.
+                # Since we just updated DB, we should re-fetch to confirm ALL 'Y'.
+                updated_buy = get_v2_buy_status(ticker)
+                if updated_buy and updated_buy['manage_id'] == manage_id:
+                     if (updated_buy['buy_sig1_yn'] == 'Y' and 
+                         updated_buy['buy_sig2_yn'] == 'Y' and 
+                         updated_buy['buy_sig3_yn'] == 'Y' and
+                         updated_buy['final_buy_yn'] == 'N'):
+                         
+                         if save_v2_buy_signal(manage_id, 'final', curr_price):
+                             print(f"🚀 {ticker} V2 Buy Cycle FINALIZED! All Signals Met.")
+                             log_history(manage_id, ticker, "최종진입완료", "Triple Filter Complete", curr_price)
+                             send_sms(ticker, "최종매수(V2)", curr_price, get_current_time_str_sms(), "트리플필터완성")
+
             # --- SELL SIDE (Position Management) ---
             sell_record = get_v2_sell_status(ticker)
 
@@ -2731,12 +2761,15 @@ def run_v2_signal_analysis():
                 
                 # Sig 1: 5m DC
                 is_5m_dc = (prev_ma10_5 >= prev_ma30_5) and (ma10_5 < ma30_5)
-                
-                if sell_record['sell_sig1_yn'] == 'N' and is_5m_dc:
+                is_5m_trend_down = (ma10_5 < ma30_5) # [NEW] Catch-up
+
+                # [FIX] Allow Catch-up for 5m DC
+                if sell_record['sell_sig1_yn'] == 'N' and (is_5m_dc or is_5m_trend_down):
                      if save_v2_sell_signal(manage_id, 'sig1', curr_price):
-                         print(f"📉 {ticker} V2 Sell Signal 1 (5m DC) Detected!")
-                         log_history(manage_id, ticker, "1차청산신호", "5분봉 DC", curr_price)
-                         send_sms(f"[청안V2] {ticker} 1차청산(5분봉) 발생\n가격:{curr_price}")
+                         msg_type = "5분봉 DC" if is_5m_dc else "5분봉 하락추세(Catch-up)"
+                         print(f"📉 {ticker} V2 Sell Signal 1 (5m DC) Detected! ({msg_type})")
+                         log_history(manage_id, ticker, "1차청산신호", msg_type, curr_price)
+                         send_sms(ticker, "1차청산(5분봉/V2)", curr_price, get_current_time_str_sms(), "단기조정/하락추세")
 
                 # Sig 2: Stop Loss / Profit Taking (Real Price Support)
                 if sell_record['sell_sig2_yn'] == 'N':
@@ -2752,17 +2785,27 @@ def run_v2_signal_analysis():
                          if save_v2_sell_signal(manage_id, 'sig2', curr_price):
                              print(f"📉 {ticker} V2 Sell Signal 2 (Stop Loss) Detected! (Entry: {base_price})")
                              log_history(manage_id, ticker, "2차청산신호", "손절/익절", curr_price)
-                             send_sms(f"[청안V2] {ticker} 2차청산(손절) 발생\n진입: {base_price}\n현재: {curr_price}")
+                             send_sms(ticker, "2차청산(손절/V2)", curr_price, get_current_time_str_sms(), f"진입가이탈(${base_price})")
 
                          
                 # Sig 3: 30m DC
                 is_30m_dc = (prev_ma10_30 >= prev_ma30_30) and (ma10_30 < ma30_30)
+                is_30m_trend_down = (ma10_30 < ma30_30) # [NEW] Catch-up
                 
-                if sell_record['sell_sig3_yn'] == 'N' and is_30m_dc:
+                # [FIX] Allow Catch-up for 30m DC (Major Exit)
+                if sell_record['sell_sig3_yn'] == 'N' and (is_30m_dc or is_30m_trend_down):
                      if save_v2_sell_signal(manage_id, 'sig3', curr_price):
-                         print(f"📉 {ticker} V2 Sell Signal 3 (30m DC) Detected!")
-                         log_history(manage_id, ticker, "3차청산신호", "30분봉 DC", curr_price)
-                         send_sms(f"[청안V2] {ticker} 3차청산(30분봉) 발생\n가격:{curr_price}")
+                         msg_type = "30분봉 DC" if is_30m_dc else "30분봉 하락추세(Catch-up)"
+                         print(f"📉 {ticker} V2 Sell Signal 3 (30m DC) Detected! ({msg_type})")
+                         log_history(manage_id, ticker, "3차청산신호", msg_type, curr_price)
+                         send_sms(ticker, "3차청산(30분봉/V2)", curr_price, get_current_time_str_sms(), "추세이탈/전량매도")
+                         
+                         # [AUTO] 30m DC = Final Exit (Trend Over)
+                         # Automatically Trigger Final Sell Completion
+                         if save_v2_sell_signal(manage_id, 'final', curr_price):
+                             print(f"🏁 {ticker} V2 Sell Cycle FINALIZED (Trend Broken)")
+                             log_history(manage_id, ticker, "최종청산완료", "30분봉 추세종료", curr_price)
+                             send_sms(ticker, "최종청산(V2)", curr_price, get_current_time_str_sms(), "매매종료(추세끝)")
 
         except Exception as e:
             print(f"❌ Error analyzing {ticker}: {e}")
