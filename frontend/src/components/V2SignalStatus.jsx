@@ -44,6 +44,9 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
     const prevSellRef = React.useRef(null);
     const isFirstLoad = React.useRef(true);
 
+    // Custom Target Inputs State
+    const [targetInputs, setTargetInputs] = React.useState({});
+
     // Determine Ticker Prefix (C=SOXL, P=SOXS)
     // Derived from title: "SOXL (BULL TOWER)" -> "C", "SOXS (BEAR TOWER)" -> "P"
     const tickerPrefix = title.includes('SOXL') ? 'C' : (title.includes('SOXS') ? 'P' : null);
@@ -91,6 +94,34 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
         prevSellRef.current = sellStatus;
 
     }, [buyStatus, sellStatus, tickerPrefix]);
+
+    const handleUpdateTarget = async (manageId, type, price) => {
+        if (!price || price <= 0) return Swal.fire('Error', "유효한 가격을 입력해주세요.", 'error');
+
+        try {
+            const res = await fetch('/api/v2/update-target', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ manage_id: manageId, target_type: type, price: parseFloat(price) })
+            });
+            const data = await res.json();
+            if (res.ok && data.status === 'success') {
+                Swal.fire({
+                    title: '완료',
+                    text: `목표가가 $${price}로 설정되었습니다.`,
+                    icon: 'success',
+                    timer: 1500,
+                    showConfirmButton: false
+                });
+                onConfirm(); // Refresh Signal Status
+            } else {
+                Swal.fire('Error', data.message || "설정 실패", 'error');
+            }
+        } catch (e) {
+            console.error("Update Target Error:", e);
+            Swal.fire('Error', "서버 통신 오류", 'error');
+        }
+    };
 
     const handleConfirm = async () => {
         if (!formData.price) return Swal.fire('Error', "가격을 입력해주세요.", 'error');
@@ -303,6 +334,41 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
                                         {formatPrice(data[step.key + '_price'])}
                                     </div>
                                 )}
+
+                                {/* Custom Target Input for Step 2 */}
+                                {isActiveMode && (
+                                    (stepType === 'BUY' && step.key === 'buy_sig2_yn') ||
+                                    (stepType === 'SELL' && step.key === 'sell_sig2_yn')
+                                ) && !isActive && (
+                                        <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '2px', justifyContent: 'center' }}>
+                                            <input
+                                                type="number"
+                                                step="0.01"
+                                                placeholder={data?.[stepType === 'BUY' ? 'target_box_price' : 'target_stop_price'] ? formatPrice(data[stepType === 'BUY' ? 'target_box_price' : 'target_stop_price']) : "목표가"}
+                                                value={targetInputs[`${manageId}_${step.key}`] || ''}
+                                                onChange={(e) => setTargetInputs({ ...targetInputs, [`${manageId}_${step.key}`]: e.target.value })}
+                                                style={{ width: '50px', fontSize: '0.65rem', padding: '1px', background: 'rgba(0,0,0,0.3)', border: '1px solid #444', color: '#fff', textAlign: 'center' }}
+                                                onClick={(e) => e.stopPropagation()}
+                                            />
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleUpdateTarget(manageId, stepType === 'BUY' ? 'box' : 'stop', targetInputs[`${manageId}_${step.key}`]);
+                                                }}
+                                                style={{ padding: '0 3px', fontSize: '0.65rem', background: '#3b82f6', border: 'none', borderRadius: '3px', cursor: 'pointer', color: '#fff' }}
+                                            >
+                                                💾
+                                            </button>
+                                        </div>
+                                    )}
+                                {isActiveMode && (
+                                    (stepType === 'BUY' && step.key === 'buy_sig2_yn' && data?.target_box_price) ||
+                                    (stepType === 'SELL' && step.key === 'sell_sig2_yn' && data?.target_stop_price)
+                                ) && !isActive && !targetInputs[`${manageId}_${step.key}`] && (
+                                        <div style={{ fontSize: '0.6rem', color: '#fbbf24', marginTop: '1px' }}>
+                                            🎯 ${formatPrice(stepType === 'BUY' ? data.target_box_price : data.target_stop_price)}
+                                        </div>
+                                    )}
                             </div>
                         </div>
                     );

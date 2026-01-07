@@ -2700,18 +2700,30 @@ def run_v2_signal_analysis():
                 manage_id = buy_record['manage_id']
                 
                 # Check Sig 2
-                if buy_record['buy_sig2_yn'] == 'N' and is_sig2:
+                # [NEW] Check for User Custom Target Price first
+                custom_buy_target = buy_record.get('target_box_price')
+                is_sig2_met = False
+                sig2_reason = "Box+2%"
+                
+                if custom_buy_target and float(custom_buy_target) > 0:
+                    is_sig2_met = (curr_price >= float(custom_buy_target))
+                    sig2_reason = f"지정가도달(${custom_buy_target})"
+                else:
+                    is_sig2_met = is_sig2 # Default 2% logic
+                
+                if buy_record['buy_sig2_yn'] == 'N' and is_sig2_met:
                     if save_v2_buy_signal(manage_id, 'sig2', curr_price):
-                        print(f"🚀 {ticker} V2 Buy Signal 2 (Box+2%) Detected!")
-                        log_history(manage_id, ticker, "2차매수신호", "Box+2%+Vol", curr_price)
-                        send_sms(f"[청안V2] {ticker} 2차매수(박스권) 발생\n가격:{curr_price}")
+                        print(f"🚀 {ticker} V2 Buy Signal 2 ({sig2_reason}) Detected!")
+                        log_history(manage_id, ticker, "2차매수신호", sig2_reason, curr_price)
+                        send_sms(ticker, "2차매수(박스권/V2)", curr_price, get_current_time_str_sms(), sig2_reason)
                         
                 # Check Sig 3
                 # [FIX] Allow Catch-up (Trend Up) even if strict cross missed
                 if buy_record['buy_sig3_yn'] == 'N' and (is_30m_gc or is_30m_trend_up):
                      if save_v2_buy_signal(manage_id, 'sig3', curr_price):
-                        print(f"🚀 {ticker} V2 Buy Signal 3 (30m GC/Trend) Detected!")
-                        log_history(manage_id, ticker, "3차매수신호", "30분봉 GC/Trend", curr_price)
+                        msg_type = "30분봉 GC" if is_30m_gc else "30분봉 상승추세(Catch-up)"
+                        print(f"🚀 {ticker} V2 Buy Signal 3 (30m GC/Trend) Detected! ({msg_type})")
+                        log_history(manage_id, ticker, "3차매수신호", msg_type, curr_price)
                         
                         sms_time = get_current_time_str_sms()
                         send_sms(ticker, "3차매수(30분봉/V2)", curr_price, sms_time, "30분봉 추세확정")
@@ -2773,19 +2785,26 @@ def run_v2_signal_analysis():
 
                 # Sig 2: Stop Loss / Profit Taking (Real Price Support)
                 if sell_record['sell_sig2_yn'] == 'N':
-                    # Determine Entry Price
+                    # Determine Entry / Base Price
                     base_price = 0
-                    if buy_record and buy_record.get('real_buy_yn') == 'Y' and buy_record.get('real_buy_price'):
-                        base_price = float(buy_record['real_buy_price'])
-                        # print(f"  🔍 {ticker} Stop Loss Check: Based on Real Buy Price ${base_price}")
+                    custom_stop_price = sell_record.get('target_stop_price')
+                    reason_msg = "손절/익절"
+                    
+                    if custom_stop_price and float(custom_stop_price) > 0:
+                        base_price = float(custom_stop_price)
+                        reason_msg = f"지정가이탈(${base_price})"
+                        # print(f"  🔍 {ticker} Custom Stop Check: ${base_price}")
                     else:
-                        base_price = float(buy_record['final_buy_price']) if buy_record and buy_record.get('final_buy_price') else 0
+                        if buy_record and buy_record.get('real_buy_yn') == 'Y' and buy_record.get('real_buy_price'):
+                            base_price = float(buy_record['real_buy_price'])
+                        else:
+                            base_price = float(buy_record['final_buy_price']) if buy_record and buy_record.get('final_buy_price') else 0
                     
                     if base_price > 0 and curr_price < base_price:
                          if save_v2_sell_signal(manage_id, 'sig2', curr_price):
-                             print(f"📉 {ticker} V2 Sell Signal 2 (Stop Loss) Detected! (Entry: {base_price})")
-                             log_history(manage_id, ticker, "2차청산신호", "손절/익절", curr_price)
-                             send_sms(ticker, "2차청산(손절/V2)", curr_price, get_current_time_str_sms(), f"진입가이탈(${base_price})")
+                             print(f"📉 {ticker} V2 Sell Signal 2 ({reason_msg}) Detected!")
+                             log_history(manage_id, ticker, "2차청산신호", reason_msg, curr_price)
+                             send_sms(ticker, "2차청산(손절/V2)", curr_price, get_current_time_str_sms(), reason_msg)
 
                          
                 # Sig 3: 30m DC

@@ -835,6 +835,19 @@ class ConfirmTradeModel(BaseModel):
     qty: float
     is_end: bool = False
 
+class UpdateTargetModel(BaseModel):
+    manage_id: str
+    target_type: str # 'box', 'stop'
+    price: float
+
+@app.post("/api/v2/update-target")
+def api_update_target(data: UpdateTargetModel):
+    from db import update_v2_target_price
+    if update_v2_target_price(data.manage_id, data.target_type, data.price):
+        return {"status": "success", "message": "Target Price Updated"}
+    else:
+        return {"status": "error", "message": "Failed to update target price"}
+
 @app.post("/api/v2/confirm-buy")
 def api_confirm_buy(data: ConfirmTradeModel):
     from db import confirm_v2_buy

@@ -1781,6 +1781,28 @@ def save_v2_sell_signal(manage_id, signal_type, price):
     finally:
         conn.close()
 
+def update_v2_target_price(manage_id, target_type, price):
+    """Set custom target price for Box(Buy2) or Stop(Sell2)"""
+    # target_type: 'box' or 'stop'
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            if target_type == 'box':
+                sql = "UPDATE buy_stock SET target_box_price=%s WHERE manage_id=%s"
+            elif target_type == 'stop':
+                sql = "UPDATE sell_stock SET target_stop_price=%s WHERE manage_id=%s"
+            else:
+                return False
+            
+            cursor.execute(sql, (price, manage_id))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Update Target Price Error: {e}")
+        return False
+    finally:
+        conn.close()
+
 def confirm_v2_buy(manage_id, price, qty):
     """사용자 실제 매수 확정 입력"""
     conn = get_connection()
