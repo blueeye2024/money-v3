@@ -1613,24 +1613,41 @@ def check_triple_filter(ticker, data_30m, data_5m):
         # Note: filter3_met is used for Step 3 (Final Entry Timing)
         # Step 1 is filter1_met (30m trend), handled below
 
-        # --- REAL-TIME FILTER CHECKS (No Reset, No Sticky) ---
-        # Each filter is checked independently at current time
-        # State only records the FIRST time each condition was met (for history)
-        
-        # Filter 1: 30m Golden Cross (Real-time check)
+        # --- REAL-TIME FILTER CHECKS & DB UPDATE ---
+        # Import save function
+        try:
+            from db import save_v2_buy_signal
+        except:
+            save_v2_buy_signal = None
+
+        manage_id = state.get("manage_id")
+
+        # Filter 1: 30m Golden Cross
         result["step1"] = filter1_met
         if filter1_met:
             result["step1_color"] = None
             result["step1_status"] = "추세 확정"
+            if not state.get("buy_sig1_yn") == 'Y':
+                 state["buy_sig1_yn"] = 'Y' # Local State Update
+                 if manage_id and save_v2_buy_signal:
+                     save_v2_buy_signal(manage_id, 'sig1', current_price)
+            
             if not state.get("step1_done_time"):
                 state["step1_done_time"] = now_time_str
         else:
-            # 데드크로스: 붉은색 + "주의"
             result["step1_color"] = "red"
             result["step1_status"] = "주의 (데드크로스)"
         
-        # Filter 2: +2% Breakout (Real-time check)
+        # Filter 2: +2% Breakout
         change_pct = result.get("daily_change", 0)
+        
+        # Explicit Force Update for Signal 2 if Breakout
+        if filter2_met: # Calculated above
+             if not state.get("buy_sig2_yn") == 'Y':
+                 state["buy_sig2_yn"] = 'Y'
+                 if manage_id and save_v2_buy_signal:
+                     save_v2_buy_signal(manage_id, 'sig2', current_price)
+
         if change_pct >= 2:
             result["step2"] = True
             result["step2_color"] = None
@@ -1647,26 +1664,34 @@ def check_triple_filter(ticker, data_30m, data_5m):
             result["step2_color"] = None
             result["step2_status"] = "보합"
 
-        # Filter 3: 5m Golden Cross (Real-time check)
+        # Filter 3: 5m Golden Cross
         result["step3"] = filter3_met
         if filter3_met:
             result["step3_color"] = None
             result["step3_status"] = "현재 골든크로스 (진입적합)"
+            if not state.get("buy_sig3_yn") == 'Y':
+                 state["buy_sig3_yn"] = 'Y'
+                 if manage_id and save_v2_buy_signal:
+                     save_v2_buy_signal(manage_id, 'sig3', current_price)
+
             if not state.get("step3_done_time"):
                 state["step3_done_time"] = now_time_str
         else:
-            # 데드크로스: 노란색 + "데드크로스 발생"
             result["step3_color"] = "yellow"
             result["step3_status"] = "현재 데드크로스 (대기)"
 
-        # FINAL ENTRY SIGNAL (All 3 must be TRUE at the same time)
+        # FINAL ENTRY SIGNAL
         if result["step1"] and result["step2"] and result["step3"]:
             result["final"] = True
             if not state.get("final_met"):
                 state["final_met"] = True
-                state["signal_time"] = now_time_str 
+                state["signal_time"] = now_time_str
+             
+                # Update Final in DB
+                if manage_id and save_v2_buy_signal:
+                    save_v2_buy_signal(manage_id, 'final', current_price)
                 
-                # 시간 정보 생성 (KST, NY)
+                # ... (rest of notification logic)
                 try:
                     ny_tz = pytz.timezone('America/New_York')
                     kst_tz = pytz.timezone('Asia/Seoul')

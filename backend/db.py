@@ -1732,6 +1732,32 @@ def create_v2_sell_record(manage_id, ticker, entry_price):
     finally:
         conn.close()
 
+def save_v2_buy_signal(manage_id, signal_type, price):
+    """매수 신호 단계별 업데이트"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            sql = ""
+            if signal_type == 'sig1':
+                 sql = "UPDATE buy_stock SET buy_sig1_yn='Y', buy_sig1_price=%s, buy_sig1_dt=NOW() WHERE manage_id=%s"
+            elif signal_type == 'sig2':
+                 sql = "UPDATE buy_stock SET buy_sig2_yn='Y', buy_sig2_price=%s, buy_sig2_dt=NOW() WHERE manage_id=%s"
+            elif signal_type == 'sig3':
+                 sql = "UPDATE buy_stock SET buy_sig3_yn='Y', buy_sig3_price=%s, buy_sig3_dt=NOW() WHERE manage_id=%s"
+            elif signal_type == 'final':
+                 sql = "UPDATE buy_stock SET final_buy_yn='Y', final_buy_price=%s, final_buy_dt=NOW() WHERE manage_id=%s"
+            
+            if sql:
+                cursor.execute(sql, (price, manage_id))
+                conn.commit()
+                return True
+            return False
+    except Exception as e:
+        print(f"Save Buy Signal Error: {e}")
+        return False
+    finally:
+        conn.close()
+
 def save_v2_sell_signal(manage_id, signal_type, price):
     """청산 신호 단계별 업데이트"""
     conn = get_connection()
