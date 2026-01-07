@@ -8,6 +8,7 @@ import time
 import re
 from concurrent.futures import ThreadPoolExecutor
 from kis_api import kis_client
+from sms import send_sms
 from db import (
     load_market_candles, 
     save_market_candles,
@@ -15,7 +16,13 @@ from db import (
     create_trade,
     close_trade,
     check_open_trade,
-    get_trade_history
+    get_trade_history,
+    log_history,
+    get_v2_buy_status,
+    save_v2_buy_signal,
+    get_v2_sell_status,
+    create_v2_sell_record,
+    save_v2_sell_signal
 )
 
 # Global Cache for Historical Data
@@ -2385,3 +2392,146 @@ def get_cross_history(df_30, df_5):
     history["dead_5m"] = history["dead_5m"][:1]
 
     return history
+
+
+# --- Cheongan V2 Signal Analysis ---
+def run_v2_signal_analysis():
+    """
+    Cheongan V2 3-Step Buy/Sell Logic Implementation
+    Run via Scheduler (Every 5 mins)
+    """
+    print(f"[{datetime.now()}] 🔄 V2 Signal Analysis Started...")
+    
+    # 1. Target Tickers
+    targets = ['SOXL', 'SOXS']
+    
+    # 2. Fetch Data (Force Update for Real-time accuracy)
+    try:
+        data_30m, data_5m, data_1d, _, _ = fetch_data(targets, force=True)
+    except Exception as e:
+        print(f"❌ V2 Data Fetch Error: {e}")
+        return
+        
+    for ticker in targets:
+        try:
+            # Data Check
+            df_5 = data_5m.get(ticker)
+            df_30 = data_30m.get(ticker)
+            
+            if df_5 is None or df_5.empty or df_30 is None or df_30.empty:
+                print(f"⚠️ {ticker} Insufficient Data for V2 Analysis")
+                continue
+                
+            # --- Indicators Calculation ---
+            # 5m
+            df_5['ma10'] = df_5['Close'].rolling(window=10).mean()
+            df_5['ma30'] = df_5['Close'].rolling(window=30).mean()
+            
+            # 30m
+            df_30['ma10'] = df_30['Close'].rolling(window=10).mean()
+            df_30['ma30'] = df_30['Close'].rolling(window=30).mean()
+            df_30['box_high'] = df_30['High'].rolling(window=20).max().shift(1) # Past 20 bars high (excluding current)
+            df_30['vol_ma5'] = df_30['Volume'].rolling(window=5).mean()
+            
+            # 1D (Prev Close)
+            prev_close = 0
+            if data_1d is not None and ticker in data_1d:
+                d1 = data_1d[ticker]
+                if not d1.empty:
+                    if len(d1) >= 2:
+                        prev_close = float(d1['Close'].iloc[-2])
+                    else:
+                        prev_close = float(d1['Close'].iloc[-1])
+            
+            # Current Values
+            curr_price = float(df_5['Close'].iloc[-1])
+            curr_vol_30 = float(df_30['Volume'].iloc[-1])
+            curr_vol_ma_30 = float(df_30['vol_ma5'].iloc[-1]) if not pd.isna(df_30['vol_ma5'].iloc[-1]) else 0
+            box_high = float(df_30['box_high'].iloc[-1]) if not pd.isna(df_30['box_high'].iloc[-1]) else 0
+            
+            # 5m Indicators
+            ma10_5 = df_5['ma10'].iloc[-1]
+            ma30_5 = df_5['ma30'].iloc[-1]
+            prev_ma10_5 = df_5['ma10'].iloc[-2]
+            prev_ma30_5 = df_5['ma30'].iloc[-2]
+            
+            # 30m Indicators
+            ma10_30 = df_30['ma10'].iloc[-1]
+            ma30_30 = df_30['ma30'].iloc[-1]
+            prev_ma10_30 = df_30['ma10'].iloc[-2]
+            prev_ma30_30 = df_30['ma30'].iloc[-2]
+            
+            # --- Logic Checking ---
+            
+            # --- BUY SIDE ---
+            buy_record = get_v2_buy_status(ticker)
+                        
+            is_5m_gc = (prev_ma10_5 <= prev_ma30_5) and (ma10_5 > ma30_5)
+            
+            cond_box = curr_price > box_high
+            cond_2pct = (prev_close > 0) and (curr_price > prev_close * 1.02)
+            cond_vol = (curr_vol_ma_30 > 0) and (curr_vol_30 > curr_vol_ma_30 * 1.5)
+            is_sig2 = cond_box and cond_2pct and cond_vol
+            
+            is_30m_gc = (prev_ma10_30 <= prev_ma30_30) and (ma10_30 > ma30_30)
+            
+            
+            if not buy_record or (buy_record['final_buy_yn'] == 'Y'):
+                # Start NEW cycle
+                if is_5m_gc:
+                    kst_now = datetime.now(timezone.utc).astimezone(pytz.timezone('Asia/Seoul'))
+                    manage_id = f"{ticker}{kst_now.strftime('%Y%m%d_%H%M')}"
+                    
+                    if save_v2_buy_signal(manage_id, ticker, 'sig1', curr_price):
+                        print(f"🚀 {ticker} V2 Buy Signal 1 (5m GC) Detected! Started {manage_id}")
+                        log_history(manage_id, ticker, "1차매수신호", "5분봉 GC", curr_price)
+                        send_sms(f"[청안V2] {ticker} 1차매수(5분봉) 발생\n가격:{curr_price}")
+            
+            else:
+                # Active Buy Cycle
+                manage_id = buy_record['manage_id']
+                
+                # Check Sig 2
+                if buy_record['buy_sig2_yn'] == 'N' and is_sig2:
+                    if save_v2_buy_signal(manage_id, ticker, 'sig2', curr_price):
+                        print(f"🚀 {ticker} V2 Buy Signal 2 (Box+2%) Detected!")
+                        log_history(manage_id, ticker, "2차매수신호", "Box+2%+Vol", curr_price)
+                        send_sms(f"[청안V2] {ticker} 2차매수(박스권) 발생\n가격:{curr_price}")
+                        
+                # Check Sig 3
+                if buy_record['buy_sig3_yn'] == 'N' and is_30m_gc:
+                     if save_v2_buy_signal(manage_id, ticker, 'sig3', curr_price):
+                        print(f"🚀 {ticker} V2 Buy Signal 3 (30m GC) Detected!")
+                        log_history(manage_id, ticker, "3차매수신호", "30분봉 GC", curr_price)
+                        send_sms(f"[청안V2] {ticker} 3차매수(30분봉) 발생\n가격:{curr_price}")
+
+            # --- SELL SIDE (Position Management) ---
+            sell_record = get_v2_sell_status(ticker)
+
+            if sell_record:
+                manage_id = sell_record['manage_id']
+                
+                # Sig 1: 5m DC
+                is_5m_dc = (prev_ma10_5 >= prev_ma30_5) and (ma10_5 < ma30_5)
+                
+                if sell_record['sell_sig1_yn'] == 'N' and is_5m_dc:
+                     if save_v2_sell_signal(manage_id, 'sig1', curr_price):
+                         print(f"📉 {ticker} V2 Sell Signal 1 (5m DC) Detected!")
+                         log_history(manage_id, ticker, "1차청산신호", "5분봉 DC", curr_price)
+                         send_sms(f"[청안V2] {ticker} 1차청산(5분봉) 발생\n가격:{curr_price}")
+                         
+                # Sig 3: 30m DC
+                is_30m_dc = (prev_ma10_30 >= prev_ma30_30) and (ma10_30 < ma30_30)
+                
+                if sell_record['sell_sig3_yn'] == 'N' and is_30m_dc:
+                     if save_v2_sell_signal(manage_id, 'sig3', curr_price):
+                         print(f"📉 {ticker} V2 Sell Signal 3 (30m DC) Detected!")
+                         log_history(manage_id, ticker, "3차청산신호", "30분봉 DC", curr_price)
+                         send_sms(f"[청안V2] {ticker} 3차청산(30분봉) 발생\n가격:{curr_price}")
+
+        except Exception as e:
+            print(f"❌ Error analyzing {ticker}: {e}")
+            import traceback
+            traceback.print_exc()
+
+    print(f"[{datetime.now()}] V2 Analysis Complete.")

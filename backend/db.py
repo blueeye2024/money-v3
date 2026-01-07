@@ -246,6 +246,82 @@ def init_db():
             """
             cursor.execute(sql_candle)
 
+            # 12. Cheongan V2: Signal Monitoring (buy_stock)
+            sql_buy = """
+            CREATE TABLE IF NOT EXISTS buy_stock (
+                idx INT AUTO_INCREMENT PRIMARY KEY,
+                ticker VARCHAR(10) NOT NULL,
+                manage_id VARCHAR(30) NOT NULL UNIQUE,
+                current_price DECIMAL(18,6),
+                row_dt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                buy_sig1_yn CHAR(1) DEFAULT 'N',
+                buy_sig2_yn CHAR(1) DEFAULT 'N',
+                buy_sig3_yn CHAR(1) DEFAULT 'N',
+                buy_sig1_dt DATETIME,
+                buy_sig2_dt DATETIME,
+                buy_sig3_dt DATETIME,
+                buy_sig1_price DECIMAL(18,6),
+                buy_sig2_price DECIMAL(18,6),
+                buy_sig3_price DECIMAL(18,6),
+                final_buy_yn CHAR(1) DEFAULT 'N',
+                final_buy_dt DATETIME,
+                final_buy_price DECIMAL(18,6),
+                real_buy_yn CHAR(1) DEFAULT 'N',
+                real_buy_price DECIMAL(18,6),
+                real_buy_dt DATETIME
+            )
+            """
+            cursor.execute(sql_buy)
+
+            # 13. Cheongan V2: Position Management (sell_stock)
+            sql_sell = """
+            CREATE TABLE IF NOT EXISTS sell_stock (
+                idx INT AUTO_INCREMENT PRIMARY KEY,
+                ticker VARCHAR(10) NOT NULL,
+                manage_id VARCHAR(30) NOT NULL UNIQUE,
+                current_price DECIMAL(18,6),
+                row_dt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                sell_sig1_yn CHAR(1) DEFAULT 'N',
+                sell_sig2_yn CHAR(1) DEFAULT 'N',
+                sell_sig3_yn CHAR(1) DEFAULT 'N',
+                sell_sig1_dt DATETIME,
+                sell_sig2_dt DATETIME,
+                sell_sig3_dt DATETIME,
+                sell_sig1_price DECIMAL(18,6),
+                sell_sig2_price DECIMAL(18,6),
+                sell_sig3_price DECIMAL(18,6),
+                sell_ratio1 DECIMAL(5,2),
+                sell_ratio2 DECIMAL(5,2),
+                sell_ratio3 DECIMAL(5,2),
+                final_sell_yn CHAR(1) DEFAULT 'N',
+                final_sell_dt DATETIME,
+                final_sell_price DECIMAL(18,6),
+                real_hold_yn CHAR(1) DEFAULT 'N',
+                real_sell_avg_price DECIMAL(18,6),
+                real_sell_dt DATETIME,
+                close_yn CHAR(1) DEFAULT 'N'
+            )
+            """
+            cursor.execute(sql_sell)
+
+            # 14. Cheongan V2: History (history)
+            sql_history = """
+            CREATE TABLE IF NOT EXISTS history (
+                idx INT AUTO_INCREMENT PRIMARY KEY,
+                log_dt DATETIME DEFAULT CURRENT_TIMESTAMP,
+                ticker VARCHAR(10) NOT NULL,
+                manage_id VARCHAR(30) NOT NULL,
+                event_type VARCHAR(50) NOT NULL,
+                event_dt DATETIME,
+                event_price DECIMAL(18,6),
+                short_msg VARCHAR(200),
+                sms_sent_yn CHAR(1) DEFAULT 'N',
+                INDEX idx_manage_time (manage_id, event_dt),
+                INDEX idx_ticker_time (ticker, event_dt)
+            )
+            """
+            cursor.execute(sql_history)
+
             # 12. System Auto-Trading Log
             sql_sys_trade = """
             CREATE TABLE IF NOT EXISTS system_trades (
@@ -1531,5 +1607,137 @@ def get_trade_history(limit=50):
             sql = "SELECT * FROM trade_history ORDER BY entry_time DESC LIMIT %s"
             cursor.execute(sql, (limit,))
             return cursor.fetchall()
+    finally:
+        conn.close()
+
+# --- Cheongan V2 Helper Functions ---
+
+def log_history(manage_id, ticker, event_type, msg=None, price=None):
+    """이벤트/신호 이력을 history 테이블에 저장"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            sql = """
+                INSERT INTO history (manage_id, ticker, event_type, short_msg, event_price, event_dt) 
+                VALUES (%s, %s, %s, %s, %s, NOW())
+            """
+            cursor.execute(sql, (manage_id, ticker, event_type, msg, price))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Log History Error: {e}")
+        return False
+    finally:
+        conn.close()
+
+def get_v2_buy_status(ticker):
+    """현재 진행 중인 매수 신호 상태 조회 (최신 1건)"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            sql = """
+                SELECT * FROM buy_stock 
+                WHERE ticker = %s 
+                ORDER BY idx DESC LIMIT 1
+            """
+            cursor.execute(sql, (ticker,))
+            return cursor.fetchone()
+    finally:
+        conn.close()
+
+def save_v2_buy_signal(manage_id, ticker, signal_type, price):
+    """매수 신호 단계별 업데이트 (1차, 2차, 3차)"""
+    # signal_type: 'sig1', 'sig2', 'sig3', 'final'
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            # 1. Check if record exists
+            cursor.execute("SELECT idx FROM buy_stock WHERE manage_id=%s", (manage_id,))
+            row = cursor.fetchone()
+            
+            if not row:
+                # Insert New (Manage ID should be created by Caller if new)
+                if signal_type == 'sig1':
+                    sql = """
+                        INSERT INTO buy_stock (manage_id, ticker, buy_sig1_yn, buy_sig1_price, buy_sig1_dt, row_dt)
+                        VALUES (%s, %s, 'Y', %s, NOW(), NOW())
+                    """
+                    cursor.execute(sql, (manage_id, ticker, price))
+                else:
+                    return False # Cannot start with sig2/3 without record (logic dependency)
+            else:
+                # Update Existing
+                if signal_type == 'sig1':
+                     sql = "UPDATE buy_stock SET buy_sig1_yn='Y', buy_sig1_price=%s, buy_sig1_dt=NOW(), row_dt=NOW() WHERE manage_id=%s"
+                elif signal_type == 'sig2':
+                     sql = "UPDATE buy_stock SET buy_sig2_yn='Y', buy_sig2_price=%s, buy_sig2_dt=NOW(), row_dt=NOW() WHERE manage_id=%s"
+                elif signal_type == 'sig3':
+                     sql = "UPDATE buy_stock SET buy_sig3_yn='Y', buy_sig3_price=%s, buy_sig3_dt=NOW(), row_dt=NOW() WHERE manage_id=%s"
+                elif signal_type == 'final':
+                     sql = "UPDATE buy_stock SET final_buy_yn='Y', final_buy_price=%s, final_buy_dt=NOW(), row_dt=NOW() WHERE manage_id=%s"
+                
+                cursor.execute(sql, (price, manage_id))
+                
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Save Buy Signal Error: {e}")
+        return False
+    finally:
+        conn.close()
+
+def get_v2_sell_status(ticker):
+    """현재 보유 중인 종목의 청산 상태 조회"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            sql = """
+                SELECT * FROM sell_stock 
+                WHERE ticker = %s AND close_yn = 'N'
+                ORDER BY idx DESC LIMIT 1
+            """
+            cursor.execute(sql, (ticker,))
+            return cursor.fetchone()
+    finally:
+        conn.close()
+
+def create_v2_sell_record(manage_id, ticker, entry_price):
+    """최종 진입 확정 시 sell_stock 레코드 생성"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            sql = """
+                INSERT INTO sell_stock (manage_id, ticker, final_sell_price, row_dt)
+                VALUES (%s, %s, 0, NOW())
+            """
+            cursor.execute(sql, (manage_id, ticker))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Create Sell Record Error: {e}")
+        return False
+    finally:
+        conn.close()
+
+def save_v2_sell_signal(manage_id, signal_type, price):
+    """청산 신호 단계별 업데이트"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            if signal_type == 'sig1':
+                 sql = "UPDATE sell_stock SET sell_sig1_yn='Y', sell_sig1_price=%s, sell_sig1_dt=NOW() WHERE manage_id=%s"
+            elif signal_type == 'sig2':
+                 sql = "UPDATE sell_stock SET sell_sig2_yn='Y', sell_sig2_price=%s, sell_sig2_dt=NOW() WHERE manage_id=%s"
+            elif signal_type == 'sig3':
+                 sql = "UPDATE sell_stock SET sell_sig3_yn='Y', sell_sig3_price=%s, sell_sig3_dt=NOW() WHERE manage_id=%s"
+            elif signal_type == 'final':
+                 sql = "UPDATE sell_stock SET final_sell_yn='Y', final_sell_price=%s, final_sell_dt=NOW() WHERE manage_id=%s"
+            
+            cursor.execute(sql, (price, manage_id))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Save Sell Signal Error: {e}")
+        return False
     finally:
         conn.close()

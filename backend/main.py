@@ -13,9 +13,9 @@ from datetime import datetime, timedelta
 SECRET_KEY = "cheongan_fintech_secret_key_2026"
 ALGORITHM = "HS256"
 
-from analysis import run_analysis, fetch_data, analyze_ticker, TARGET_TICKERS
+from analysis import run_analysis, fetch_data, analyze_ticker, TARGET_TICKERS, run_v2_signal_analysis
 from sms import send_sms
-from db import init_db, save_signal, check_last_signal, get_stocks, add_stock, delete_stock, add_transaction, get_transactions, update_transaction, delete_transaction, get_signals, save_sms_log, get_sms_logs, delete_all_signals, delete_sms_log, delete_all_sms_logs, get_ticker_settings, update_ticker_setting, update_stock_status
+from db import init_db, save_signal, check_last_signal, get_stocks, add_stock, delete_stock, add_transaction, get_transactions, update_transaction, delete_transaction, get_signals, save_sms_log, get_sms_logs, delete_all_signals, delete_sms_log, delete_all_sms_logs, get_ticker_settings, update_ticker_setting, update_stock_status, get_v2_buy_status, get_v2_sell_status
 
 app = FastAPI()
 
@@ -53,6 +53,10 @@ def on_startup():
             print(f"Auto Price Update Failed: {e}")
 
     scheduler.add_job(update_prices_job, 'interval', minutes=5)
+    
+    # [New] Cheongan V2 Signal Analysis (Every 5 mins)
+    scheduler.add_job(run_v2_signal_analysis, 'interval', minutes=5)
+    
     scheduler.start()
     print("✅ Scheduler Started: Monitor(1m), PriceUpdate(5m)")
 
@@ -790,6 +794,38 @@ def me_api(token: str):
         return {"status": "error", "message": "Token expired"}
     except jwt.InvalidTokenError:
         return {"status": "error", "message": "Invalid token"}
+
+@app.get("/api/v2/status/{ticker}")
+def get_v2_status(ticker: str):
+    """Get V2 Signal Status (Buy/Sell)"""
+    try:
+        from db import get_v2_buy_status, get_v2_sell_status
+        ticker = ticker.upper()
+        
+        buy_record = get_v2_buy_status(ticker)
+        sell_record = get_v2_sell_status(ticker)
+        
+        # Convert decimals to float for JSON serialization
+        def serialize(obj):
+            if not obj: return None
+            new_obj = dict(obj)
+            for k, v in new_obj.items():
+                from decimal import Decimal
+                from datetime import datetime
+                if isinstance(v, Decimal):
+                    new_obj[k] = float(v)
+                elif isinstance(v, datetime):
+                    new_obj[k] = v.isoformat()
+            return new_obj
+
+        return {
+            "status": "success",
+            "buy": serialize(buy_record),
+            "sell": serialize(sell_record)
+        }
+    except Exception as e:
+        print(f"V2 Status Error: {e}")
+        return {"status": "error", "message": str(e)}
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8080, reload=True)
