@@ -1523,8 +1523,6 @@ def check_triple_filter(ticker, data_30m, data_5m):
             sma30_30 = 0
         
         filter1_met = bool(sma10_30 > sma30_30)  # 골든크로스
-        print(f"DEBUG {ticker} Filter1: SMA10={sma10_30:.4f}, SMA30={sma30_30:.4f}, filter1_met={filter1_met}")
-            
         # Filter 2: Daily Change (Breakout) - +2% 이상 상승
         filter2_met = False
         prev_close = None
@@ -1614,6 +1612,10 @@ def check_triple_filter(ticker, data_30m, data_5m):
         # Step 1 is filter1_met (30m trend), handled below
 
         # --- REAL-TIME FILTER CHECKS & DB UPDATE ---
+        # [FIX] MAPPING CORRECTION based on Frontend Labels
+        # Step 1: 5m GC (Timing) - Was Filter 3
+        # Step 3: 30m GC (Trend) - Was Filter 1
+
         # Import save function
         try:
             from db import save_v2_buy_signal
@@ -1622,38 +1624,35 @@ def check_triple_filter(ticker, data_30m, data_5m):
 
         manage_id = state.get("manage_id")
 
-        # Filter 1: 30m Golden Cross
-        result["step1"] = filter1_met
-        if filter1_met:
+        # Step 1: 5m Golden Cross (Timing)
+        result["step1"] = filter3_met # [SWAPPED]
+        if filter3_met:
             result["step1_color"] = None
-            result["step1_status"] = "추세 확정"
+            result["step1_status"] = "현재 골든크로스 (진입적합)"
             if not state.get("buy_sig1_yn") == 'Y':
-                 state["buy_sig1_yn"] = 'Y' # Local State Update
+                 state["buy_sig1_yn"] = 'Y' 
                  if manage_id and save_v2_buy_signal:
                      save_v2_buy_signal(manage_id, 'sig1', current_price)
             
             if not state.get("step1_done_time"):
                 state["step1_done_time"] = now_time_str
         else:
-            result["step1_color"] = "red"
-            result["step1_status"] = "주의 (데드크로스)"
+            result["step1_color"] = "yellow"
+            result["step1_status"] = "현재 데드크로스 (대기)"
         
-        # Filter 2: +2% Breakout
+        # Step 2: +2% Breakout
         change_pct = result.get("daily_change", 0)
         
-        # Explicit Force Update for Signal 2 if Breakout
         # DEBUG PRINTS
-        print(f"DEBUG: Ticker={ticker}, Filter2Met={filter2_met}, ManageID={manage_id}, IsBreakout={is_breakout}, ChangePct={change_pct}")
+        print(f"DEBUG: Ticker={ticker}, Filter2Met={filter2_met}, ManageID={manage_id}, ChangePct={change_pct}")
         
-        if filter2_met: # Calculated above
+        if filter2_met: 
              if not state.get("buy_sig2_yn") == 'Y':
                  state["buy_sig2_yn"] = 'Y'
                  print(f"DEBUG: Attempting to SAVE Sig2 for {manage_id}")
                  if manage_id and save_v2_buy_signal:
                      res = save_v2_buy_signal(manage_id, 'sig2', current_price)
                      print(f"DEBUG: Save Result = {res}")
-                 else:
-                     print("DEBUG: Save Failed - Missing ManageID or Function")
 
         if change_pct >= 2:
             result["step2"] = True
@@ -1671,11 +1670,11 @@ def check_triple_filter(ticker, data_30m, data_5m):
             result["step2_color"] = None
             result["step2_status"] = "보합"
 
-        # Filter 3: 5m Golden Cross
-        result["step3"] = filter3_met
-        if filter3_met:
+        # Step 3: 30m Golden Cross (Trend)
+        result["step3"] = filter1_met # [SWAPPED]
+        if filter1_met:
             result["step3_color"] = None
-            result["step3_status"] = "현재 골든크로스 (진입적합)"
+            result["step3_status"] = "추세 확정"
             if not state.get("buy_sig3_yn") == 'Y':
                  state["buy_sig3_yn"] = 'Y'
                  if manage_id and save_v2_buy_signal:
@@ -1684,8 +1683,8 @@ def check_triple_filter(ticker, data_30m, data_5m):
             if not state.get("step3_done_time"):
                 state["step3_done_time"] = now_time_str
         else:
-            result["step3_color"] = "yellow"
-            result["step3_status"] = "현재 데드크로스 (대기)"
+            result["step3_color"] = "red"
+            result["step3_status"] = "주의 (데드크로스)"
 
         # FINAL ENTRY SIGNAL
         if result["step1"] and result["step2"] and result["step3"]:
@@ -2638,6 +2637,7 @@ def run_v2_signal_analysis():
             is_sig2 = cond_2pct # cond_box and cond_2pct (Relaxed)
             
             is_30m_gc = (prev_ma10_30 <= prev_ma30_30) and (ma10_30 > ma30_30)
+            is_30m_trend_up = (ma10_30 > ma30_30) # [NEW] For Catch-up
             
             
             # Check if we can start a new cycle
@@ -2702,11 +2702,14 @@ def run_v2_signal_analysis():
                         send_sms(f"[청안V2] {ticker} 2차매수(박스권) 발생\n가격:{curr_price}")
                         
                 # Check Sig 3
-                if buy_record['buy_sig3_yn'] == 'N' and is_30m_gc:
+                # [FIX] Allow Catch-up (Trend Up) even if strict cross missed
+                if buy_record['buy_sig3_yn'] == 'N' and (is_30m_gc or is_30m_trend_up):
                      if save_v2_buy_signal(manage_id, 'sig3', curr_price):
-                        print(f"🚀 {ticker} V2 Buy Signal 3 (30m GC) Detected!")
-                        log_history(manage_id, ticker, "3차매수신호", "30분봉 GC", curr_price)
-                        send_sms(f"[청안V2] {ticker} 3차매수(30분봉) 발생\n가격:{curr_price}")
+                        print(f"🚀 {ticker} V2 Buy Signal 3 (30m GC/Trend) Detected!")
+                        log_history(manage_id, ticker, "3차매수신호", "30분봉 GC/Trend", curr_price)
+                        
+                        sms_time = get_current_time_str_sms()
+                        send_sms(ticker, "3차매수(30분봉/V2)", curr_price, sms_time, "30분봉 추세확정")
 
             # --- SELL SIDE (Position Management) ---
             sell_record = get_v2_sell_status(ticker)
