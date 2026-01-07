@@ -49,52 +49,40 @@ def diagnose_soxl():
     from analysis import calculate_tech_indicators, calculate_sma
     
     # Calculate indicators
-    df_5m['SMA_5'] = calculate_sma(df_5m['Close'], 5)
-    df_5m['SMA_20'] = calculate_sma(df_5m['Close'], 20)
+    df_5m['SMA_10'] = calculate_sma(df_5m['Close'], 10)
+    df_5m['SMA_30'] = calculate_sma(df_5m['Close'], 30)
     calculate_tech_indicators(df_5m) # modifies in-place for RSI
     
     # Get last 5 rows
     recent = df_5m.tail(5)
     print("\nRecent 5m Data (Last 5 candles):")
-    print(recent[['Close', 'SMA_5', 'SMA_20', 'RSI']])
+    print(recent[['Close', 'SMA_10', 'SMA_30', 'RSI']])
     
     curr = df_5m.iloc[-1]
     prev = df_5m.iloc[-2]
     
     print("\n--- Logic Check ---")
     
-    # 1. 5m MA Trend (Catch-up Logic defined in Analysis.py as Alignment)
-    # Analysis.py: is_5m_trend_up = (ma5_5 > ma20_5)
-    ma5_curr = curr['SMA_5']
-    ma20_curr = curr['SMA_20']
-    
-    # Original 'Trend Up' (Slope) check:
-    ma20_prev = prev['SMA_20']
-    slope_up = ma20_curr > ma20_prev
+    # 1. 5m MA Trend (Catch-up Logic: MA10 > MA30 Alignment)
+    ma10_curr = curr['SMA_10']
+    ma30_curr = curr['SMA_30']
     
     # Analysis.py Def:
-    is_5m_trend_up = (ma5_curr > ma20_curr)
+    is_5m_trend_up = (ma10_curr > ma30_curr)
     
-    print(f"1. 5m Alignment (Catch-up)? {is_5m_trend_up} (MA5: {ma5_curr:.4f} > MA20: {ma20_curr:.4f})")
-    print(f"   (MA20 Slope Up? {slope_up})")
+    print(f"1. 5m Alignment (Catch-up)? {is_5m_trend_up} (MA10: {ma10_curr:.4f} > MA30: {ma30_curr:.4f})")
     
-    # 2. Golden Cross (MA5 > MA20)
-    # Check strict crossover (Prev MA5 <= Prev MA20 AND Curr MA5 > Curr MA20)
-    # Or just current state?
-    # Analysis.py:
-    # is_5m_gc = (prev['SMA_5'] <= prev['SMA_20']) and (curr['SMA_5'] > curr['SMA_20'])
-    is_5m_gc = (prev['SMA_5'] <= prev['SMA_20']) and (curr['SMA_5'] > curr['SMA_20'])
+    # 2. Golden Cross (Strict Cross) check
+    ma10_prev = prev['SMA_10']
+    ma30_prev = prev['SMA_30']
+    
+    is_5m_gc = (ma10_prev <= ma30_prev) and (ma10_curr > ma30_curr)
+
     print(f"2. 5m Golden Cross (Strict)? {is_5m_gc}")
-    print(f"   Prev: MA5({prev['SMA_5']:.4f}) <= MA20({prev['SMA_20']:.4f})")
-    print(f"   Curr: MA5({curr['SMA_5']:.4f}) > MA20({curr['SMA_20']:.4f})")
+    print(f"   Prev: MA10({ma10_prev:.4f}) <= MA30({ma30_prev:.4f})")
+    print(f"   Curr: MA10({ma10_curr:.4f}) > MA30({ma30_curr:.4f})")
     
-    # Catch-up Logic check (Trend Up + MA5 > MA20)
-    # Note: Analysis.py uses `is_5m_gc or is_trend_up` depending on context?
-    # Actually Step 1 is usually just GC or Trend.
-    # In V2 logic:
-    # cond_1 = (is_5m_gc and is_5m_trend_up)
-    
-    print(f"\nCondition 1 (GC + Trend Up): {is_5m_gc and is_5m_trend_up}")
+    print(f"\nCondition 1 (GC OR Trend Up): {is_5m_gc or is_5m_trend_up}")
     
     # Check RSI
     rsi_ok = curr['RSI'] < 70

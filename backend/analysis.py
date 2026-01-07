@@ -1602,10 +1602,10 @@ def check_triple_filter(ticker, data_30m, data_5m):
 
         # Filter 3: 5m Timing (Golden Cross SMA10 > SMA30)
         filter3_met = False
-        if df5 is not None and not df5.empty and len(df5) > 20:
-             sma5_5 = float(calculate_sma(df5['Close'], 5).iloc[-1])
-             sma20_5 = float(calculate_sma(df5['Close'], 20).iloc[-1])
-             filter3_met = bool(sma5_5 > sma20_5)  # 골든크로스 상태 (5/20)
+        if df5 is not None and not df5.empty and len(df5) > 30:
+             sma10_5 = float(calculate_sma(df5['Close'], 10).iloc[-1])
+             sma30_5 = float(calculate_sma(df5['Close'], 30).iloc[-1])
+             filter3_met = bool(sma10_5 > sma30_5)  # 골든크로스 상태 (10/30)
 
 
         # Note: filter3_met is used for Step 3 (Final Entry Timing)
@@ -2572,12 +2572,12 @@ def run_v2_signal_analysis():
             
             # --- Indicators Calculation ---
             # 5m
-            df_5['ma5'] = df_5['Close'].rolling(window=5).mean()
-            df_5['ma20'] = df_5['Close'].rolling(window=20).mean()
+            df_5['ma10'] = df_5['Close'].rolling(window=10).mean()
+            df_5['ma30'] = df_5['Close'].rolling(window=30).mean()
             
             # 30m
-            df_30['ma5'] = df_30['Close'].rolling(window=5).mean()
-            df_30['ma20'] = df_30['Close'].rolling(window=20).mean()
+            df_30['ma10'] = df_30['Close'].rolling(window=10).mean()
+            df_30['ma30'] = df_30['Close'].rolling(window=30).mean()
             df_30['box_high'] = df_30['High'].rolling(window=20).max().shift(1) # Past 20 bars high (excluding current)
             df_30['vol_ma5'] = df_30['Volume'].rolling(window=5).mean()
             
@@ -2614,16 +2614,16 @@ def run_v2_signal_analysis():
                 print(f"  ⚠️ KIS Price Patch Failed: {e}")
             
             # 5m Indicators
-            ma5_5 = df_5['ma5'].iloc[-1]
-            ma20_5 = df_5['ma20'].iloc[-1]
-            prev_ma5_5 = df_5['ma5'].iloc[-2]
-            prev_ma20_5 = df_5['ma20'].iloc[-2]
+            ma10_5 = df_5['ma10'].iloc[-1]
+            ma30_5 = df_5['ma30'].iloc[-1]
+            prev_ma10_5 = df_5['ma10'].iloc[-2]
+            prev_ma30_5 = df_5['ma30'].iloc[-2]
             
             # 30m Indicators
-            ma5_30 = df_30['ma5'].iloc[-1]
-            ma20_30 = df_30['ma20'].iloc[-1]
-            prev_ma5_30 = df_30['ma5'].iloc[-2]
-            prev_ma20_30 = df_30['ma20'].iloc[-2]
+            ma10_30 = df_30['ma10'].iloc[-1]
+            ma30_30 = df_30['ma30'].iloc[-1]
+            prev_ma10_30 = df_30['ma10'].iloc[-2]
+            prev_ma30_30 = df_30['ma30'].iloc[-2]
             
             # --- Logic Checking ---
             
@@ -2631,8 +2631,8 @@ def run_v2_signal_analysis():
             buy_record = get_v2_buy_status(ticker)
                         
             # Sig 1: 5m GC (Strict Cross) or Trend Maintenance (Catch-up)
-            is_5m_gc_cross = (prev_ma5_5 <= prev_ma20_5) and (ma5_5 > ma20_5)
-            is_5m_trend_up = (ma5_5 > ma20_5)
+            is_5m_gc_cross = (prev_ma10_5 <= prev_ma30_5) and (ma10_5 > ma30_5)
+            is_5m_trend_up = (ma10_5 > ma30_5)
             
             cond_box = curr_price > box_high
             cond_2pct = (prev_close > 0) and (curr_price > prev_close * 1.02)
@@ -2641,8 +2641,8 @@ def run_v2_signal_analysis():
             # But keeping box check is safer. Let's remove Vol only.
             is_sig2 = cond_2pct # cond_box and cond_2pct (Relaxed)
             
-            is_30m_gc = (prev_ma5_30 <= prev_ma20_30) and (ma5_30 > ma20_30)
-            is_30m_trend_up = (ma5_30 > ma20_30) # [NEW] For Catch-up
+            is_30m_gc = (prev_ma10_30 <= prev_ma30_30) and (ma10_30 > ma30_30)
+            is_30m_trend_up = (ma10_30 > ma30_30) # [NEW] For Catch-up
             
             
             # Check if we can start a new cycle
@@ -2772,8 +2772,8 @@ def run_v2_signal_analysis():
                 manage_id = sell_record['manage_id']
                 
                 # Sig 1: 5m DC
-                is_5m_dc = (prev_ma5_5 >= prev_ma20_5) and (ma5_5 < ma20_5)
-                is_5m_trend_down = (ma5_5 < ma20_5) # [NEW] Catch-up
+                is_5m_dc = (prev_ma10_5 >= prev_ma30_5) and (ma10_5 < ma30_5)
+                is_5m_trend_down = (ma10_5 < ma30_5) # [NEW] Catch-up
 
                 # [FIX] Allow Catch-up for 5m DC
                 if sell_record['sell_sig1_yn'] == 'N' and (is_5m_dc or is_5m_trend_down):
