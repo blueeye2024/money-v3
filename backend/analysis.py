@@ -2031,6 +2031,13 @@ def generate_expert_commentary(ticker, res, tech, regime):
 """
     return final_report.strip()
 
+def get_evaluation_label(score):
+    if score >= 80: return "강력 매수 (Strong Buy)"
+    elif score >= 60: return "매수 관점 (Buy)"
+    elif score >= 40: return "중립/관망 (Hold)"
+    else: return "매도/리스크 관리 (Sell/Risk)"
+
+
 def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None):
     """
     V3.5 Comprehensive Holding Score Algorithm
