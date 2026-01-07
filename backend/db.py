@@ -1917,8 +1917,8 @@ def manual_update_signal(manage_id, signal_key, price, status='Y', ticker=None):
                     # If auto creating sell, we need entry price? 
                     # For now only support auto-create BUY cycle.
                     sql_insert = f"""
-                        INSERT INTO buy_stock (manage_id, ticker, created_at, row_dt, {col_yn}, {col_price}, {col_dt})
-                        VALUES (%s, %s, NOW(), NOW(), %s, %s, NOW())
+                        INSERT INTO buy_stock (manage_id, ticker, row_dt, {col_yn}, {col_price}, {col_dt})
+                        VALUES (%s, %s, NOW(), %s, %s, NOW())
                     """
                     cursor.execute(sql_insert, (manage_id, ticker, status, price))
                     log_history(manage_id, ticker, '수동신호생성', f"Manual Start {signal_key}", price)
