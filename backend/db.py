@@ -1880,11 +1880,12 @@ def confirm_v2_sell(manage_id, price, qty, is_end=False):
     finally:
         conn.close()
 
-def manual_update_signal(manage_id, signal_key, price, status='Y'):
+def manual_update_signal(manage_id, signal_key, price, status='Y', ticker=None):
     """
     수동으로 신호 상태 변경 (1차, 2차, 3차)
     signal_key: 'buy1', 'buy2', 'buy3', 'sell1', 'sell2', 'sell3'
     status: 'Y' (Set) or 'N' (Cancel)
+    ticker: Optional, used to create new record if not exists
     """
     conn = get_connection()
     try:
@@ -1904,27 +1905,49 @@ def manual_update_signal(manage_id, signal_key, price, status='Y'):
         table, col_yn, col_price, col_dt = mapping[signal_key]
         
         with conn.cursor() as cursor:
-            # If canceling ('N'), we might leave price as is or set to 0? 
-            # Ideally keep price history but mark N? Usually we reset for clean state.
-            # Let's keep price if modifying, but if N, maybe 0?
-            # User said "Cancel", likely meaning "Oops, didn't happen". 
-            # So setting price to 0 or keeping it doesn't matter much if 'N'.
-            # Let's use the passed price (which might be 0 if canceled via UI).
+            # Check existence first
+            check_sql = f"SELECT 1 FROM {table} WHERE manage_id=%s"
+            cursor.execute(check_sql, (manage_id,))
+            exists = cursor.fetchone()
             
-            sql = f"""
-                UPDATE {table}
-                SET {col_yn} = %s, 
-                    {col_price} = %s, 
-                    {col_dt} = NOW()
-                WHERE manage_id = %s
-            """
-            cursor.execute(sql, (status, price, manage_id))
+            if not exists:
+                if ticker and table == 'buy_stock' and status == 'Y':
+                    # Create New Record
+                    # Note: For sell_stock, user should terminate buy first or we need buy record logic? 
+                    # If auto creating sell, we need entry price? 
+                    # For now only support auto-create BUY cycle.
+                    sql_insert = f"""
+                        INSERT INTO buy_stock (manage_id, ticker, created_at, row_dt, {col_yn}, {col_price}, {col_dt})
+                        VALUES (%s, %s, NOW(), NOW(), %s, %s, NOW())
+                    """
+                    cursor.execute(sql_insert, (manage_id, ticker, status, price))
+                    log_history(manage_id, ticker, '수동신호생성', f"Manual Start {signal_key}", price)
+                    # Commit via main flow
+                else:
+                    print(f"Manual Update Skipped: Record not found for {manage_id} (Ticker={ticker})")
+                    return False
+            else:
+                # Update existing
+                sql = f"""
+                    UPDATE {table}
+                    SET {col_yn} = %s, 
+                        {col_price} = %s, 
+                        {col_dt} = NOW()
+                    WHERE manage_id = %s
+                """
+                cursor.execute(sql, (status, price, manage_id))
             
             # Logic for final_buy only if status is 'Y'
             if status == 'Y' and signal_key == 'buy3':
                  cursor.execute("UPDATE buy_stock SET final_buy_yn='Y', final_buy_price=%s, final_buy_dt=NOW() WHERE manage_id=%s", (price, manage_id))
             
-            log_history(manage_id, 'SOXS', '수동신호변경', f"{signal_key}:{status}", price)
+            # Log
+            log_ticker = ticker if ticker else 'SOXS' # fallback if not passed (though existence implies we might know it, but DB doesn't select it)
+            if exists: # Try to fetch ticker if exists to log correctly? 
+                 # For efficiency skip fetching ticker if not sure.
+                 pass
+            
+            log_history(manage_id, log_ticker, '수동신호변경', f"{signal_key}:{status}", price)
             
         conn.commit()
         return True

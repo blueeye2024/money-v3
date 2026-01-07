@@ -874,6 +874,7 @@ def api_confirm_sell(data: ConfirmTradeModel):
 
 class ManualSignalModel(BaseModel):
     manage_id: str
+    ticker: str = None # [NEW] Optional ticker for new records
     signal_key: str
     price: float
     status: str = 'Y'
@@ -882,7 +883,7 @@ class ManualSignalModel(BaseModel):
 def api_manual_signal(data: ManualSignalModel):
     from db import manual_update_signal
     try:
-        success = manual_update_signal(data.manage_id, data.signal_key, data.price, data.status)
+        success = manual_update_signal(data.manage_id, data.signal_key, data.price, data.status, data.ticker)
         if success:
             return {"status": "success", "message": "Signal Updated"}
         else:

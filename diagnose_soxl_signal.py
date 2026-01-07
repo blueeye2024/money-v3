@@ -10,7 +10,7 @@ from analysis import fetch_data, calculate_sma
 
 def diagnose_soxl():
     print("=== Diagnosing SOXL 5m Signal Logic ===")
-    ticker = "SOXS"
+    ticker = "SOXL"
     
     # Fetch 5m data
     print(f"Fetching 5m data for {ticker}...")

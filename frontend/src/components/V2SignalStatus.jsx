@@ -160,8 +160,16 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
 
         if (modal.type === 'MANUAL_SIGNAL') {
             endpoint = '/api/v2/manual-signal';
+            // Use existing ID or generate NEW format matching backend standard (Ticker + YYYYMMDD_HHMM)
+            // Or simpler: let user use SOXL_MANUAL + random? 
+            // Better to let backend generate standard ID if missing? 
+            // Or frontend generates: SOXL + timestamp
+            const nowStr = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 12); // YYYYMMDDHHMM
+            const newId = title + nowStr;
+
             payload = {
-                manage_id: activeData?.manage_id || title + 'MANUAL',
+                manage_id: activeData?.manage_id || newId,
+                ticker: title, // Send Ticker Explicitly
                 signal_key: modal.key,
                 price: parseFloat(formData.price),
                 status: 'Y'
@@ -332,7 +340,8 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
                         <div key={idx} style={{ zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', flex: 1 }}>
                             <div
                                 onClick={() => {
-                                    if (!activeData?.manage_id) return Swal.fire('알림', "활성 기록이 없어 수동 신호 등록이 불가능합니다.\n(첫 5분봉 신호는 자동 감지를 기다려주세요)", 'info');
+                                    // [MODIFIED] Allow Manual Signal Start even if no active record
+                                    // if (!activeData?.manage_id) return Swal.fire('알림', "활성 기록이 없어 수동 신호 등록이 불가능합니다.\n(첫 5분봉 신호는 자동 감지를 기다려주세요)", 'info');
                                     setModal({ type: 'MANUAL_SIGNAL', isOpen: true, key: step.rawKey });
                                 }}
                                 style={{
