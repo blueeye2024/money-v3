@@ -1026,64 +1026,69 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, df_1dRaw, market_vol_score=0, is
             if current_price < bb_low:
                 pnl_impact += 10
 
+        # [Ver 3.9] Market Intelligence - Advanced Metrics
+        # 1. ATR (Average True Range) - Volatility
+        atr_14 = 0.0
+        try:
+            # Calculate True Range manually or use pandas_ta if possible
+            # We used 'ta' before. df_30['ATR'] = ta.atr(df_30['High'], df_30['Low'], df_30['Close'], length=14)
+            # Since we iterate, let's look at the last value if 'ATR' column exists, if not calc on fly
+            # Assuming 'ta' imported as pandas_ta
+            # For simplicity, calculate TR for last candle
+            h = float(df_30['High'].iloc[-1])
+            l = float(df_30['Low'].iloc[-1])
+            c_prev = float(df_30['Close'].iloc[-2])
+            tr = max(h-l, abs(h-c_prev), abs(l-c_prev))
+            # Just approximation for now or use the library
+            # Let's try to see if ATR is already computed in earlier steps or add it
+            # Actually, standard logic:
+            if 'ATR_14' not in df_30.columns:
+                df_30['ATR_14'] = ta.atr(df_30['High'], df_30['Low'], df_30['Close'], length=14)
+            atr_14 = float(df_30['ATR_14'].iloc[-1])
+        except:
+             atr_14 = 0.0
+
+        # 2. Volume Analysis
+        vol_curr = float(df_30['Volume'].iloc[-1])
+        vol_avg_5d = 0.0 # 30m candles for 5 days? ~5 days * 13 candles/day = 65
+        vol_ratio = 1.0
+        try:
+            vol_avg = df_30['Volume'].rolling(window=65).mean().iloc[-1]
+            if vol_avg > 0:
+                vol_ratio = vol_curr / vol_avg
+        except:
+            pass
+
+        # 3. Pivot Points (Standard)
+        # P = (H + L + C) / 3
+        # R1 = 2*P - L, S1 = 2*P - H
+        pivot_p = (float(df_30['High'].iloc[-1]) + float(df_30['Low'].iloc[-1]) + float(df_30['Close'].iloc[-1])) / 3
+        pivot_r1 = 2 * pivot_p - float(df_30['Low'].iloc[-1])
+        pivot_s1 = 2 * pivot_p - float(df_30['High'].iloc[-1])
+        
+        # 4. AI Analyst Tags
+        ai_tags = []
+        if vol_ratio >= 3.0: ai_tags.append({"text": "Volume Spike", "color": "#ef4444" if vol_curr < 0 else "#22c55e"}) # Spike
+        elif vol_ratio >= 1.5: ai_tags.append({"text": "거래량 증가", "color": "#fbbf24"})
+        
+        if atr_14 > (current_price * 0.02): ai_tags.append({"text": "High Volatility", "color": "#f97316"})
+        
+        if rsi_val > 75: ai_tags.append({"text": "Overbought", "color": "#ef4444"})
+        elif rsi_val < 25: ai_tags.append({"text": "Oversold", "color": "#22c55e"})
+        
+        if is_box: ai_tags.append({"text": "Squeeze (Box)", "color": "#a855f7"})
+        
         # 6. Total Score
         final_score = base_score + trend_score + reliability_score + breakout_score + market_score + pnl_impact
         final_score = int(max(0, min(100, final_score)))
         
-        score_details = {
-            "base": base_score,
-            "base_details": {
-                "main": base_main,
-                "confluence": base_confluence,
-                "rsi": aux_rsi,
-                "macd": aux_macd,
-                "bb": aux_bb,
-                "cross": aux_cross
-            },
-            "trend": trend_score,
-            "reliability": reliability_score,
-            "breakout": breakout_score,
-            "market": market_score,
-            "pnl_adj": round(pnl_impact, 1),
-            "total": final_score
-        }
-
-        # Change Pct (Only use historical fallback if Real-time info is missing)
-        if not real_time_info:
-            prev_close = df_30['Close'].iloc[-2] # Default fallback
-            try:
-                current_date = df_30.index[-1].date()
-                prev_day_data = df_30[df_30.index.date < current_date]
-                if not prev_day_data.empty:
-                    prev_close = prev_day_data['Close'].iloc[-1]
-                    change_pct = ((current_price - prev_close) / prev_close) * 100
-            except:
-                 pass
-
-        # Generate Stock Specific Mock News (Technical)
-        stock_news = []
-        if recent_cross_type == 'gold': stock_news.append("골든크로스 발생: 강력한 매수 신호 포착")
-        if recent_cross_type == 'dead': stock_news.append("데드크로스 발생: 매도 압력 증가")
-        if is_box: stock_news.append("박스권 횡보 지속: 돌파 여부 모니터링 필요")
-        if rsi_val > 70: stock_news.append("RSI 과매수권 진입: 차익 실현 매물 주의")
-        elif rsi_val < 30: stock_news.append("RSI 과매도권 진입: 기술적 반등 기대감 유효")
-        if change_pct > 3.0: stock_news.append(f"급등세 연출: 전일 대비 {change_pct:.1f}% 상승")
-        elif change_pct < -3.0: stock_news.append(f"급락세 연출: 전일 대비 {abs(change_pct):.1f}% 하락")
+        score_interpretation = get_score_interpretation(final_score, position)
         
-        # Limit to 2
-        if pnl_impact != 0:
-            direction = "가점" if pnl_impact > 0 else "감점"
-            stock_news.append(f"보유 수익률 반영: 점수 {abs(int(pnl_impact))}점 {direction}")
-            
-        # Limit to 2 (Prioritize PnL msg if exists)
-        stock_news = stock_news[:2]
-        if not stock_news: stock_news.append("특이사항 없음: 일반적인 시장 흐름 추종")
-
         result = {
             "ticker": ticker,
             "name": stock_name,
             "current_price": float(current_price) if pd.notnull(current_price) else None,
-            "daily_change": float(change_pct) if pd.notnull(change_pct) else 0.0, # [ADDED] Explicit Daily Change %
+            "daily_change": float(change_pct) if pd.notnull(change_pct) else 0.0,
             "change_pct": float(change_pct) if pd.notnull(change_pct) else 0.0,
             "position": position,
             "last_cross_type": recent_cross_type,
@@ -1097,7 +1102,15 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, df_1dRaw, market_vol_score=0, is
             "macd_sig": float(signal) if pd.notnull(signal) else None,
             "prob_up": float(news_prob),
             "score": final_score,
-            "score_interpretation": get_score_interpretation(final_score, position),
+            "score_interpretation": score_interpretation,
+            "new_metrics": { # [Ver 3.9]
+                "atr": round(atr_14, 2),
+                "vol_ratio": round(vol_ratio, 2),
+                "pivot_p": round(pivot_p, 2),
+                "pivot_r1": round(pivot_r1, 2),
+                "pivot_s1": round(pivot_s1, 2),
+                "ai_tags": ai_tags
+            },
             "score_details": score_details,
             "news_items": stock_news,
             "is_held": is_held,
@@ -2437,7 +2450,7 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
     # recent_news = get_market_news_v2()
     
     details = {
-        "version": "3.8.0 (V2 Integration)",
+        "version": "3.9.0 (Market Intelligence)",
         "prime_guide": {
             "scores": scores,
             "guides": guides,

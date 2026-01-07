@@ -209,7 +209,7 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh }) => {
                             <div style={{ width: '12px', height: '12px', background: '#38bdf8', borderRadius: '50%', boxShadow: '0 0 15px #38bdf8', flexShrink: 0 }} />
                             <h3 style={{ margin: 0, fontSize: '1.4rem', color: '#38bdf8', fontWeight: '900', letterSpacing: '-0.5px', whiteSpace: 'nowrap' }}>청안 Prime Guide : Action Plan</h3>
                         </div>
-                        <div style={{ fontSize: '0.8rem', color: '#64748b', background: '#0f172a', padding: '4px 10px', borderRadius: '20px' }}>V3.8 V2 Integration</div>
+                        <div style={{ fontSize: '0.8rem', color: '#64748b', background: '#0f172a', padding: '4px 10px', borderRadius: '20px' }}>Ver 3.9 Market Intelligence</div>
                     </div>
 
                     {/* Dual Guide Layout */}
@@ -271,31 +271,54 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh }) => {
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '20px' }}>
                             {['UPRO', 'SOXL', 'SOXS'].map(ticker => {
                                 const guideData = regimeDetails?.prime_guide || {};
-                                const scoreObj = guideData.scores?.[ticker] || { score: 0, breakdown: {} };
+                                const scoreObj = guideData.scores?.[ticker] || { score: 0, breakdown: {}, new_metrics: {} };
                                 const tech = guideData.tech_summary?.[ticker] || {};
                                 const comment = guideData.tech_comments?.[ticker] || "-";
+                                const metrics = scoreObj.new_metrics || {};
 
                                 const color = ticker === 'SOXL' ? '#06b6d4' : ticker === 'SOXS' ? '#a855f7' : '#f59e0b';
 
                                 return (
                                     <div key={ticker} style={{ background: 'rgba(255,255,255,0.03)', padding: '15px', borderRadius: '12px', border: `1px solid ${color}22` }}>
+                                        {/* Header */}
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                                             <span style={{ fontWeight: 'bold', color: color, fontSize: '1rem' }}>{ticker}</span>
-                                            <span style={{ fontWeight: 'bold', color: 'white', fontSize: '1.1rem' }}>{scoreObj.score} <span style={{ fontSize: '0.7rem', color: '#888' }}>점</span></span>
+                                            <span style={{ fontWeight: 'bold', color: 'white', fontSize: '1.1rem' }}>{scoreObj.score} <span style={{ fontSize: '0.7rem', color: '#888' }}>pt</span></span>
                                         </div>
 
-                                        {/* Evaluation Summary */}
-                                        <div style={{ fontSize: '0.8rem', color: '#e2e8f0', background: 'rgba(0,0,0,0.3)', padding: '8px', borderRadius: '6px', marginBottom: '12px', textAlign: 'center', fontWeight: 'bold' }}>
-                                            {scoreObj.evaluation || "-"}
+                                        {/* AI Tags */}
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '10px' }}>
+                                            {(metrics.ai_tags || []).length > 0 ? (
+                                                metrics.ai_tags.map((tag, i) => (
+                                                    <span key={i} style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: `${tag.color}22`, color: tag.color, border: `1px solid ${tag.color}44` }}>
+                                                        {tag.text}
+                                                    </span>
+                                                ))
+                                            ) : (
+                                                <span style={{ fontSize: '0.65rem', color: '#666' }}>No Tags</span>
+                                            )}
                                         </div>
 
-                                        {/* Tech Summary (2 decimals) */}
-                                        <div style={{ fontSize: '0.8rem', color: '#aaa' }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>RSI(14)</span> <span style={{ color: 'white' }}>{Number(tech.rsi || 0).toFixed(2)}</span></div>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>MACD</span> <span style={{ color: 'white' }}>{Number(tech.macd || 0).toFixed(2)}</span></div>
-                                            <div style={{ marginTop: '6px', fontSize: '0.75rem', color: color, lineHeight: '1.3', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '4px' }}>
-                                                "{comment}"
+                                        {/* Quantitative Metrics Grid */}
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.75rem', marginBottom: '10px', background: 'rgba(0,0,0,0.2)', padding: '8px', borderRadius: '8px' }}>
+                                            <div style={{ color: '#aaa' }}>RSI(14)</div>
+                                            <div style={{ textAlign: 'right', color: (tech.rsi > 70 || tech.rsi < 30) ? '#facc15' : 'white' }}>{Number(tech.rsi || 0).toFixed(1)}</div>
+
+                                            <div style={{ color: '#aaa' }}>Vol Ratio</div>
+                                            <div style={{ textAlign: 'right', color: metrics.vol_ratio > 1.5 ? '#facc15' : 'white' }}>
+                                                {metrics.vol_ratio ? `${metrics.vol_ratio}x` : '-'}
                                             </div>
+
+                                            <div style={{ color: '#aaa' }}>ATR (Vol)</div>
+                                            <div style={{ textAlign: 'right', color: '#fff' }}>{metrics.atr || '-'}</div>
+
+                                            <div style={{ color: '#aaa' }}>Pivot R1</div>
+                                            <div style={{ textAlign: 'right', color: '#f87171' }}>{metrics.pivot_r1 || '-'}</div>
+                                        </div>
+
+                                        {/* Tech Comment */}
+                                        <div style={{ marginTop: '6px', fontSize: '0.75rem', color: '#94a3b8', lineHeight: '1.3', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '6px' }}>
+                                            "{comment}"
                                         </div>
                                     </div>
                                 )
