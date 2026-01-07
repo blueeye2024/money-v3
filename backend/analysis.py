@@ -1129,15 +1129,26 @@ def generate_trade_guidelines(results, market_data, regime_info, total_capital=1
         strategy_summary = "자산 방어 및 현금 대기 (AAAU/GOOGL/현금50%)"
     
     # Calculate Capital Status
+    # Calculate Capital Status
     current_holdings_value = 0.0
-    for ticker, info in held_tickers.items():
+    
+    # Adapter: Handle List of Dicts (Merged DB) or Dict (Legacy)
+    iterator = []
+    if isinstance(held_tickers, list):
+         iterator = [(h['ticker'], h) for h in held_tickers]
+    elif isinstance(held_tickers, dict):
+         iterator = held_tickers.items()
+
+    for ticker, info in iterator:
         curr_price = info.get('avg_price', 0)
         # Find current price in results
         for r in results:
             if r['ticker'] == ticker:
                 curr_price = r.get('current_price', 0)
                 break
-        current_holdings_value += (info['qty'] * curr_price)
+        
+        qty = info.get('qty', 0)
+        current_holdings_value += (qty * curr_price)
         
     cash_balance = total_capital - current_holdings_value
     

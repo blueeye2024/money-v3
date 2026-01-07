@@ -541,29 +541,9 @@ def delete_stock(code):
         conn.close()
 
 # --- Journal Transactions ---
-def add_transaction(data):
-    conn = get_connection()
-    try:
-        with conn.cursor() as cursor:
-            sql = """
-            INSERT INTO journal_transactions (ticker, trade_type, qty, price, trade_date, memo)
-            VALUES (%s, %s, %s, %s, %s, %s)
-            """
-            cursor.execute(sql, (
-                data['ticker'],
-                data['trade_type'],
-                data['qty'],
-                data['price'],
-                data['trade_date'],
-                data.get('memo', '')
-            ))
-        conn.commit()
-        return True
-    except Exception as e:
-        print(f"Add Transaction Error: {e}")
-        return False
-    finally:
-        conn.close()
+# Transaction Functions (Refactored to Holdings)
+# add_transaction removed as journal_transactions table is dropped.
+# Use update_holding instead.
 
 # 3. Journal Transactions (Merged into managed_stocks, table dropped)
             # sql_journal = ... (Deleted)
@@ -630,7 +610,11 @@ def update_holding(ticker, qty_change, price, memo=None):
         conn.close()
 
 # Legacy aliases for compatibility (if needed temporarily)
+# Legacy aliases for compatibility (if needed temporarily)
 def get_transactions():
+    return get_holdings()
+
+def get_current_holdings():
     return get_holdings()
 
 def add_transaction(ticker, trade_type, qty, price, trade_date, memo):
