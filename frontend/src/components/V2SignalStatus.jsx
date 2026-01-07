@@ -565,8 +565,8 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
                             )}
 
                             {/* Action Buttons */}
-                            <div style={{ display: 'grid', gridTemplateColumns: (modal.type === 'SELL' || modal.type === 'SET_TARGET') ? '1fr 1fr' : '1fr 1fr', gap: '8px' }}>
-                                {/* Left Button: Save or Confirm */}
+                            <div style={{ display: 'grid', gridTemplateColumns: (modal.type === 'MANUAL_SIGNAL') ? '1fr 1fr 1fr' : (modal.type === 'SELL' || modal.type === 'SET_TARGET') ? '1fr 1fr' : '1fr 1fr', gap: '8px' }}>
+                                {/* Left Button: Save or Confirm (Hide during Manual Signal or Sell or SetTarget) */}
                                 {modal.type !== 'MANUAL_SIGNAL' && modal.type !== 'SELL' && modal.type !== 'SET_TARGET' && (
                                     <button
                                         onClick={() => handleConfirm(false)}
@@ -583,6 +583,16 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
                                         style={{ padding: '12px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '0.9rem', cursor: 'pointer' }}
                                     >
                                         저장 (Save)
+                                    </button>
+                                )}
+
+                                {/* Manual Signal Confirm Button (NEW) */}
+                                {modal.type === 'MANUAL_SIGNAL' && (
+                                    <button
+                                        onClick={() => handleConfirm(false)}
+                                        style={{ padding: '12px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '0.9rem', cursor: 'pointer' }}
+                                    >
+                                        신호 발생
                                     </button>
                                 )}
 
