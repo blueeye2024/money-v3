@@ -10,7 +10,7 @@ const JournalPage = () => {
     const [showForm, setShowForm] = useState(false);
     const [showStockManager, setShowStockManager] = useState(false);
     const [loading, setLoading] = useState(true);
-    const [stockForm, setStockForm] = useState({ code: '', name: '' });
+    const [stockForm, setStockForm] = useState({ code: '', name: '', is_active: true });
     const [form, setForm] = useState({ ticker: '', qty: 1, price: '' });
     const [editingId, setEditingId] = useState(null); // Used as Ticker in editing mode
     const [updatingPrices, setUpdatingPrices] = useState(false);
@@ -210,7 +210,7 @@ const JournalPage = () => {
         e.preventDefault();
         try {
             await axios.post('/api/stocks', stockForm);
-            setStockForm({ code: '', name: '' });
+            setStockForm({ code: '', name: '', is_active: true });
             fetchStocks();
         } catch (e) { alert('추가 실패'); }
     };
@@ -328,19 +328,33 @@ const JournalPage = () => {
             {showStockManager && (
                 <div className="section-panel">
                     <h2 style={{ fontSize: '1.5rem', fontWeight: '700', marginBottom: '1.5rem', color: '#1e3a8a' }}>종목 관리</h2>
-                    <form onSubmit={handleAddStock} style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
-                        <input className="form-input" type="text" value={stockForm.code} onChange={(e) => setStockForm({ code: e.target.value.toUpperCase(), name: e.target.value.toUpperCase() })} placeholder="종목 코드 (예: SOXL)" required style={{ flex: 1 }} />
-                        <input className="form-input" type="text" value={stockForm.name} readOnly placeholder="종목명 (티커와 동일)" style={{ flex: 1, background: '#e8e8ed', color: '#666' }} />
-                        <button type="submit" className="btn-update" style={{ justifyContent: 'center' }}>추가</button>
+                    <form onSubmit={handleAddStock} style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <div style={{ flex: 1, minWidth: '120px' }}>
+                            <input className="form-input" type="text" value={stockForm.code} onChange={(e) => setStockForm({ ...stockForm, code: e.target.value.toUpperCase(), name: stockForm.name || e.target.value.toUpperCase() })} placeholder="종목 코드 (예: SOXL)" required style={{ width: '100%' }} />
+                        </div>
+                        <div style={{ flex: 1.5, minWidth: '150px' }}>
+                            <input className="form-input" type="text" value={stockForm.name} onChange={(e) => setStockForm({ ...stockForm, name: e.target.value })} placeholder="종목명" style={{ width: '100%' }} />
+                        </div>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', background: 'rgba(255,255,255,0.5)', padding: '0.5rem 1rem', borderRadius: '8px' }}>
+                            <input type="checkbox" checked={stockForm.is_active !== false} onChange={(e) => setStockForm({ ...stockForm, is_active: e.target.checked })} />
+                            <span style={{ fontSize: '0.9rem', fontWeight: '600', color: '#1d1d1f' }}>거래 중 (Active)</span>
+                        </label>
+                        <button type="submit" className="btn-update" style={{ justifyContent: 'center', minWidth: '80px' }}>{stockForm.code && stocks.find(s => s.code === stockForm.code) ? '수정' : '추가'}</button>
                     </form>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '1rem' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '1rem' }}>
                         {stocks.map(stock => (
-                            <div key={stock.code} style={{ background: '#f5f5f7', padding: '1rem', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <div>
-                                    <div style={{ fontWeight: '700', fontSize: '1.1rem', color: '#1d1d1f' }}>{stock.code}</div>
-                                    <div style={{ fontSize: '0.85rem', color: '#8e8e93' }}>{stock.name}</div>
+                            <div key={stock.code} style={{ background: stock.is_active ? '#f5f5f7' : '#e5e5ea', padding: '1rem', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: stock.is_active ? 1 : 0.7 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: stock.is_active ? '#34c759' : '#8e8e93' }}></div>
+                                    <div>
+                                        <div style={{ fontWeight: '700', fontSize: '1.1rem', color: '#1d1d1f' }}>{stock.code}</div>
+                                        <div style={{ fontSize: '0.85rem', color: '#8e8e93' }}>{stock.name}</div>
+                                    </div>
                                 </div>
-                                <button onClick={() => handleDeleteStock(stock.code)} style={{ background: 'transparent', border: 'none', color: '#ff3b30', cursor: 'pointer', fontSize: '1.2rem', padding: '0.25rem' }}>×</button>
+                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                    <button onClick={() => setStockForm({ code: stock.code, name: stock.name, is_active: stock.is_active })} style={{ background: 'transparent', border: 'none', color: '#007aff', cursor: 'pointer', fontSize: '0.9rem', fontWeight: '600' }}>수정</button>
+                                    <button onClick={() => handleDeleteStock(stock.code)} style={{ background: 'transparent', border: 'none', color: '#ff3b30', cursor: 'pointer', fontSize: '1.2rem', padding: '0 0.25rem' }}>×</button>
+                                </div>
                             </div>
                         ))}
                     </div>

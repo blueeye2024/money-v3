@@ -499,29 +499,33 @@ def check_recent_sms_log(stock_name, signal_type, timeframe_minutes=30):
 
 # --- Stock Management ---
 def get_stocks():
-    """종목 목록 조회 (현재가 포함)"""
+    """종목 목록 조회 (관리용, 모든 상태 반환)"""
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
             cursor.execute("""
-                SELECT ticker as code, name, current_price, price_updated_at, is_market_open 
+                SELECT ticker as code, name, current_price, price_updated_at, is_market_open, is_active
                 FROM managed_stocks 
-                WHERE is_active = TRUE
                 ORDER BY ticker ASC
             """)
             rows = cursor.fetchall()
-            
-            # DictCursor이므로 딕셔너리 리스트 반환
-            # ticker를 code로 alias하여 기존 프론트엔드 호환성 유지
             return rows
     finally:
         conn.close()
 
-def add_stock(code, name):
+def add_stock(code, name, is_active=True):
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
-            cursor.execute("INSERT INTO stocks (code, name) VALUES (%s, %s)", (code, name))
+            # managed_stocks에 추가 (이미 존재하면 is_active 업데이트)
+            sql = """
+            INSERT INTO managed_stocks (ticker, name, is_active) 
+            VALUES (%s, %s, %s)
+            ON DUPLICATE KEY UPDATE 
+                name = VALUES(name),
+                is_active = VALUES(is_active)
+            """
+            cursor.execute(sql, (code, name, is_active))
         conn.commit()
         return True
     except Exception as e:
@@ -530,13 +534,29 @@ def add_stock(code, name):
     finally:
         conn.close()
 
+def update_stock_status(code, is_active):
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("UPDATE managed_stocks SET is_active=%s WHERE ticker=%s", (is_active, code))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Update Stock Status Error: {e}")
+        return False
+    finally:
+        conn.close()
+
 def delete_stock(code):
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
-            cursor.execute("DELETE FROM stocks WHERE code=%s", (code,))
+            cursor.execute("DELETE FROM managed_stocks WHERE ticker=%s", (code,))
         conn.commit()
         return True
+    except Exception as e:
+        print(f"Delete Stock Error: {e}")
+        return False
     finally:
         conn.close()
 

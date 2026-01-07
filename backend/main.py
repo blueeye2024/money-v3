@@ -15,7 +15,7 @@ ALGORITHM = "HS256"
 
 from analysis import run_analysis, fetch_data, analyze_ticker, TARGET_TICKERS
 from sms import send_sms
-from db import init_db, save_signal, check_last_signal, get_stocks, add_stock, delete_stock, add_transaction, get_transactions, update_transaction, delete_transaction, get_signals, save_sms_log, get_sms_logs, delete_all_signals, delete_sms_log, delete_all_sms_logs, get_ticker_settings, update_ticker_setting
+from db import init_db, save_signal, check_last_signal, get_stocks, add_stock, delete_stock, add_transaction, get_transactions, update_transaction, delete_transaction, get_signals, save_sms_log, get_sms_logs, delete_all_signals, delete_sms_log, delete_all_sms_logs, get_ticker_settings, update_ticker_setting, update_stock_status
 
 app = FastAPI()
 
@@ -562,6 +562,7 @@ def api_delete_sms_log(id: int):
 class StockModel(BaseModel):
     code: str
     name: str
+    is_active: bool = True
 
 @app.get("/api/stocks")
 def api_get_stocks():
@@ -569,7 +570,16 @@ def api_get_stocks():
 
 @app.post("/api/stocks")
 def api_add_stock(stock: StockModel):
-    if add_stock(stock.code, stock.name):
+    if add_stock(stock.code, stock.name, stock.is_active):
+        return {"status": "success"}
+    return {"status": "error"}
+
+class StockStatusModel(BaseModel):
+    is_active: bool
+
+@app.put("/api/stocks/{code}/status")
+def api_update_stock_status(code: str, status: StockStatusModel):
+    if update_stock_status(code, status.is_active):
         return {"status": "success"}
     return {"status": "error"}
 
