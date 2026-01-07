@@ -1642,11 +1642,18 @@ def check_triple_filter(ticker, data_30m, data_5m):
         change_pct = result.get("daily_change", 0)
         
         # Explicit Force Update for Signal 2 if Breakout
+        # DEBUG PRINTS
+        print(f"DEBUG: Ticker={ticker}, Filter2Met={filter2_met}, ManageID={manage_id}, IsBreakout={is_breakout}, ChangePct={change_pct}")
+        
         if filter2_met: # Calculated above
              if not state.get("buy_sig2_yn") == 'Y':
                  state["buy_sig2_yn"] = 'Y'
+                 print(f"DEBUG: Attempting to SAVE Sig2 for {manage_id}")
                  if manage_id and save_v2_buy_signal:
-                     save_v2_buy_signal(manage_id, 'sig2', current_price)
+                     res = save_v2_buy_signal(manage_id, 'sig2', current_price)
+                     print(f"DEBUG: Save Result = {res}")
+                 else:
+                     print("DEBUG: Save Failed - Missing ManageID or Function")
 
         if change_pct >= 2:
             result["step2"] = True
@@ -2625,8 +2632,10 @@ def run_v2_signal_analysis():
             
             cond_box = curr_price > box_high
             cond_2pct = (prev_close > 0) and (curr_price > prev_close * 1.02)
-            cond_vol = (curr_vol_ma_30 > 0) and (curr_vol_30 > curr_vol_ma_30 * 1.5)
-            is_sig2 = cond_box and cond_2pct and cond_vol
+            # cond_vol = (curr_vol_ma_30 > 0) and (curr_vol_30 > curr_vol_ma_30 * 1.5)
+            # [FIX] Align with Dashboard: Remove strict volume/box requirement, prioritize 2% gain
+            # But keeping box check is safer. Let's remove Vol only.
+            is_sig2 = cond_2pct # cond_box and cond_2pct (Relaxed)
             
             is_30m_gc = (prev_ma10_30 <= prev_ma30_30) and (ma10_30 > ma30_30)
             
@@ -2671,7 +2680,7 @@ def run_v2_signal_analysis():
                     kst_now = datetime.now(timezone.utc).astimezone(pytz.timezone('Asia/Seoul'))
                     manage_id = f"{ticker}{kst_now.strftime('%Y%m%d_%H%M')}"
                     
-                    if save_v2_buy_signal(manage_id, ticker, 'sig1', curr_price):
+                    if save_v2_buy_signal(manage_id, 'sig1', curr_price):
                         msg_type = "5분봉 GC" if is_5m_gc_cross else "5분봉 상승추세(Catch-up)"
                         print(f"🚀 {ticker} V2 Buy Signal 1 Detect! ({msg_type}) Started {manage_id}")
                         log_history(manage_id, ticker, "1차매수신호", msg_type, curr_price)
@@ -2687,14 +2696,14 @@ def run_v2_signal_analysis():
                 
                 # Check Sig 2
                 if buy_record['buy_sig2_yn'] == 'N' and is_sig2:
-                    if save_v2_buy_signal(manage_id, ticker, 'sig2', curr_price):
+                    if save_v2_buy_signal(manage_id, 'sig2', curr_price):
                         print(f"🚀 {ticker} V2 Buy Signal 2 (Box+2%) Detected!")
                         log_history(manage_id, ticker, "2차매수신호", "Box+2%+Vol", curr_price)
                         send_sms(f"[청안V2] {ticker} 2차매수(박스권) 발생\n가격:{curr_price}")
                         
                 # Check Sig 3
                 if buy_record['buy_sig3_yn'] == 'N' and is_30m_gc:
-                     if save_v2_buy_signal(manage_id, ticker, 'sig3', curr_price):
+                     if save_v2_buy_signal(manage_id, 'sig3', curr_price):
                         print(f"🚀 {ticker} V2 Buy Signal 3 (30m GC) Detected!")
                         log_history(manage_id, ticker, "3차매수신호", "30분봉 GC", curr_price)
                         send_sms(f"[청안V2] {ticker} 3차매수(30분봉) 발생\n가격:{curr_price}")
