@@ -116,6 +116,36 @@ code {
   gap: 1.5rem;
 }
 
+/* Responsive Grids */
+.responsive-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.responsive-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.responsive-grid-2-1 {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 24px;
+}
+
+@media (max-width: 768px) {
+
+  .responsive-grid-3,
+  .responsive-grid-2,
+  .responsive-grid-2-1 {
+    grid-template-columns: 1fr !important;
+    gap: 15px !important;
+  }
+}
+
+
 /* Touch Targets & Optimization */
 button,
 .nav-link,
@@ -230,6 +260,7 @@ header h1 {
     font-size: 0.85rem;
   }
 }
+
 /* --- Asset Management Page (Glassmorphism) --- */
 .page-container {
   max-width: 1200px;
@@ -284,8 +315,8 @@ header h1 {
 
 .card-blue {
   background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 50%, #93c5fd 100%);
-  box-shadow: 0 4px 20px rgba(59,130,246,0.2);
-  border: 1px solid rgba(147,197,253,0.3);
+  box-shadow: 0 4px 20px rgba(59, 130, 246, 0.2);
+  border: 1px solid rgba(147, 197, 253, 0.3);
   color: #1e3a8a;
 }
 
@@ -315,7 +346,7 @@ header h1 {
 }
 
 .glass-input {
-  background: rgba(255,255,255,0.2);
+  background: rgba(255, 255, 255, 0.2);
   border: none;
   color: inherit;
   padding: 0.5rem;
@@ -327,11 +358,11 @@ header h1 {
 }
 
 .glass-input:focus {
-  background: rgba(255,255,255,0.3);
+  background: rgba(255, 255, 255, 0.3);
 }
 
 .glass-btn {
-  background: rgba(255,255,255,0.25);
+  background: rgba(255, 255, 255, 0.25);
   backdrop-filter: blur(5px);
   border: none;
   color: white;
@@ -344,7 +375,7 @@ header h1 {
 }
 
 .glass-btn:hover {
-  background: rgba(255,255,255,0.35);
+  background: rgba(255, 255, 255, 0.35);
 }
 
 .action-bar {
@@ -388,7 +419,7 @@ header h1 {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  box-shadow: 0 4px 12px rgba(59,130,246,0.3);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
 }
 
 .section-panel {
@@ -396,8 +427,8 @@ header h1 {
   border-radius: 20px;
   padding: 2rem;
   margin-bottom: 2rem;
-  box-shadow: 0 4px 20px rgba(59,130,246,0.2);
-  border: 1px solid rgba(147,197,253,0.3);
+  box-shadow: 0 4px 20px rgba(59, 130, 246, 0.2);
+  border: 1px solid rgba(147, 197, 253, 0.3);
   animation: slideDown 0.3s ease;
 }
 
@@ -428,7 +459,7 @@ header h1 {
   font-weight: 600;
   color: #1e40af;
   text-transform: uppercase;
-  background: rgba(59,130,246,0.15);
+  background: rgba(59, 130, 246, 0.15);
 }
 
 .data-table th:first-child {
@@ -438,7 +469,7 @@ header h1 {
 .data-table td {
   padding: 1.25rem 1.5rem;
   text-align: right;
-  border-bottom: 1px solid rgba(59,130,246,0.15);
+  border-bottom: 1px solid rgba(59, 130, 246, 0.15);
   font-size: 0.95rem;
 }
 
@@ -447,15 +478,28 @@ header h1 {
 }
 
 .data-table tr:hover {
-  background: rgba(59,130,246,0.08);
+  background: rgba(59, 130, 246, 0.08);
 }
 
 /* Animations */
 @keyframes slideDown {
-  from { opacity: 0; transform: translateY(-20px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
+
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }

@@ -2018,30 +2018,38 @@ def generate_expert_commentary(ticker, res, tech, regime):
 """
     return final_report.strip()
 
-def calculate_holding_score(res, tech):
+def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None):
     """
     V3.5 Comprehensive Holding Score Algorithm
     Weight: Cheongan Index (60%) + Tech/Risk (40%)
+    [V3.8] Integrated with V2 Signal System
     """
     if not res: return {"score": 0, "breakdown": {}, "evaluation": "데이터 부족"}
 
     score = 0
     breakdown = {"cheongan": 0, "tech": 0, "penalty": 0}
     
+    # Check V2 Status
+    is_v2_holding = v2_buy and v2_buy.get('final_buy_yn') == 'Y'
+    is_v2_sell_active = v2_sell and v2_sell.get('final_sell_yn') == 'N' # Selling phase started but not finished
+    
     # ----------------------------------------
     # 1. Cheongan Index (Max 60)
     # ----------------------------------------
     cheongan_score = 0
     # A. Trend (30분봉 정배열) - 30점
-    if res.get('step1'): 
+    # [V3.8] Trust V2 Signal if Active
+    if res.get('step1') or (v2_buy and v2_buy.get('buy_sig3_yn') == 'Y'): 
         cheongan_score += 30
     
     # B. Timing (5분봉 진입) - 20점
-    if res.get('step3'): 
+    # [V3.8] Trust V2 Signal if Active
+    if res.get('step3') or (v2_buy and v2_buy.get('buy_sig1_yn') == 'Y'): 
         cheongan_score += 20
         
     # C. Momentum (박스권/수급) - 10점
-    if res.get('step2'): 
+    # [V3.8] Trust V2 Signal if Active
+    if res.get('step2') or (v2_buy and v2_buy.get('buy_sig2_yn') == 'Y'): 
         cheongan_score += 10
     elif res.get('daily_change', 0) > 2.0:
         cheongan_score += 5 # 수급 대체 점수
@@ -2082,7 +2090,21 @@ def calculate_holding_score(res, tech):
     if res.get('step3_color') == 'yellow': penalty += 15
     if res.get('step2_color') == 'orange': penalty += 30
     
+    # [V3.8] V2 Sell Signal Penalty
+    if v2_sell:
+        if v2_sell.get('sell_sig1_yn') == 'Y': penalty += 15 # 5m DC
+        if v2_sell.get('sell_sig3_yn') == 'Y': penalty += 30 # 30m DC (Major Exit)
+
     score = max(0, min(100, score - penalty))
+    
+    # [V3.8] Holding Boost (존버 모드)
+    # If we are officially holding via V2 System, minimum score floor.
+    if is_v2_holding:
+        if penalty == 0:
+            score = max(score, 85) # Holding w/o warning -> Strong Buy state
+        else:
+            score = max(score, 45) # Holding w/ warning -> At least Hold state
+
     breakdown['penalty'] = penalty
 
     # Evaluation Tag
@@ -2093,32 +2115,52 @@ def calculate_holding_score(res, tech):
     
     return {"score": score, "breakdown": breakdown, "evaluation": evaluation}
 
-def generate_expert_commentary_v2(ticker, score_data, res, tech, regime):
+def generate_expert_commentary_v2(ticker, score_data, res, tech, regime, v2_buy=None, v2_sell=None):
     score = score_data['score']
     breakdown = score_data['breakdown']
     rsi = tech.get('rsi', 0)
     
+    # V2 Status
+    is_v2_active = v2_buy and v2_buy.get('final_buy_yn') == 'Y'
+    v2_stage = ""
+    if v2_buy:
+        if v2_buy.get('buy_sig3_yn') == 'Y': v2_stage = "3차 진입완료"
+        elif v2_buy.get('buy_sig2_yn') == 'Y': v2_stage = "2차 진입완료"
+        elif v2_buy.get('buy_sig1_yn') == 'Y': v2_stage = "1차 진입완료"
+        
     # Header
-    comment = f"[{score_data['evaluation']}] 현재 점수 {score}점\n\n"
+    comment = f"[{score_data['evaluation']}] 현재 점수 {score}점"
+    if is_v2_active:
+        comment += f" (V2 {v2_stage} 보유중)"
+    comment += "\n\n"
     
     # Analysis
     if score >= 80:
-        comment += f"🚀 [핵심 분석] 30분봉 추세와 5분봉 타점이 완벽하게 일치합니다. 청안 지수({breakdown['cheongan']}/60)가 만점에 가까우며, RSI({rsi:.1f}) 또한 안정적인 상승 구간에 위치해 추가 상승 여력이 충분합니다.\n"
-        comment += "💡 [전략] 비중을 적극 확대하되, 전고점 돌파 여부를 주시하십시오."
+        comment += f"🚀 [핵심 분석] "
+        if is_v2_active: comment += f"V2 시스템이 강력한 상승 추세를 타고 있습니다({v2_stage}). "
+        comment += f"청안 지수({breakdown['cheongan']}/60)가 견고하며, RSI({rsi:.1f}) 또한 이상적입니다.\n"
+        comment += "💡 [전략] 수익을 극대화(Let profits run)하십시오. 섣부른 매도보다 추세 끝까지 동행하는 것이 유리합니다."
     elif score >= 60:
-        comment += f"✅ [핵심 분석] 상승 추세는 유효하나, 일부 감점 요인이 있습니다(청안 {breakdown['cheongan']}/60, Tech {breakdown['tech']}/40). RSI나 MACD 중 하나가 조정을 받고 있을 수 있습니다.\n"
-        comment += "💡 [전략] 분할 매수로 접근하며, 확실한 거래량 동반 시 추가 진입하십시오."
+        comment += f"✅ [핵심 분석] "
+        if is_v2_active: comment += f"보유 포지션은 안정적입니다. "
+        comment += f"다만 일부 기술적 조정 가능성이 있습니다(Tech {breakdown['tech']}/40). RSI 과열 여부를 체크하십시오.\n"
+        comment += "💡 [전략] 신규 진입은 분할로 접근하고, 기존 보유자는 홀딩 관점을 유지하십시오."
     elif score >= 40:
-        missing = []
-        if not res.get('step1'): missing.append("30분 추세 역배열")
-        if not res.get('step3'): missing.append("5분 진입신호 부재")
-        
-        comment += f"⏳ [핵심 분석] 현재 진입 근거가 다소 부족합니다({', '.join(missing)}). 기술적 지표 점수({breakdown['tech']}점)만으로는 추세 전환을 확신하기 어렵습니다.\n"
-        comment += "💡 [전략] 현금 비중을 유지하며 '청안 지수' 항목이 개선될 때까지 기다리십시오."
+        comment += f"⏳ [핵심 분석] "
+        if is_v2_active: 
+            comment += f"현재 보유 중이나 위험 신호가 감지되었습니다(감점 -{breakdown['penalty']}점). "
+        else:
+            comment += f"신규 진입 근거가 약합니다. V2 신호가 켜질 때까지 기다리는 것이 좋습니다. "
+        comment += f"기술적 지표가 중립적입니다.\n"
+        comment += "💡 [전략] 현금 비중을 50% 이상 유지하며 다음 V2 신호를 기다리십시오."
     else:
-        reason = "단기 추세 붕괴" if breakdown['penalty'] > 0 else "하락 추세 지속"
-        comment += f"⚠️ [핵심 분석] {reason}로 인해 리스크가 높습니다. (패널티 적용: -{breakdown['penalty']}점). 현재 자리는 매수보다 리스크 관리가 최우선입니다.\n"
-        comment += "💡 [전략] 보유 물량 축소 및 관망을 권장합니다."
+        comment += f"⚠️ [핵심 분석] "
+        if is_v2_active:
+             comment += f"보유 포지션에 대한 청산 신호가 발생했을 수 있습니다! "
+        else:
+             comment += f"하락 추세가 지배적입니다. "
+        comment += f"(패널티 -{breakdown['penalty']}점). 리스크 관리가 최우선입니다.\n"
+        comment += "💡 [전략] 적극적인 비중 축소 또는 전량 청산을 권장합니다."
         
     return comment
 
@@ -2154,6 +2196,95 @@ def get_filtered_history_v2():
         filtered.append(sig)
     
     return filtered[:20] # Return top 20
+
+
+def get_cross_history(df_30, df_5):
+    history = {
+        "gold_30m": [],
+        "dead_5m": [],
+        "gold_5m": []
+    }
+    
+    tz_kr = pytz.timezone('Asia/Seoul')
+    tz_ny = pytz.timezone('America/New_York')
+    
+    # helper
+    def fmt_time(dt):
+        if dt.tzinfo is None: 
+            # DB & YFinance data is naive NY Time. Localize it correctly.
+            try:
+                dt = tz_ny.localize(dt)
+            except:
+                dt = dt.replace(tzinfo=tz_ny)
+        return {
+            "kr": dt.astimezone(tz_kr).strftime('%m-%d %H:%M'),
+            "ny": dt.astimezone(tz_ny).strftime('%m-%d %H:%M')
+        }
+
+    # 1. 30m Golden Crosses
+    if df_30 is not None and not df_30.empty and len(df_30) > 30:
+        d30 = df_30.copy()
+        d30 = d30[~d30.index.duplicated(keep='last')]
+        d30['SMA10'] = ta.sma(d30['Close'], length=10)
+        d30['SMA30'] = ta.sma(d30['Close'], length=30)
+        
+        # Look back deeper
+        scan_depth = len(d30) - 1
+        for i in range(len(d30)-1, 1, -1): 
+            if i < 1: break
+            c_10 = d30['SMA10'].iloc[i]
+            c_30 = d30['SMA30'].iloc[i]
+            p_10 = d30['SMA10'].iloc[i-1]
+            p_30 = d30['SMA30'].iloc[i-1]
+            
+            # Gold Cross
+            if p_10 <= p_30 and c_10 > c_30:
+                t = fmt_time(d30.index[i])
+                history["gold_30m"].append({
+                    "time_kr": t["kr"], "time_ny": t["ny"],
+                    "price": f"{float(d30['Close'].iloc[i]):.2f}",
+                    "type": "골든크로스 (30분)"
+                })
+    
+    # 2. 5m Crosses
+    if df_5 is not None and not df_5.empty and len(df_5) > 30:
+        d5 = df_5.copy()
+        d5 = d5[~d5.index.duplicated(keep='last')]
+        d5['SMA10'] = ta.sma(d5['Close'], length=10)
+        d5['SMA30'] = ta.sma(d5['Close'], length=30)
+        
+        # Look back deeper
+        scan_depth = len(d5) - 1
+        for i in range(len(d5)-1, 1, -1): 
+            if i < 1: break
+            c_10 = d5['SMA10'].iloc[i]
+            c_30 = d5['SMA30'].iloc[i]
+            p_10 = d5['SMA10'].iloc[i-1]
+            p_30 = d5['SMA30'].iloc[i-1]
+            
+            # Dead Cross
+            if p_10 >= p_30 and c_10 < c_30:
+                t = fmt_time(d5.index[i])
+                history["dead_5m"].append({
+                    "time_kr": t["kr"], "time_ny": t["ny"],
+                    "price": f"{float(d5['Close'].iloc[i]):.2f}",
+                    "type": "데드크로스 (5분)"
+                })
+            # Gold Cross
+            elif p_10 <= p_30 and c_10 > c_30:
+                t = fmt_time(d5.index[i])
+                history["gold_5m"].append({
+                    "time_kr": t["kr"], "time_ny": t["ny"],
+                    "price": f"{float(d5['Close'].iloc[i]):.2f}",
+                    "type": "골든크로스 (5분)"
+                })
+
+    # Limit to latest 1 (User Request)
+    history["gold_30m"] = history["gold_30m"][:1]
+    history["gold_5m"] = history["gold_5m"][:1]
+    history["dead_5m"] = history["dead_5m"][:1]
+
+    return history
 
 
 def process_auto_trading(ticker, result_info, current_price, current_time):
@@ -2281,12 +2412,21 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
     tech_comments = {}
     
     for t in tickers:
+        # [V3.8] Retrieve V2 Status (Already fetched in results[t])
+        v2_buy_info = None
+        v2_sell_info = None
+        if t in ['SOXL', 'SOXS']:
+             # Access raw DB version via results[t]['v2_buy'] which is a DICT (serialized)
+             # But calculate_holding_score might expect dict access.
+             v2_buy_info = results[t].get('v2_buy')
+             v2_sell_info = results[t].get('v2_sell')
+             
         # 1. Calculate Score
-        score_model = calculate_holding_score(results[t], techs[t])
+        score_model = calculate_holding_score(results[t], techs[t], v2_buy_info, v2_sell_info)
         scores[t] = score_model
         
         # 2. Generate Guide
-        guides[t] = generate_expert_commentary_v2(t, score_model, results[t], techs[t], regime)
+        guides[t] = generate_expert_commentary_v2(t, score_model, results[t], techs[t], regime, v2_buy_info, v2_sell_info)
         
         # 3. Simple Tech Comment
         score_eval = score_model['evaluation'].split('(')[0].strip()
@@ -2335,94 +2475,6 @@ if __name__ == "__main__":
     # Test run
     print(run_analysis())
 
-def get_cross_history(df_30, df_5):
-    history = {
-        "gold_30m": [],
-        "dead_5m": [],
-        "gold_5m": []
-    }
-    
-    tz_kr = pytz.timezone('Asia/Seoul')
-    tz_ny = pytz.timezone('America/New_York')
-    
-    # helper
-    def fmt_time(dt):
-        if dt.tzinfo is None: 
-            # DB & YFinance data is naive NY Time. Localize it correctly.
-            try:
-                dt = tz_ny.localize(dt)
-            except:
-                dt = dt.replace(tzinfo=tz_ny)
-        return {
-            "kr": dt.astimezone(tz_kr).strftime('%m-%d %H:%M'),
-            "ny": dt.astimezone(tz_ny).strftime('%m-%d %H:%M')
-        }
-
-    # 1. 30m Golden Crosses
-    if df_30 is not None and not df_30.empty and len(df_30) > 30:
-        d30 = df_30.copy()
-        d30 = d30[~d30.index.duplicated(keep='last')]
-        d30['SMA10'] = ta.sma(d30['Close'], length=10)
-        d30['SMA30'] = ta.sma(d30['Close'], length=30)
-        
-        # Look back deeper
-        scan_depth = len(d30) - 1
-        for i in range(len(d30)-1, 1, -1): 
-            if i < 1: break
-            c_10 = d30['SMA10'].iloc[i]
-            c_30 = d30['SMA30'].iloc[i]
-            p_10 = d30['SMA10'].iloc[i-1]
-            p_30 = d30['SMA30'].iloc[i-1]
-            
-            # Gold Cross
-            if p_10 <= p_30 and c_10 > c_30:
-                t = fmt_time(d30.index[i])
-                history["gold_30m"].append({
-                    "time_kr": t["kr"], "time_ny": t["ny"],
-                    "price": f"{float(d30['Close'].iloc[i]):.2f}",
-                    "type": "골든크로스 (30분)"
-                })
-    
-    # 2. 5m Crosses
-    if df_5 is not None and not df_5.empty and len(df_5) > 30:
-        d5 = df_5.copy()
-        d5 = d5[~d5.index.duplicated(keep='last')]
-        d5['SMA10'] = ta.sma(d5['Close'], length=10)
-        d5['SMA30'] = ta.sma(d5['Close'], length=30)
-        
-        # Look back deeper
-        scan_depth = len(d5) - 1
-        for i in range(len(d5)-1, 1, -1): 
-            if i < 1: break
-            c_10 = d5['SMA10'].iloc[i]
-            c_30 = d5['SMA30'].iloc[i]
-            p_10 = d5['SMA10'].iloc[i-1]
-            p_30 = d5['SMA30'].iloc[i-1]
-            
-            # Dead Cross
-            if p_10 >= p_30 and c_10 < c_30:
-                t = fmt_time(d5.index[i])
-                history["dead_5m"].append({
-                    "time_kr": t["kr"], "time_ny": t["ny"],
-                    "price": f"{float(d5['Close'].iloc[i]):.2f}",
-                    "type": "데드크로스 (5분)"
-                })
-            # Gold Cross
-            elif p_10 <= p_30 and c_10 > c_30:
-                t = fmt_time(d5.index[i])
-                history["gold_5m"].append({
-                    "time_kr": t["kr"], "time_ny": t["ny"],
-                    "price": f"{float(d5['Close'].iloc[i]):.2f}",
-                    "type": "골든크로스 (5분)"
-                })
-
-    # Limit to latest 1 (User Request)
-    history["gold_30m"] = history["gold_30m"][:1]
-    history["gold_5m"] = history["gold_5m"][:1]
-    history["dead_5m"] = history["dead_5m"][:1]
-
-    return history
-
 
 # --- Cheongan V2 Signal Analysis ---
 def run_v2_signal_analysis():
@@ -2452,6 +2504,23 @@ def run_v2_signal_analysis():
                 print(f"⚠️ {ticker} Insufficient Data for V2 Analysis")
                 continue
                 
+            # --- Clean Data (Resample to ensure strict 5m/30m intervals) ---
+            # To avoid duplicate rows or non-snapped timestamps disrupting MA
+            if not isinstance(df_5.index, pd.DatetimeIndex):
+                df_5.index = pd.to_datetime(df_5.index)
+            if not isinstance(df_30.index, pd.DatetimeIndex):
+                df_30.index = pd.to_datetime(df_30.index)
+            
+            # Resample and take last close (Handle ticks)
+            # using '5min' for pandas < 2.2, '5min' is standard alias
+            df_5 = df_5.resample('5min').agg({
+                'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last', 'Volume': 'sum'
+            }).dropna()
+            
+            df_30 = df_30.resample('30min').agg({
+                'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last', 'Volume': 'sum'
+            }).dropna()
+            
             # --- Indicators Calculation ---
             # 5m
             df_5['ma10'] = df_5['Close'].rolling(window=10).mean()
@@ -2479,6 +2548,22 @@ def run_v2_signal_analysis():
             curr_vol_ma_30 = float(df_30['vol_ma5'].iloc[-1]) if not pd.isna(df_30['vol_ma5'].iloc[-1]) else 0
             box_high = float(df_30['box_high'].iloc[-1]) if not pd.isna(df_30['box_high'].iloc[-1]) else 0
             
+            # [NEW] Patch Price/PrevClose from KIS (Authoritative Source)
+            try:
+                from kis_api import kis_client
+                kis_p = kis_client.get_price(ticker)
+                if kis_p:
+                    # diff is signed (e.g., 0.06 or -0.10)
+                    # prev_close = current - diff
+                    # But wait, diff is (current - prev). So prev = current - diff.
+                    # e.g. 2.44 (+0.06) -> Prev = 2.38. Correct.
+                    curr_price = float(kis_p['price'])
+                    k_diff = float(kis_p['diff'])
+                    prev_close = curr_price - k_diff
+                    print(f"  🎯 KIS Patch {ticker}: Price={curr_price}, Prev={prev_close:.2f}")
+            except Exception as e:
+                print(f"  ⚠️ KIS Price Patch Failed: {e}")
+            
             # 5m Indicators
             ma10_5 = df_5['ma10'].iloc[-1]
             ma30_5 = df_5['ma30'].iloc[-1]
@@ -2496,7 +2581,9 @@ def run_v2_signal_analysis():
             # --- BUY SIDE ---
             buy_record = get_v2_buy_status(ticker)
                         
-            is_5m_gc = (prev_ma10_5 <= prev_ma30_5) and (ma10_5 > ma30_5)
+            # Sig 1: 5m GC (Strict Cross) or Trend Maintenance (Catch-up)
+            is_5m_gc_cross = (prev_ma10_5 <= prev_ma30_5) and (ma10_5 > ma30_5)
+            is_5m_trend_up = (ma10_5 > ma30_5)
             
             cond_box = curr_price > box_high
             cond_2pct = (prev_close > 0) and (curr_price > prev_close * 1.02)
@@ -2506,18 +2593,57 @@ def run_v2_signal_analysis():
             is_30m_gc = (prev_ma10_30 <= prev_ma30_30) and (ma10_30 > ma30_30)
             
             
-            if not buy_record or (buy_record['final_buy_yn'] == 'Y'):
+            # Check if we can start a new cycle
+            can_start_new = False
+            
+            if not buy_record:
+                can_start_new = True
+            elif buy_record['final_buy_yn'] == 'Y':
+                # Existing Buy Completed. Check if Sold/Closed.
+                # Must check the Sell Record corresponding to this Buy Cycle
+                last_sell = get_v2_sell_status(ticker)
+                
+                if last_sell and last_sell['manage_id'] == buy_record['manage_id']:
+                    # If Sell is Finalized (Y), then we are free to start new.
+                    if last_sell['final_sell_yn'] == 'Y':
+                        can_start_new = True
+                    else:
+                        # Holding (Sell not finished). Do NOT start new.
+                        can_start_new = False
+                        # print(f"  🔒 {ticker} Holding Active (ManageID: {buy_record['manage_id']}). No new cycle.")
+                else:
+                    # Logic Gap: Buy Complete but No Sell Record Found?
+                    # This implies the auto-create failed or manual sync issue.
+                    # Strict Rule: Do not start new if possibly holding.
+                    # However, if it's very old, maybe? But user wants Strict.
+                    # Let's assume strict: If Buy Y and No Sell Y -> Locked.
+                    # But wait, if I just fixed the bug, the sell record might be missing for OLD ones?
+                    # No, I fixed it. So new ones will have it.
+                    # For safety, if Buy is Y, we REQUIRE Sell Y to restart.
+                    can_start_new = False
+                    # Exception: If user manually closed via DB?
+            else:
+                # Buy Cycle In Progress (final_buy_yn = 'N')
+                can_start_new = False
+
+            if can_start_new:
                 # Start NEW cycle
-                if is_5m_gc:
+                # Catch-up: If Cross happened OR Trend is already UP (and we have no record)
+                if is_5m_gc_cross or is_5m_trend_up:
                     kst_now = datetime.now(timezone.utc).astimezone(pytz.timezone('Asia/Seoul'))
                     manage_id = f"{ticker}{kst_now.strftime('%Y%m%d_%H%M')}"
                     
                     if save_v2_buy_signal(manage_id, ticker, 'sig1', curr_price):
-                        print(f"🚀 {ticker} V2 Buy Signal 1 (5m GC) Detected! Started {manage_id}")
-                        log_history(manage_id, ticker, "1차매수신호", "5분봉 GC", curr_price)
-                        send_sms(f"[청안V2] {ticker} 1차매수(5분봉) 발생\n가격:{curr_price}")
+                        msg_type = "5분봉 GC" if is_5m_gc_cross else "5분봉 상승추세(Catch-up)"
+                        print(f"🚀 {ticker} V2 Buy Signal 1 Detect! ({msg_type}) Started {manage_id}")
+                        log_history(manage_id, ticker, "1차매수신호", msg_type, curr_price)
+                        
+                        # SMS
+                        sms_time = get_current_time_str_sms()
+                        send_sms(ticker, "1차매수(5분봉/V2)", curr_price, sms_time, msg_type)
             
-            else:
+            # If not starting new, we might be continuing existing
+            elif buy_record and buy_record['final_buy_yn'] == 'N':
                 # Active Buy Cycle
                 manage_id = buy_record['manage_id']
                 
@@ -2537,6 +2663,18 @@ def run_v2_signal_analysis():
 
             # --- SELL SIDE (Position Management) ---
             sell_record = get_v2_sell_status(ticker)
+
+            # [FIX] If Buy is Finalized but no Sell Record exists, create it now
+            if not sell_record and buy_record and buy_record['final_buy_yn'] == 'Y':
+                # Only create if not already handled (check manage_id)
+                # But sell_record is None, so create it.
+                from db import create_v2_sell_record
+                manage_id = buy_record['manage_id']
+                # Assume entry price is final_buy_price or current price
+                entry_price = buy_record['final_buy_price'] if buy_record['final_buy_price'] else curr_price
+                if create_v2_sell_record(manage_id, ticker, entry_price):
+                     print(f"  ✨ Creating Sell Record for {ticker} (Buy Completed at {entry_price})")
+                     sell_record = get_v2_sell_status(ticker) # Reload
 
             if sell_record:
                 manage_id = sell_record['manage_id']

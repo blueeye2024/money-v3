@@ -32,7 +32,7 @@ const SystemPerformanceReport = ({ trades = [] }) => {
     return (
         <div>
             {/* Top Stats */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '15px' }}>
+            <div className="responsive-grid-3" style={{ marginBottom: '15px' }}>
                 <div style={{ background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '8px', textAlign: 'center' }}>
                     <div style={{ fontSize: '0.7rem', color: '#888' }}>Win Rate</div>
                     <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#fff' }}>{stats?.win_rate?.toFixed(1) || 0}%</div>
@@ -100,7 +100,7 @@ const SystemPerformanceReport = ({ trades = [] }) => {
     );
 };
 
-const MarketInsight = ({ market, stocks, signalHistory }) => {
+const MarketInsight = ({ market, stocks, signalHistory, onRefresh }) => {
     if (!market) return <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>데이터 로딩 중...</div>;
 
     const { market_regime } = market;
@@ -190,6 +190,7 @@ const MarketInsight = ({ market, stocks, signalHistory }) => {
                         sellStatus={regimeDetails?.soxl?.v2_sell}
                         renderInfo={regimeDetails?.soxl}
                         isBear={false}
+                        onRefresh={onRefresh}
                     />
                     <V2SignalStatus
                         title="SOXS (BEAR TOWER)"
@@ -197,6 +198,7 @@ const MarketInsight = ({ market, stocks, signalHistory }) => {
                         sellStatus={regimeDetails?.soxs?.v2_sell}
                         renderInfo={regimeDetails?.soxs}
                         isBear={true}
+                        onRefresh={onRefresh}
                     />
                 </div>
 
@@ -211,7 +213,7 @@ const MarketInsight = ({ market, stocks, signalHistory }) => {
                     </div>
 
                     {/* Dual Guide Layout */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                    <div className="responsive-grid-2">
                         {['SOXL', 'SOXS'].map(ticker => {
                             const guideData = regimeDetails?.prime_guide || {};
                             const scoreObj = guideData.scores?.[ticker] || { score: 0, breakdown: {} };
@@ -220,7 +222,7 @@ const MarketInsight = ({ market, stocks, signalHistory }) => {
                             const color = isSoxl ? '#06b6d4' : '#a855f7';
 
                             return (
-                                <div key={ticker} style={{ background: `rgba(${isSoxl ? '6,182,212' : '168,85,247'}, 0.05)`, padding: '1.5rem', borderRadius: '16px', border: `1px solid ${color}33` }}>
+                                <div key={ticker} style={{ width: '100%', background: `rgba(${isSoxl ? '6,182,212' : '168,85,247'}, 0.05)`, padding: '1.5rem', borderRadius: '16px', border: `1px solid ${color}33` }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                                         <h4 style={{ margin: 0, color: color, fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
                                             {isSoxl ? '🐂' : '🐻'} {ticker} 전략
@@ -258,7 +260,7 @@ const MarketInsight = ({ market, stocks, signalHistory }) => {
                 </div>
 
                 {/* 3. Bottom Grid: Intelligence & History */}
-                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px' }}>
+                <div className="responsive-grid-2-1">
 
                     {/* Col 1: Market Intelligence Center (Detailed) */}
                     <div style={{ background: 'rgba(0,0,0,0.2)', padding: '1.5rem', borderRadius: '16px' }}>

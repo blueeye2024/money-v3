@@ -268,6 +268,7 @@ def init_db():
                 final_buy_price DECIMAL(18,6),
                 real_buy_yn CHAR(1) DEFAULT 'N',
                 real_buy_price DECIMAL(18,6),
+                real_buy_qn DECIMAL(10,2),
                 real_buy_dt DATETIME
             )
             """
@@ -298,6 +299,7 @@ def init_db():
                 final_sell_price DECIMAL(18,6),
                 real_hold_yn CHAR(1) DEFAULT 'N',
                 real_sell_avg_price DECIMAL(18,6),
+                real_sell_qn DECIMAL(10,2),
                 real_sell_dt DATETIME,
                 close_yn CHAR(1) DEFAULT 'N'
             )
@@ -1613,10 +1615,21 @@ def get_trade_history(limit=50):
 # --- Cheongan V2 Helper Functions ---
 
 def log_history(manage_id, ticker, event_type, msg=None, price=None):
-    """이벤트/신호 이력을 history 테이블에 저장"""
+    """이벤트/신호 이력을 history 테이블에 저장 (30분 내 중복 방지)"""
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
+            # 30분 이내 동일한 이벤트(ticker, event_type, msg)가 있는지 확인
+            check_sql = """
+                SELECT event_dt FROM history 
+                WHERE ticker=%s AND event_type=%s AND short_msg=%s 
+                AND event_dt > NOW() - INTERVAL '30 minutes'
+                LIMIT 1
+            """
+            cursor.execute(check_sql, (ticker, event_type, msg))
+            if cursor.fetchone():
+                return True # 중복 기록 방지 (성공으로 처리)
+
             sql = """
                 INSERT INTO history (manage_id, ticker, event_type, short_msg, event_price, event_dt) 
                 VALUES (%s, %s, %s, %s, %s, NOW())
@@ -1738,6 +1751,156 @@ def save_v2_sell_signal(manage_id, signal_type, price):
         return True
     except Exception as e:
         print(f"Save Sell Signal Error: {e}")
+        return False
+    finally:
+        conn.close()
+
+def confirm_v2_buy(manage_id, price, qty):
+    """사용자 실제 매수 확정 입력"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            # 1. Update buy_stock with real info
+            sql = """
+                UPDATE buy_stock
+                SET real_buy_yn = 'Y', 
+                    real_buy_price = %s, 
+                    real_buy_qn = %s,
+                    real_buy_dt = NOW()
+                WHERE manage_id = %s
+            """
+            cursor.execute(sql, (price, qty, manage_id))
+            
+            # Log
+            log_history(manage_id, 'SOXS', '실매수확정', f"가격:${price}/수량:{qty}", price)
+            
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Confirm V2 Buy Error: {e}")
+        return False
+    finally:
+        conn.close()
+
+def confirm_v2_sell(manage_id, price, qty, is_end=False):
+    """사용자 실제 매도(청산) 확정 입력"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            # If is_end=True, we close the cycle (close_yn='Y')
+            close_flag = 'Y' if is_end else 'N'
+            
+            # If we sold, we are NOT holding anymore -> real_hold_yn = 'N'
+            # But wait, did we buy? confirm_buy doesn't update sell_stock.
+            # So holding update depends on sell_stock record existing (which it does).
+            
+            sql = """
+                UPDATE sell_stock
+                SET real_hold_yn = 'N', 
+                    real_sell_avg_price = %s,
+                    real_sell_qn = %s,
+                    real_sell_dt = NOW(),
+                    close_yn = %s,
+                    final_sell_yn = 'Y'
+                WHERE manage_id = %s
+            """
+            cursor.execute(sql, (price, qty, close_flag, manage_id))
+            
+            # Log
+            log_history(manage_id, 'SOXS', '미션종료' if is_end else '실매도기록', f"가격:${price}/수량:{qty}", price)
+            
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Confirm V2 Sell Error: {e}")
+        return False
+    finally:
+        conn.close()
+
+def manual_update_signal(manage_id, signal_key, price, status='Y'):
+    """
+    수동으로 신호 상태 변경 (1차, 2차, 3차)
+    signal_key: 'buy1', 'buy2', 'buy3', 'sell1', 'sell2', 'sell3'
+    status: 'Y' (Set) or 'N' (Cancel)
+    """
+    conn = get_connection()
+    try:
+        # Map key to columns
+        mapping = {
+            'buy1': ('buy_stock', 'buy_sig1_yn', 'buy_sig1_price', 'buy_sig1_dt'),
+            'buy2': ('buy_stock', 'buy_sig2_yn', 'buy_sig2_price', 'buy_sig2_dt'),
+            'buy3': ('buy_stock', 'buy_sig3_yn', 'buy_sig3_price', 'buy_sig3_dt'),
+            'sell1': ('sell_stock', 'sell_sig1_yn', 'sell_sig1_price', 'sell_sig1_dt'),
+            'sell2': ('sell_stock', 'sell_sig2_yn', 'sell_sig2_price', 'sell_sig2_dt'),
+            'sell3': ('sell_stock', 'sell_sig3_yn', 'sell_sig3_price', 'sell_sig3_dt')
+        }
+        
+        if signal_key not in mapping:
+            return False
+            
+        table, col_yn, col_price, col_dt = mapping[signal_key]
+        
+        with conn.cursor() as cursor:
+            # If canceling ('N'), we might leave price as is or set to 0? 
+            # Ideally keep price history but mark N? Usually we reset for clean state.
+            # Let's keep price if modifying, but if N, maybe 0?
+            # User said "Cancel", likely meaning "Oops, didn't happen". 
+            # So setting price to 0 or keeping it doesn't matter much if 'N'.
+            # Let's use the passed price (which might be 0 if canceled via UI).
+            
+            sql = f"""
+                UPDATE {table}
+                SET {col_yn} = %s, 
+                    {col_price} = %s, 
+                    {col_dt} = NOW()
+                WHERE manage_id = %s
+            """
+            cursor.execute(sql, (status, price, manage_id))
+            
+            # Logic for final_buy only if status is 'Y'
+            if status == 'Y' and signal_key == 'buy3':
+                 cursor.execute("UPDATE buy_stock SET final_buy_yn='Y', final_buy_price=%s, final_buy_dt=NOW() WHERE manage_id=%s", (price, manage_id))
+            
+            log_history(manage_id, 'SOXS', '수동신호변경', f"{signal_key}:{status}", price)
+            
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Manual Update Error: {e}")
+        return False
+    finally:
+        conn.close()
+
+def delete_v2_record(manage_id):
+    """기록 삭제 (전체 - 매수+매도)"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            # Delete from buy_stock and sell_stock
+            cursor.execute("DELETE FROM buy_stock WHERE manage_id = %s", (manage_id,))
+            cursor.execute("DELETE FROM sell_stock WHERE manage_id = %s", (manage_id,))
+            
+            log_history(manage_id, 'SOXS', '기록삭제(전체)', 'User Request (All)', 0)
+            
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Delete Record Error: {e}")
+        return False
+    finally:
+        conn.close()
+
+def delete_v2_sell_only(manage_id):
+    """매도(Sell) 기록만 삭제 (매수는 유지 - 다시 매도 사이클 시작 가능)"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("DELETE FROM sell_stock WHERE manage_id = %s", (manage_id,))
+            log_history(manage_id, 'SOXS', '매도기록삭제', 'User Request (Sell Only)', 0)
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Delete Sell Only Error: {e}")
         return False
     finally:
         conn.close()

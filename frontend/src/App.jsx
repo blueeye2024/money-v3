@@ -188,7 +188,7 @@ function Dashboard() {
             {data?.market && <MarketStats market={data.market} />}
 
 
-            {data && <MarketInsight market={data} stocks={visibleStocks} signalHistory={signalHistory} />}
+            {data && <MarketInsight market={data} stocks={visibleStocks} signalHistory={signalHistory} onRefresh={fetchData} />}
 
             {data?.stocks && <FinalSignal stocks={visibleStocks} total_assets={data.total_assets} />}
         </div>

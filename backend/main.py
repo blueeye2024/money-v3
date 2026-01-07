@@ -827,5 +827,79 @@ def get_v2_status(ticker: str):
         print(f"V2 Status Error: {e}")
         return {"status": "error", "message": str(e)}
 
+# --- Trade Confirmation Endpoints ---
+
+class ConfirmTradeModel(BaseModel):
+    manage_id: str
+    price: float
+    qty: float
+    is_end: bool = False
+
+@app.post("/api/v2/confirm-buy")
+def api_confirm_buy(data: ConfirmTradeModel):
+    from db import confirm_v2_buy
+    try:
+        success = confirm_v2_buy(data.manage_id, data.price, data.qty)
+        if success:
+            return {"status": "success", "message": "Buy Confirmed"}
+        else:
+            return {"status": "error", "message": "DB Update Failed"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/api/v2/confirm-sell")
+def api_confirm_sell(data: ConfirmTradeModel):
+    from db import confirm_v2_sell
+    try:
+        success = confirm_v2_sell(data.manage_id, data.price, data.qty, data.is_end)
+        if success:
+            return {"status": "success", "message": "Sell Confirmed"}
+        else:
+            return {"status": "error", "message": "DB Update Failed"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+class ManualSignalModel(BaseModel):
+    manage_id: str
+    signal_key: str
+    price: float
+    status: str = 'Y'
+
+@app.post("/api/v2/manual-signal")
+def api_manual_signal(data: ManualSignalModel):
+    from db import manual_update_signal
+    try:
+        success = manual_update_signal(data.manage_id, data.signal_key, data.price, data.status)
+        if success:
+            return {"status": "success", "message": "Signal Updated"}
+        else:
+            return {"status": "error", "message": "Update Failed (Invalid Key/ID?)"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.delete("/api/v2/record/{manage_id}")
+def api_delete_record(manage_id: str):
+    from db import delete_v2_record
+    try:
+        success = delete_v2_record(manage_id)
+        if success:
+            return {"status": "success", "message": "Record Deleted"}
+        else:
+            return {"status": "error", "message": "Delete Failed"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.delete("/api/v2/sell-record/{manage_id}")
+def api_delete_sell_record(manage_id: str):
+    from db import delete_v2_sell_only
+    try:
+        success = delete_v2_sell_only(manage_id)
+        if success:
+            return {"status": "success", "message": "Sell Record Deleted"}
+        else:
+            return {"status": "error", "message": "Delete Failed"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8080, reload=True)
