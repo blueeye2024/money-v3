@@ -450,8 +450,8 @@ const JournalPage = () => {
                                             <div style={{ fontWeight: '700', fontSize: '1.1rem', color: '#1e3a8a', marginBottom: '0.25rem' }}>{ticker}</div>
                                             <div style={{ fontSize: '0.85rem', color: '#64748b' }}>{h.name}</div>
                                         </td>
-                                        <td>${Number(h.avgPrice).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 4 })}</td>
-                                        <td style={{ fontWeight: '700' }}>{h.qty}</td>
+                                        <td style={{ color: '#1e3a8a', fontWeight: '500' }}>${Number(h.avgPrice).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 4 })}</td>
+                                        <td style={{ fontWeight: '700', color: '#1e3a8a' }}>{h.qty}</td>
                                         <td>
                                             <div style={{ fontSize: '1rem', fontWeight: '700', color: '#1e40af', marginBottom: '0.25rem' }}>${h.currentValue.toFixed(2)}</div>
                                             <div style={{ fontSize: '0.8rem', color: '#64748b' }}>{h.currentValueKRW.toLocaleString(undefined, { maximumFractionDigits: 0 })}원</div>
