@@ -1790,24 +1790,32 @@ def confirm_v2_sell(manage_id, price, qty, is_end=False):
             # If is_end=True, we close the cycle (close_yn='Y')
             close_flag = 'Y' if is_end else 'N'
             
-            # If we sold, we are NOT holding anymore -> real_hold_yn = 'N'
-            # But wait, did we buy? confirm_buy doesn't update sell_stock.
-            # So holding update depends on sell_stock record existing (which it does).
-            
-            sql = """
-                UPDATE sell_stock
-                SET real_hold_yn = 'N', 
-                    real_sell_avg_price = %s,
-                    real_sell_qn = %s,
-                    real_sell_dt = NOW(),
-                    close_yn = %s,
-                    final_sell_yn = 'Y'
-                WHERE manage_id = %s
-            """
-            cursor.execute(sql, (price, qty, close_flag, manage_id))
-            
-            # Log
-            log_history(manage_id, 'SOXS', '미션종료' if is_end else '실매도기록', f"가격:${price}/수량:{qty}", price)
+            if is_end:
+                # Terminate Trade: Set final flags
+                sql = """
+                    UPDATE sell_stock
+                    SET real_hold_yn = 'N', 
+                        real_sell_avg_price = %s,
+                        real_sell_qn = %s,
+                        real_sell_dt = NOW(),
+                        close_yn = 'Y',
+                        final_sell_yn = 'Y'
+                    WHERE manage_id = %s
+                """
+                cursor.execute(sql, (price, qty, manage_id))
+                log_history(manage_id, 'SYSTEM', '미션종료', f"최종청산: ${price} / {qty}개", price)
+            else:
+                # Partial Update: Just update info, keep holding
+                sql = """
+                    UPDATE sell_stock
+                    SET real_sell_avg_price = %s,
+                        real_sell_qn = %s,
+                        real_sell_dt = NOW()
+                    WHERE manage_id = %s
+                """
+                cursor.execute(sql, (price, qty, manage_id))
+                log_history(manage_id, 'SYSTEM', '중간청산', f"중간청산(누적): ${price} / {qty}개", price)
+
             
         conn.commit()
         return True

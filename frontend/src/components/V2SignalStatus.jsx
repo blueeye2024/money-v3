@@ -435,27 +435,54 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
                             <input
                                 type="number" step="0.01"
                                 value={formData.price} onChange={e => setFormData({ ...formData, price: e.target.value })}
-                                style={{ width: '100%', padding: '8px', background: '#0f172a', border: '1px solid #334155', color: '#fff', borderRadius: '4px', border: '1px solid #475569' }}
+                                style={{ width: '100%', padding: '12px', background: '#0f172a', border: '1px solid #334155', color: '#fff', borderRadius: '8px', fontSize: '1.1rem', fontWeight: 'bold' }}
+                                placeholder="실 매도 가격 (Average)"
                             />
                         </div>
 
                         {modal.type !== 'MANUAL_SIGNAL' && (
-                            <div style={{ marginBottom: '20px' }}>
-                                <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.8rem', marginBottom: '4px' }}>총 수량 (개)</label>
-                                <input
-                                    type="number" step="1"
-                                    value={formData.qty} onChange={e => setFormData({ ...formData, qty: e.target.value })}
-                                    style={{ width: '100%', padding: '8px', background: '#0f172a', border: '1px solid #334155', color: '#fff', borderRadius: '4px', border: '1px solid #475569' }}
-                                />
-                            </div>
+                            <>
+                                <div style={{ marginBottom: '20px' }}>
+                                    <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.8rem', marginBottom: '4px' }}>총 수량 (개)</label>
+                                    <input
+                                        type="number" step="1"
+                                        value={formData.qty} onChange={e => setFormData({ ...formData, qty: e.target.value })}
+                                        style={{ width: '100%', padding: '12px', background: '#0f172a', border: '1px solid #334155', color: '#fff', borderRadius: '8px', fontSize: '1.1rem', fontWeight: 'bold' }}
+                                        placeholder="누적 매도 수량 (Total)"
+                                    />
+                                </div>
+
+                                {/* Total Amount Display */}
+                                <div style={{ background: '#1e293b', padding: '12px', borderRadius: '8px', textAlign: 'center', marginBottom: '16px', border: '1px solid #334155' }}>
+                                    <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>총 매도 금액 (예상)</div>
+                                    <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#ef4444' }}>
+                                        ${(parseFloat(formData.price || 0) * parseFloat(formData.qty || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </div>
+                                </div>
+
+                                {/* Termination Checkbox */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px', background: 'rgba(239, 68, 68, 0.1)', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.3)', marginBottom: '16px' }}>
+                                    <input
+                                        type="checkbox"
+                                        id="chk_terminate"
+                                        checked={formData.is_end || false}
+                                        onChange={(e) => setFormData({ ...formData, is_end: e.target.checked })}
+                                        style={{ width: '20px', height: '20px', cursor: 'pointer', accentColor: '#ef4444' }}
+                                    />
+                                    <label htmlFor="chk_terminate" style={{ cursor: 'pointer', flex: 1 }}>
+                                        <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '1rem' }}>종결/청산 확정</div>
+                                        <div style={{ fontSize: '0.75rem', color: '#cbd5e1' }}>체크 시에만 이번 거래가 완전히 종료됩니다. (미체크 시 실매도 기록만 업데이트)</div>
+                                    </label>
+                                </div>
+                            </>
                         )}
 
-                        <div style={{ display: 'flex', gap: '8px', marginTop: '15px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                             <button
-                                onClick={handleConfirm} disabled={submitting}
-                                style={{ flex: 2, padding: '10px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
+                                onClick={() => handleConfirm(formData.is_end)}
+                                style={{ padding: '12px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer' }}
                             >
-                                {submitting ? '처리중...' : '확인'}
+                                {formData.is_end ? '최종 종결 (End)' : '정보 업데이트 (Update)'}
                             </button>
 
                             {/* Cancel Signal Button (Only Manual) */}
