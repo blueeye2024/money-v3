@@ -440,73 +440,75 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
                             />
                         </div>
 
-                        <div style={{ marginBottom: '15px' }}>
-                            <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.8rem', marginBottom: '4px' }}>총 수량 (개)</label>
-                            <input
-                                type="number" step="1"
-                                value={formData.qty} onChange={e => setFormData({ ...formData, qty: e.target.value })}
-                                style={{ width: '100%', padding: '10px', background: '#0f172a', border: '1px solid #334155', color: '#fff', borderRadius: '8px', fontSize: '1rem', fontWeight: 'bold' }}
-                                placeholder="누적 매도 수량 (Total)"
-                            />
-                        </div>
+                        {modal.type !== 'MANUAL_SIGNAL' && (
+                            <>
+                                <div style={{ marginBottom: '15px' }}>
+                                    <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.8rem', marginBottom: '4px' }}>총 수량 (개)</label>
+                                    <input
+                                        type="number" step="1"
+                                        value={formData.qty} onChange={e => setFormData({ ...formData, qty: e.target.value })}
+                                        style={{ width: '100%', padding: '10px', background: '#0f172a', border: '1px solid #334155', color: '#fff', borderRadius: '8px', fontSize: '1rem', fontWeight: 'bold' }}
+                                        placeholder="누적 매도 수량 (Total)"
+                                    />
+                                </div>
 
-                        {/* Total Amount Display */}
-                        <div style={{ background: '#1e293b', padding: '10px', borderRadius: '8px', textAlign: 'center', marginBottom: '15px', border: '1px solid #334155' }}>
-                            <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>총 매도 금액 (예상)</div>
-                            <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#ef4444' }}>
-                                ${(parseFloat(formData.price || 0) * parseFloat(formData.qty || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </div>
-                        </div>
+                                {/* Total Amount Display */}
+                                <div style={{ background: '#1e293b', padding: '10px', borderRadius: '8px', textAlign: 'center', marginBottom: '15px', border: '1px solid #334155' }}>
+                                    <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>총 매도 금액 (예상)</div>
+                                    <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#ef4444' }}>
+                                        ${(parseFloat(formData.price || 0) * parseFloat(formData.qty || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </div>
+                                </div>
 
-                        {/* Termination Checkbox (SELL ONLY) */}
-                        {modal.type === 'SELL' && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px', background: 'rgba(239, 68, 68, 0.1)', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.3)', marginBottom: '15px' }}>
-                                <input
-                                    type="checkbox"
-                                    id="chk_terminate"
-                                    checked={formData.is_end || false}
-                                    onChange={(e) => setFormData({ ...formData, is_end: e.target.checked })}
-                                    style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: '#ef4444' }}
-                                />
-                                <label htmlFor="chk_terminate" style={{ cursor: 'pointer', flex: 1, color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>
-                                    종결/청산 확정
-                                </label>
-                            </div>
+                                {/* Termination Checkbox (SELL ONLY) */}
+                                {modal.type === 'SELL' && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px', background: 'rgba(239, 68, 68, 0.1)', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.3)', marginBottom: '15px' }}>
+                                        <input
+                                            type="checkbox"
+                                            id="chk_terminate"
+                                            checked={formData.is_end || false}
+                                            onChange={(e) => setFormData({ ...formData, is_end: e.target.checked })}
+                                            style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: '#ef4444' }}
+                                        />
+                                        <label htmlFor="chk_terminate" style={{ cursor: 'pointer', flex: 1, color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>
+                                            종결/청산 확정
+                                        </label>
+                                    </div>
+                                )}
+                            </>
                         )}
-                    </>
-                        )}
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                        <button
-                            onClick={() => handleConfirm(formData.is_end)}
-                            style={{ padding: '12px', background: modal.type === 'BUY' ? '#10b981' : '#ef4444', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer' }}
-                        >
-                            {formData.is_end ? '최종 종결 (End)' : '저장 (Save)'}
-                        </button>
-
-                        {/* Cancel Signal Button (Only Manual) */}
-                        {modal.type === 'MANUAL_SIGNAL' && (
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                             <button
-                                onClick={handleCancelSignal} disabled={submitting}
-                                style={{ padding: '10px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.8rem' }}
+                                onClick={() => handleConfirm(formData.is_end)}
+                                style={{ padding: '12px', background: modal.type === 'BUY' ? '#10b981' : '#ef4444', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer' }}
                             >
-                                신호 취소
+                                {formData.is_end ? '최종 종결 (End)' : '저장 (Save)'}
                             </button>
-                        )}
 
-                        <button
-                            onClick={() => setModal({ type: null, isOpen: false, key: null })}
-                            style={{ padding: '10px', background: '#334155', color: '#cbd5e1', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
-                        >
-                            닫기
-                        </button>
+                            {/* Cancel Signal Button (Only Manual) */}
+                            {modal.type === 'MANUAL_SIGNAL' && (
+                                <button
+                                    onClick={handleCancelSignal} disabled={submitting}
+                                    style={{ padding: '10px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.8rem' }}
+                                >
+                                    신호 취소
+                                </button>
+                            )}
+
+                            <button
+                                onClick={() => setModal({ type: null, isOpen: false, key: null })}
+                                style={{ padding: '10px', background: '#334155', color: '#cbd5e1', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
+                            >
+                                닫기
+                            </button>
+                        </div>
                     </div>
                 </div>
-            </div>
-    )
-}
+            )
+            }
 
-<style>{`
+            <style>{`
                 @keyframes pulse {
                     0% { opacity: 1; }
                     50% { opacity: 0.6; }
