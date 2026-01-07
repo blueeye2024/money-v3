@@ -370,13 +370,18 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
                                     {step.label}
                                 </div>
                                 <div style={{ fontSize: '0.65rem', color: '#475569', marginTop: '2px' }}>
-                                    {data?.[step.key + '_date'] ? new Date(data[step.key + '_date']).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : step.desc}
+                                    {/* [MODIFIED] Show Price/Target instead of Description when Active */}
+                                    {isActive ? (
+                                        (stepType === 'BUY' && step.key === 'buy_sig2_yn' && data?.target_box_price) ?
+                                            `Target: ${formatPrice(data.target_box_price)}` :
+                                            ((stepType === 'SELL' && step.key === 'sell_sig2_yn' && data?.target_stop_price) ?
+                                                `Target: ${formatPrice(data.target_stop_price)}` :
+                                                (data?.[step.key + '_price'] ? Number(data[step.key + '_price']).toFixed(2) : 'Done'))
+                                    ) : (
+                                        data?.[step.key + '_date'] ? new Date(data[step.key + '_date']).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : step.desc
+                                    )}
                                 </div>
-                                {isActive && data?.[step.key + '_price'] && (
-                                    <div style={{ fontSize: '0.7rem', color: localModeColor, fontWeight: 'bold', marginTop: '2px' }}>
-                                        {formatPrice(data[step.key + '_price'])}
-                                    </div>
-                                )}
+                                {/* Price redundant with description area now */}
 
                                 {/* Custom Target Badge (Click to Open Modal) */}
                                 {isActiveMode && (
