@@ -248,13 +248,23 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
 
     const renderSteps = (stepType, data, isActiveMode) => {
         const stepList = getSteps(stepType);
-        let localModeColor = isActiveMode ? (mode === 'SELL' ? '#ef4444' : themeColor) : '#10b981'; // Green for past success
+
+        // Debug Info
+        const manageId = data?.manage_id || '-';
+        let localModeColor = isActiveMode ? (mode === 'SELL' ? '#ef4444' : themeColor) : '#10b981';
         if (stepType === 'BUY' && isHolding) localModeColor = '#10b981';
 
         return (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', marginTop: '1rem', padding: '0 10px' }}>
                 {/* Connecting Line */}
                 <div style={{ position: 'absolute', top: '20px', left: '15%', right: '15%', height: '2px', background: 'rgba(255,255,255,0.1)', zIndex: 0 }} />
+
+                {/* Manage ID Display */}
+                {isActiveMode && (
+                    <div style={{ position: 'absolute', top: '-25px', right: '0', fontSize: '0.65rem', color: '#475569' }}>
+                        ID: {manageId}
+                    </div>
+                )}
 
                 {stepList.map((step, idx) => {
                     const isActive = data?.[step.key] === 'Y';
@@ -273,7 +283,7 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                                     boxShadow: isActive ? `0 0 15px ${localModeColor}66` : 'none',
                                     transition: 'all 0.3s ease',
-                                    cursor: 'pointer' // Clickable
+                                    cursor: 'pointer'
                                 }}
                                 title="수동 신호 발생 (클릭)"
                             >

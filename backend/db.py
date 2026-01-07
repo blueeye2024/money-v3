@@ -1803,6 +1803,11 @@ def confirm_v2_sell(manage_id, price, qty, is_end=False):
                     WHERE manage_id = %s
                 """
                 cursor.execute(sql, (price, qty, manage_id))
+                
+                # Also Close BUY Record (final_buy_yn = 'Y') to allow new cycle
+                sql_buy = "UPDATE buy_stock SET final_buy_yn = 'Y', row_dt = NOW() WHERE manage_id = %s"
+                cursor.execute(sql_buy, (manage_id,))
+                
                 log_history(manage_id, 'SYSTEM', '미션종료', f"최종청산: ${price} / {qty}개", price)
             else:
                 # Partial Update: Just update info, keep holding
