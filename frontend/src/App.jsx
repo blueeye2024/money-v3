@@ -258,7 +258,7 @@ function Layout() {
                 <Link to="/journal" className="nav-link" style={{
                     color: location.pathname === '/journal' ? 'var(--accent-blue)' : 'var(--text-primary)',
                     fontWeight: location.pathname === '/journal' ? 'bold' : 'normal',
-                }}>매매 일지</Link>
+                }}>자산 관리</Link>
                 <Link to="/managed-stocks" className="nav-link" style={{
                     color: location.pathname === '/managed-stocks' ? 'var(--accent-blue)' : 'var(--text-primary)',
                     fontWeight: location.pathname === '/managed-stocks' ? 'bold' : 'normal',
