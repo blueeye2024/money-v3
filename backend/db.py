@@ -565,20 +565,82 @@ def add_transaction(data):
     finally:
         conn.close()
 
-def get_transactions():
+# 3. Journal Transactions (Merged into managed_stocks, table dropped)
+            # sql_journal = ... (Deleted)
+
+def get_holdings():
+    """자산 보유 현황 조회 (From managed_stocks)"""
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
+            # managed_stocks에서 수량, 평단가, 현재가 모두 조회
             sql = """
-            SELECT j.*, s.name as stock_name 
-            FROM journal_transactions j 
-            LEFT JOIN stocks s ON j.ticker = s.code 
-            ORDER BY j.trade_date DESC
+            SELECT ticker, name, quantity as qty, avg_price, current_price, is_market_open, is_manual_price
+            FROM managed_stocks 
+            WHERE quantity > 0 OR is_active = TRUE
+            ORDER BY ticker ASC
             """
             cursor.execute(sql)
             return cursor.fetchall()
     finally:
         conn.close()
+
+def update_holding(ticker, qty_change, price, memo=None):
+    """보유량 및 평단가 업데이트 (매수/매도)"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            # 기존 보유량 조회
+            cursor.execute("SELECT quantity, avg_price FROM managed_stocks WHERE ticker=%s", (ticker,))
+            row = cursor.fetchone()
+            
+            if not row:
+                # 종목이 없으면 먼저 생성 (add_stock 호출 권장하지만 여기서도 처리 가능)
+                return False, "Managed stock not found. Add stock first."
+            
+            current_qty = row['quantity'] or 0
+            current_avg = row['avg_price'] or 0.0
+            
+            new_qty = current_qty + qty_change
+            
+            # 매수(Increase)일 경우 평단가 갱신 (가중평균)
+            if qty_change > 0:
+                total_amt = (current_qty * current_avg) + (qty_change * price)
+                new_avg = total_amt / new_qty if new_qty > 0 else 0
+            else:
+                # 매도(Decrease)일 경우 평단가 불변 (단, 전량 매도 시 0 처리)
+                new_avg = current_avg if new_qty > 0 else 0
+            
+            if new_qty < 0:
+                print("Warning: Quantity cannot be negative.")
+                # new_qty = 0 # Or allow negative for short? prevent for now.
+            
+            cursor.execute("""
+                UPDATE managed_stocks 
+                SET quantity=%s, avg_price=%s
+                WHERE ticker=%s
+            """, (new_qty, new_avg, ticker))
+            
+            conn.commit()
+            return True, "Holding updated"
+    except Exception as e:
+        print(f"Update Holding Error: {e}")
+        return False, str(e)
+    finally:
+        conn.close()
+
+# Legacy aliases for compatibility (if needed temporarily)
+def get_transactions():
+    return get_holdings()
+
+def add_transaction(ticker, trade_type, qty, price, trade_date, memo):
+    # Adapter: Convert Trade Input -> Holding Update
+    qty_change = qty if trade_type == 'BUY' else -qty
+    return update_holding(ticker, qty_change, price, memo)
+
+def get_transactions_legacy():
+    # Placeholder if old function is called
+    return []
 
 def update_transaction(id, data):
     conn = get_connection()
