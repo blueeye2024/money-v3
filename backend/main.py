@@ -839,11 +839,11 @@ class ConfirmTradeModel(BaseModel):
 def api_confirm_buy(data: ConfirmTradeModel):
     from db import confirm_v2_buy
     try:
-        success = confirm_v2_buy(data.manage_id, data.price, data.qty)
+        success, msg = confirm_v2_buy(data.manage_id, data.price, data.qty)
         if success:
             return {"status": "success", "message": "Buy Confirmed"}
         else:
-            return {"status": "error", "message": "DB Update Failed"}
+            return {"status": "error", "message": msg}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
@@ -851,11 +851,11 @@ def api_confirm_buy(data: ConfirmTradeModel):
 def api_confirm_sell(data: ConfirmTradeModel):
     from db import confirm_v2_sell
     try:
-        success = confirm_v2_sell(data.manage_id, data.price, data.qty, data.is_end)
+        success, msg = confirm_v2_sell(data.manage_id, data.price, data.qty, data.is_end)
         if success:
             return {"status": "success", "message": "Sell Confirmed"}
         else:
-            return {"status": "error", "message": "DB Update Failed"}
+            return {"status": "error", "message": msg}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 

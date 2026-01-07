@@ -1775,10 +1775,10 @@ def confirm_v2_buy(manage_id, price, qty):
             log_history(manage_id, 'SOXS', '실매수확정', f"가격:${price}/수량:{qty}", price)
             
         conn.commit()
-        return True
+        return True, "Success"
     except Exception as e:
         print(f"Confirm V2 Buy Error: {e}")
-        return False
+        return False, str(e)
     finally:
         conn.close()
 
@@ -1819,14 +1819,16 @@ def confirm_v2_sell(manage_id, price, qty, is_end=False):
                     WHERE manage_id = %s
                 """
                 cursor.execute(sql, (price, qty, manage_id))
-                log_history(manage_id, 'SYSTEM', '중간청산', f"중간청산(누적): ${price} / {qty}개", price)
+                log_history(manage_id, 'SYSTEM', '중간청산', f"수량/금액 업데이트", price)
 
-            
+            if cursor.rowcount == 0:
+                 return False, "참조하는 매매 데이터(ManageID)를 찾을 수 없습니다."
+
         conn.commit()
-        return True
+        return True, "Success"
     except Exception as e:
         print(f"Confirm V2 Sell Error: {e}")
-        return False
+        return False, str(e)
     finally:
         conn.close()
 
