@@ -24,12 +24,20 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
     // Initial Load of Real Data if available
     React.useEffect(() => {
         if (modal.isOpen) {
-            setFormData({
-                price: current_price || '',
-                qty: ''
-            });
+            // Pre-fill if editing existing Real Buy
+            if (modal.type === 'BUY' && buyStatus?.real_buy_yn === 'Y') {
+                setFormData({
+                    price: buyStatus.real_buy_price || current_price || '',
+                    qty: buyStatus.real_buy_qn || ''
+                });
+            } else {
+                setFormData({
+                    price: current_price || '',
+                    qty: ''
+                });
+            }
         }
-    }, [modal.isOpen, current_price]);
+    }, [modal.isOpen, current_price, buyStatus]);
 
     // --- Audio Alert Logic (Ver 3.9) ---
     const prevBuyRef = React.useRef(null);
@@ -347,8 +355,12 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
                         </div>
                     )}
                     {isHolding && buyStatus?.real_buy_yn === 'Y' && (
-                        <div style={{ fontSize: '0.7rem', color: '#10b981', fontWeight: 'bold', marginTop: '4px' }}>
-                            ✅ 실매수: {Number(buyStatus.real_buy_qn)}개
+                        <div
+                            onClick={() => setModal({ type: 'BUY', isOpen: true })}
+                            style={{ fontSize: '0.7rem', color: '#10b981', fontWeight: 'bold', marginTop: '4px', cursor: 'pointer', textDecoration: 'underline' }}
+                            title="클릭하여 실매수 가격/수량 수정"
+                        >
+                            ✅ 실매수: {Number(buyStatus.real_buy_qn)}개 @ ${formatPrice(buyStatus.real_buy_price)}
                         </div>
                     )}
                 </div>
