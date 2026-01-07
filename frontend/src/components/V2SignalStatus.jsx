@@ -111,10 +111,10 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
             if (!formData.qty) { setSubmitting(false); return Swal.fire('Error', "수량을 입력해주세요.", 'error'); }
             endpoint = modal.type === 'BUY' ? '/api/v2/confirm-buy' : '/api/v2/confirm-sell';
             payload = {
-                manage_id: activeData.manage_id,
+                manage_id: activeData?.manage_id,
                 price: parseFloat(formData.price),
                 qty: parseFloat(formData.qty),
-                is_end: modal.type === 'SELL'
+                is_end: !!formData.is_end
             };
         }
 
