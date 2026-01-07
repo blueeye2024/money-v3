@@ -2797,12 +2797,24 @@ def run_v2_signal_analysis():
                 is_5m_trend_down = (ma10_5 < ma30_5) # [NEW] Catch-up
 
                 # [FIX] Allow Catch-up for 5m DC
-                if sell_record['sell_sig1_yn'] == 'N' and (is_5m_dc or is_5m_trend_down):
-                     if save_v2_sell_signal(manage_id, 'sig1', curr_price):
-                         msg_type = "5분봉 DC" if is_5m_dc else "5분봉 하락추세(Catch-up)"
-                         print(f"📉 {ticker} V2 Sell Signal 1 (5m DC) Detected! ({msg_type})")
-                         log_history(manage_id, ticker, "1차청산신호", msg_type, curr_price)
-                         send_sms(ticker, "1차청산(5분봉/V2)", curr_price, get_current_time_str_sms(), "단기조정/하락추세")
+                if (is_5m_dc or is_5m_trend_down):
+                     if sell_record['sell_sig1_yn'] == 'N':
+                         if save_v2_sell_signal(manage_id, 'sig1', curr_price):
+                             msg_type = "5분봉 DC" if is_5m_dc else "5분봉 하락추세(Catch-up)"
+                             print(f"📉 {ticker} V2 Sell Signal 1 (5m DC) Detected! ({msg_type})")
+                             log_history(manage_id, ticker, "1차청산신호", msg_type, curr_price)
+                             send_sms(ticker, "1차청산(5분봉/V2)", curr_price, get_current_time_str_sms(), "단기조정/하락추세")
+                else:
+                    # [NEW] Auto-Reset Sell Signal 1
+                    if sell_record['sell_sig1_yn'] == 'Y':
+                        # If Signal 2 hasn't triggered yet, we can reset Sig 1?
+                        # Even if Sig 2 triggered, if 5m trend recovers (Golden Cross), Signal 1 (Dead Cross) is invalid.
+                        # So Reset is valid.
+                         try:
+                             from db import manual_update_signal
+                             manual_update_signal(manage_id, 'sell1', 0, 'N')
+                             print(f"📈 {ticker} Sell Signal 1 Reset (Condition Lost)")
+                         except: pass
 
                 # Sig 2: Stop Loss / Profit Taking (Real Price Support)
                 if sell_record['sell_sig2_yn'] == 'N':
@@ -2833,18 +2845,6 @@ def run_v2_signal_analysis():
                 is_30m_trend_down = (ma10_30 < ma30_30) # [NEW] Catch-up
                 
                 # [FIX] Allow Catch-up for 30m DC (Major Exit)
-                if sell_record['sell_sig3_yn'] == 'N' and (is_30m_dc or is_30m_trend_down):
-                     if save_v2_sell_signal(manage_id, 'sig3', curr_price):
-                         msg_type = "30분봉 DC" if is_30m_dc else "30분봉 하락추세(Catch-up)"
-                         print(f"📉 {ticker} V2 Sell Signal 3 (30m DC) Detected! ({msg_type})")
-                         log_history(manage_id, ticker, "3차청산신호", msg_type, curr_price)
-                         send_sms(ticker, "3차청산(30분봉/V2)", curr_price, get_current_time_str_sms(), "추세이탈/전량매도")
-                         
-                         # [AUTO] 30m DC = Final Exit (Trend Over)
-                         # Automatically Trigger Final Sell Completion
-                         if save_v2_sell_signal(manage_id, 'final', curr_price):
-                             print(f"🏁 {ticker} V2 Sell Cycle FINALIZED (Trend Broken)")
-                             log_history(manage_id, ticker, "최종청산완료", "30분봉 추세종료", curr_price)
                              send_sms(ticker, "최종청산(V2)", curr_price, get_current_time_str_sms(), "매매종료(추세끝)")
 
         except Exception as e:
