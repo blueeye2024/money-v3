@@ -62,22 +62,29 @@ class KisApi:
         exchanges = [exchange] if exchange else ["NAS", "NYS", "AMS"]
         
         for excd in exchanges:
+            print(f"  KIS API: Checking {excd} for {symbol}...")
             res = self._fetch_price_request(excd, symbol)
+            
             if res and res.get('rt_cd') == '0':
                 out = res['output']
                 # If 'last' price is empty, it means this exchange has no data for this ticker. Try next.
                 if not out.get('last'):
+                    print(f"  KIS API: No price data in {excd} for {symbol}.")
                     continue
                     
                 try:
+                    price = float(out['last']) if out.get('last') else 0.0
+                    print(f"  KIS API: Found {symbol} in {excd} @ ${price}")
                     return {
-                        'price': float(out['last']) if out.get('last') else 0.0,
+                        'price': price,
                         'diff': float(out['diff']) if out.get('diff') else 0.0,
                         'rate': float(out['rate']) if out.get('rate') else 0.0,
                         'exchange': excd
                     }
                 except (ValueError, TypeError):
                     continue
+            else:
+                 print(f"  KIS API: Error or No Data in {excd} for {symbol} (Code: {res.get('rt_cd')})")
             
         return None
 

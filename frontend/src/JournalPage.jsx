@@ -36,7 +36,18 @@ const JournalPage = () => {
         }
     };
 
-    useEffect(() => { fetchAll(); }, []);
+    useEffect(() => {
+        fetchAll();
+
+        // Auto-refresh every 30 seconds to reflect backend updates
+        const interval = setInterval(() => {
+            console.log("Auto-refreshing prices from DB...");
+            fetchCurrentPrices();
+            fetchTransactions(); // Re-calc holdings
+        }, 30000);
+
+        return () => clearInterval(interval);
+    }, []);
 
     const fetchAll = async () => {
         setLoading(true);

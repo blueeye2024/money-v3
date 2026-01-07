@@ -31,7 +31,7 @@ app.add_middleware(
 # 1. Initialize DB & Scheduler
 @app.on_event("startup")
 def on_startup():
-    from db import init_db, get_global_config
+    from db import init_db, get_global_config, update_stock_prices
     init_db()
     
     # Load SMS Setting from DB
@@ -41,10 +41,20 @@ def on_startup():
 
     # Start Scheduler
     scheduler = BackgroundScheduler()
-    scheduler.add_job(monitor_signals, 'interval', minutes=1)  # 신호 모니터링 (1분)
-    scheduler.add_job(update_prices_job, 'interval', minutes=5)  # 종목 현재가 업데이트 (5분)
-    scheduler.add_job(update_prices_job, 'interval', minutes=5)  # 종목 현재가 업데이트 (5분)
+    scheduler.add_job(monitor_signals, 'interval', minutes=1)
+    
+    # [New] Auto Price Update (Every 5 mins)
+    def update_prices_job():
+        try:
+            # Only run during market hours + buffer (roughly) or freely if quota allows.
+            # For now, run unconditionally as requested.
+            update_stock_prices()
+        except Exception as e:
+            print(f"Auto Price Update Failed: {e}")
+
+    scheduler.add_job(update_prices_job, 'interval', minutes=5)
     scheduler.start()
+    print("✅ Scheduler Started: Monitor(1m), PriceUpdate(5m)")
 
 # ... (API endpoints)
 
