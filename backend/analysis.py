@@ -2845,7 +2845,28 @@ def run_v2_signal_analysis():
                 is_30m_trend_down = (ma10_30 < ma30_30) # [NEW] Catch-up
                 
                 # [FIX] Allow Catch-up for 30m DC (Major Exit)
-                             send_sms(ticker, "최종청산(V2)", curr_price, get_current_time_str_sms(), "매매종료(추세끝)")
+                if (is_30m_dc or is_30m_trend_down):
+                    if sell_record['sell_sig3_yn'] == 'N':
+                         if save_v2_sell_signal(manage_id, 'sig3', curr_price):
+                             msg_type = "30분봉 DC" if is_30m_dc else "30분봉 하락추세(Catch-up)"
+                             print(f"📉 {ticker} V2 Sell Signal 3 (30m DC) Detected! ({msg_type})")
+                             log_history(manage_id, ticker, "3차청산신호", msg_type, curr_price)
+                             send_sms(ticker, "3차청산(30분봉/V2)", curr_price, get_current_time_str_sms(), "추세이탈/전량매도")
+                else:
+                    # [NEW] Auto-Reset Sell Signal 3
+                    if sell_record['sell_sig3_yn'] == 'Y':
+                         try:
+                             from db import manual_update_signal
+                             manual_update_signal(manage_id, 'sell3', 0, 'N')
+                             print(f"📈 {ticker} Sell Signal 3 Reset (Condition Lost)")
+                         except: pass
+
+                # Final Exit Logic (Sig 3 triggers Final)
+                if sell_record['sell_sig3_yn'] == 'Y' and sell_record['final_sell_yn'] == 'N':
+                     if save_v2_sell_signal(manage_id, 'final', curr_price):
+                         print(f"🏁 {ticker} V2 Sell Cycle FINALIZED (Trend Broken)")
+                         log_history(manage_id, ticker, "최종청산완료", "30분봉 추세종료", curr_price)
+                         send_sms(ticker, "최종청산(V2)", curr_price, get_current_time_str_sms(), "매매종료(추세끝)")
 
         except Exception as e:
             print(f"❌ Error analyzing {ticker}: {e}")
