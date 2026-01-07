@@ -553,7 +553,11 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
                                     type="number" step="0.01"
                                     value={formData.price} onChange={e => setFormData({ ...formData, price: e.target.value })}
                                     style={{ width: '100%', padding: '10px', background: '#0f172a', border: '1px solid #334155', color: '#fff', borderRadius: '8px', fontSize: '1rem', fontWeight: 'bold' }}
-                                    placeholder="실 매도 가격 (Average)"
+                                    placeholder={
+                                        modal.type === 'SET_TARGET'
+                                            ? (modal.key === 'buy_sig2_yn' ? "돌파 목표가 ($)" : "하향 이탈가/손절가 ($)")
+                                            : "가격 입력 ($)"
+                                    }
                                 />
                             </div>
 
