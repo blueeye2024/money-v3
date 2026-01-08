@@ -1871,8 +1871,9 @@ def check_triple_filter(ticker, data_30m, data_5m):
 
         # [Ver 3.9] Market Intelligence - Advanced Metrics (Optimization)
         if df30 is not None and not df30.empty:
-            result['new_metrics'] = calculate_market_intelligence(df30)
-            print(f"DEBUG: {ticker} New Metrics: {result.get('new_metrics')}")
+            # result['new_metrics'] = calculate_market_intelligence(df30)
+            result['new_metrics'] = {} # Dummy to prevent Key Error if used later
+            # print(f"DEBUG: {ticker} New Metrics: {result.get('new_metrics')}")
 
 
     except Exception as e:
