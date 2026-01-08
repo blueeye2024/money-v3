@@ -173,9 +173,12 @@ function Dashboard() {
                                 display: 'flex', alignItems: 'center', gap: '8px',
                                 border: '1px solid rgba(255,255,255,0.05)'
                             }}>
-                                <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>Last Analysis:</span>
+                                <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>Last Data:</span>
                                 <span style={{ fontSize: '0.9rem', fontWeight: 500, color: '#e2e8f0' }}>
-                                    {data.market_regime?.soxl?.data_time ? `${data.market_regime.soxl.data_time} (Data)` : data.timestamp.full_str}
+                                    {/* Prioritize data_time from SOXL, then timestamp.full_str */}
+                                    {data.market_regime?.soxl?.data_time ? `${data.market_regime.soxl.data_time}` :
+                                        data.market_regime?.SOXL?.data_time ? `${data.market_regime.SOXL.data_time}` :
+                                            data.timestamp.full_str}
                                 </span>
                             </div>
                         </div>

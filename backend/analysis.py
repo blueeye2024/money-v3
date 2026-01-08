@@ -1942,10 +1942,11 @@ def check_triple_filter(ticker, data_30m, data_5m):
         print(f"DEBUG: {ticker} current_price={result.get('current_price')}, daily_change={result.get('daily_change')}")
 
         # [Ver 3.9] Market Intelligence - Advanced Metrics (Optimization)
+        # [Ver 3.9] Market Intelligence - Advanced Metrics (Optimization)
         if df30 is not None and not df30.empty:
-            # result['new_metrics'] = calculate_market_intelligence(df30)
-            result['new_metrics'] = {} # Dummy to prevent Key Error if used later
-            # print(f"DEBUG: {ticker} New Metrics: {result.get('new_metrics')}")
+            result['new_metrics'] = calculate_market_intelligence(df30)
+            # result['new_metrics'] = {} # Dummy to prevent Key Error if used later
+            print(f"DEBUG: {ticker} New Metrics: {result.get('new_metrics')}")
 
 
     except Exception as e:
@@ -1958,6 +1959,53 @@ def check_triple_filter(ticker, data_30m, data_5m):
 # --- Antigravity V2.1 Helper Functions ---
 
 
+
+# --- Helper Functions for Market Intelligence ---
+def calculate_market_intelligence(df):
+    """
+    Calculate advanced metrics: Vol Ratio, ATR, Pivot R1
+    """
+    metrics = {}
+    try:
+        # 1. Vol Ratio (Current Vol / 20-period Avg Vol)
+        if 'Volume' in df.columns and len(df) >= 20:
+            vol_sma = ta.sma(df['Volume'], length=20)
+            if vol_sma is not None and vol_sma.iloc[-1] > 0:
+                metrics['vol_ratio'] = round(df['Volume'].iloc[-1] / vol_sma.iloc[-1], 2)
+            else:
+                metrics['vol_ratio'] = 0.0
+        else:
+            metrics['vol_ratio'] = 0.0
+
+        # 2. ATR (Average True Range, 14 period)
+        # pandas_ta atr requires High, Low, Close
+        try:
+             atr_series = ta.atr(df['High'], df['Low'], df['Close'], length=14)
+             if atr_series is not None:
+                 metrics['atr'] = round(atr_series.iloc[-1], 2)
+             else:
+                 metrics['atr'] = 0.0
+        except:
+             metrics['atr'] = 0.0
+        
+        # 3. Pivot R1 (Classic Pivot Points)
+        # Pivot = (H + L + C) / 3
+        # R1 = 2*P - L
+        try:
+            high = df['High'].iloc[-1]
+            low = df['Low'].iloc[-1]
+            close = df['Close'].iloc[-1]
+            pivot = (high + low + close) / 3
+            r1 = (2 * pivot) - low
+            metrics['pivot_r1'] = round(r1, 2)
+        except:
+            metrics['pivot_r1'] = 0.0
+
+    except Exception as e:
+        print(f"Market Intelligence Error: {e}")
+        return {}
+        
+    return metrics
 
 # Helper: Calculate Cheongan Index (보유 매력도)
 def calculate_cheongan_index(res):
