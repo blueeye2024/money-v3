@@ -160,7 +160,7 @@ const JournalPage = () => {
             ticker: holding.ticker,
             qty: holding.qty, // [FIX] Use existing Quantity
             price: holding.avgPrice, // [FIX] Use existing Average Price
-            trade_type: 'BUY' // Default to Buy for editing, user can switch if needed logic requires
+            trade_type: 'RESET' // [FIX] Use RESET for corrections (Snapshot)
         });
         setEditingId(holding.ticker);
         setShowForm(true);
@@ -376,14 +376,20 @@ const JournalPage = () => {
                             </div>
                             <div>
                                 <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: '#1d1d1f', fontWeight: '600' }}>구분</label>
-                                <div style={{ display: 'flex', gap: '0.5rem', height: '42px' }}>
-                                    <button type="button" onClick={() => setForm({ ...form, trade_type: 'BUY' })} style={{ flex: 1, borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 'bold', background: form.trade_type === 'BUY' ? '#ef4444' : 'rgba(255,255,255,0.3)', color: form.trade_type === 'BUY' ? 'white' : '#1d1d1f' }}>
-                                        매수 (Add)
-                                    </button>
-                                    <button type="button" onClick={() => setForm({ ...form, trade_type: 'SELL' })} style={{ flex: 1, borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 'bold', background: form.trade_type === 'SELL' ? '#3b82f6' : 'rgba(255,255,255,0.3)', color: form.trade_type === 'SELL' ? 'white' : '#1d1d1f' }}>
-                                        매도 (Sub)
-                                    </button>
-                                </div>
+                                {!editingId ? (
+                                    <div style={{ display: 'flex', gap: '0.5rem', height: '42px' }}>
+                                        <button type="button" onClick={() => setForm({ ...form, trade_type: 'BUY' })} style={{ flex: 1, borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 'bold', background: form.trade_type === 'BUY' ? '#ef4444' : 'rgba(255,255,255,0.3)', color: form.trade_type === 'BUY' ? 'white' : '#1d1d1f' }}>
+                                            매수 (Add)
+                                        </button>
+                                        <button type="button" onClick={() => setForm({ ...form, trade_type: 'SELL' })} style={{ flex: 1, borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 'bold', background: form.trade_type === 'SELL' ? '#3b82f6' : 'rgba(255,255,255,0.3)', color: form.trade_type === 'SELL' ? 'white' : '#1d1d1f' }}>
+                                            매도 (Sub)
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div style={{ padding: '0.75rem', background: 'rgba(255,255,255,0.2)', borderRadius: '8px', textAlign: 'center', fontWeight: 'bold', color: '#1e3a8a' }}>
+                                        보유량 수정 (Correction)
+                                    </div>
+                                )}
                             </div>
                             <div>
                                 <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: '#1d1d1f', fontWeight: '600' }}>수량</label>

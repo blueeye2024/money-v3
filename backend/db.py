@@ -708,12 +708,9 @@ def update_holding(ticker, qty_change, price, memo=None):
         conn.close()
 
 # Legacy aliases for compatibility (if needed temporarily)
-# Legacy aliases for compatibility (if needed temporarily)
 def get_transactions():
     return get_holdings()
 
-def get_current_holdings():
-    return get_holdings()
 
 def add_transaction(ticker_or_data, trade_type=None, qty=None, price=None, trade_date=None, memo=''):
     # [FIX] Support both Dictionary (from API) and Individual Args
@@ -724,20 +721,90 @@ def add_transaction(ticker_or_data, trade_type=None, qty=None, price=None, trade
         qty = int(data.get('qty', 0))
         price = float(data.get('price', 0))
         memo = data.get('memo', '')
+        trade_date = data.get('trade_date')
     else:
         ticker = ticker_or_data
         qty = int(qty) if qty else 0
         price = float(price) if price else 0
 
+    # 1. Insert into journal_transactions (Source of Truth for Analysis)
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            sql = """
+            INSERT INTO journal_transactions 
+            (ticker, trade_type, qty, price, trade_date, memo)
+            VALUES (%s, %s, %s, %s, COALESCE(%s, NOW()), %s)
+            """
+            cursor.execute(sql, (ticker, trade_type, qty, price, trade_date, memo))
+            conn.commit()
+    except Exception as e:
+        print(f"Insert Transaction Error: {e}")
+        # Continue to update managed_stocks even if log fails? 
+        # No, if log fails, maybe we should abort? But let's try to sync.
+    finally:
+        conn.close()
+
+    # 2. Update Managed Stocks (Snapshot for Frontend)
     # Adapter: Convert Trade Input -> Holding Update
-    qty_change = qty if trade_type == 'BUY' else -qty
-    return update_holding(ticker, qty_change, price, memo)
+    
+    if trade_type == 'RESET':
+        # Direct Overwrite
+        return update_holding(ticker, qty, price, memo, is_reset=True)
+    else:
+        # Incremental
+        qty_change = qty if trade_type == 'BUY' else -qty
+        return update_holding(ticker, qty_change, price, memo, is_reset=False)
 
-def get_transactions_legacy():
-    # Placeholder if old function is called
-    return []
+def update_holding(ticker, qty_change_or_new_qty, price, memo=None, is_reset=False):
+    """보유량 및 평단가 업데이트 (매수/매도/RESET)"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            # 기존 보유량 조회
+            cursor.execute("SELECT quantity, avg_price FROM managed_stocks WHERE ticker=%s", (ticker,))
+            row = cursor.fetchone()
+            
+            if not row:
+                # 종목이 없으면 먼저 생성 (add_stock 호출 권장하지만 여기서도 처리 가능)
+                return False, "Managed stock not found. Add stock first."
+            
+            if is_reset:
+                # RESET: Overwrite Quantity and Avg Price
+                new_qty = qty_change_or_new_qty
+                new_avg = price
+            else:
+                # Incremental Calculation
+                current_qty = row['quantity'] or 0
+                current_avg = row['avg_price'] or 0.0
+                qty_change = qty_change_or_new_qty
+                new_qty = current_qty + qty_change
+                
+                # 매수(Increase)일 경우 평단가 갱신 (가중평균)
+                if qty_change > 0:
+                    total_amt = (current_qty * current_avg) + (qty_change * price)
+                    new_avg = total_amt / new_qty if new_qty > 0 else 0
+                else:
+                    # 매도(Decrease)일 경우 평단가 불변 (단, 전량 매도 시 0 처리)
+                    new_avg = current_avg if new_qty > 0 else 0
 
-def update_transaction(id, data):
+            if new_qty < 0:
+                print("Warning: Quantity cannot be negative.")
+                # new_qty = 0 # Or allow negative for short? prevent for now.
+            
+            cursor.execute("""
+                UPDATE managed_stocks 
+                SET quantity=%s, avg_price=%s
+                WHERE ticker=%s
+            """, (new_qty, new_avg, ticker))
+            
+            conn.commit()
+            return True, "Holding updated"
+    except Exception as e:
+        print(f"Update Holding Error: {e}")
+        return False, str(e)
+    finally:
+        conn.close()
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
@@ -955,9 +1022,15 @@ def get_current_holdings():
                 t = tx['ticker']
                 if t not in queues: queues[t] = []
                 
-                if tx['trade_type'] == 'BUY':
+                # [NEW] RESET Logic (Clears history, sets snapshot)
+                if tx['trade_type'] == 'RESET':
+                    # Clear existing queue and set new state (Assume this is the new single 'lot')
+                    queues[t] = [{'p': float(tx['price']), 'q': int(tx['qty'])}]
+                
+                elif tx['trade_type'] == 'BUY':
                     queues[t].append({'p': float(tx['price']), 'q': int(tx['qty'])})
                 else:
+                    # SELL logic
                     sell_q = int(tx['qty'])
                     while sell_q > 0 and queues[t]:
                         batch = queues[t][0]
