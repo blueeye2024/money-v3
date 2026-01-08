@@ -749,7 +749,7 @@ def add_transaction(ticker_or_data, trade_type=None, qty=None, price=None, trade
         price = float(price) if price else 0
 
     try:
-        with open("/tmp/db_debug.log", "a") as f:
+        with open("/home/blue/debug_money.log", "a") as f:
             f.write(f"ADD_TXN: ticker={ticker}, type={trade_type}, qty={qty}, price={price}\n")
     except: pass
 
@@ -836,7 +836,7 @@ def update_holding(ticker, qty_change_or_new_qty, price, memo=None, is_reset=Fal
                 new_qty = qty_change_or_new_qty
                 new_avg = price
                 try:
-                    with open("/tmp/db_debug.log", "a") as f:
+                    with open("/home/blue/debug_money.log", "a") as f:
                         f.write(f"UPDATE_HOLDING [RESET]: ticker={ticker}, new_qty={new_qty}, new_avg={new_avg}\n")
                 except: pass
             else:
