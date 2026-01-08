@@ -1808,10 +1808,87 @@ def check_triple_filter(ticker, data_30m, data_5m):
         print(f"DEBUG: {ticker} current_price={result.get('current_price')}, daily_change={result.get('daily_change')}")
 
 
-# [Ver 3.9] Market Intelligence - Advanced Metrics (Optimization)
+
+        # [Ver 3.9] Market Intelligence - Advanced Metrics (Optimization)
         if df30 is not None and not df30.empty:
             result['new_metrics'] = calculate_market_intelligence(df30)
-            # result['new_metrics'] = {} # Dummy to prevent Key Error if used later
+            
+            # --- [NEW] Log Market Indicators & Signals to DB ---
+            try:
+                from db import log_market_indicators
+                
+                # Determine Signal Times (Scan recent DF for Cross)
+                # Helper to find latest cross time
+                def find_cross_time(df, fast_col='MA5', slow_col='MA20', type='gold'):
+                    try:
+                        if len(df) < 5: return 'N'
+                        # Create boolean series for crossover
+                        if type == 'gold':
+                            # Current > Slow and Prev <= PrevSlow
+                            cross = (df[fast_col] > df[slow_col]) & (df[fast_col].shift(1) <= df[slow_col].shift(1))
+                        else: # dead
+                            cross = (df[fast_col] < df[slow_col]) & (df[fast_col].shift(1) >= df[slow_col].shift(1))
+                        
+                        # Get True indices
+                        locs = df.index[cross]
+                        if len(locs) > 0:
+                            # Return latest one (localized string)
+                            latest = locs[-1] # Timestamp
+                            # Convert to KST string for user request
+                            # Assuming index is NY time (from earlier fetching logic)
+                            # Convert NY -> KST
+                            latest_kst = latest.astimezone(pytz.timezone('Asia/Seoul'))
+                            return latest_kst.strftime("%Y-%m-%d %H:%M:%S")
+                    except:
+                        pass
+                    return 'N'
+
+                # Calculate MA if not present (df30 has them from run_analysis logic? 
+                # run_analysis calls analyze_ticker which calculates MAs but returns boolean.
+                # data_cache usually has raw data. We need MAs.
+                # calculate_market_intelligence gets 'df', but df30 passed to it might be raw?
+                # Actually run_analysis gets 'df' from fetch_data. 
+                # fetch_data returns raw.
+                # We need to compute MAs on df30 and df5 here if we want to find cross times.
+                
+                # Re-compute MAs for signal timing (lightweight)
+                df30_ma = df30.copy()
+                df30_ma.ta.sma(length=5, append=True)
+                df30_ma.ta.sma(length=20, append=True)
+                
+                df5_ma = df5.copy() if df5 is not None else None
+                if df5_ma is not None:
+                    df5_ma.ta.sma(length=5, append=True)
+                    df5_ma.ta.sma(length=20, append=True)
+                
+                gold_30m = find_cross_time(df30_ma, 'SMA_5', 'SMA_20', 'gold')
+                dead_30m = find_cross_time(df30_ma, 'SMA_5', 'SMA_20', 'dead')
+                
+                gold_5m = 'N'
+                dead_5m = 'N'
+                if df5_ma is not None:
+                    gold_5m = find_cross_time(df5_ma, 'SMA_5', 'SMA_20', 'gold')
+                    dead_5m = find_cross_time(df5_ma, 'SMA_5', 'SMA_20', 'dead')
+
+                # Log Data Construction
+                log_data = {
+                    'ticker': ticker,
+                    'candle_time': result.get('data_time'), # NY time str or obj? analysis.py uses last_time_str
+                    'rsi': result['new_metrics'].get('rsi'),
+                    'vr': result['new_metrics'].get('vol_ratio'),
+                    'atr': result['new_metrics'].get('atr'),
+                    'pivot_r1': result['new_metrics'].get('pivot_r1'),
+                    'gold_30m': gold_30m,
+                    'gold_5m': gold_5m,
+                    'dead_30m': dead_30m,
+                    'dead_5m': dead_5m
+                }
+                
+                log_market_indicators(log_data)
+                
+            except Exception as e:
+                print(f"Logging Market Indicators Failed ({ticker}): {e}")
+
             print(f"DEBUG: {ticker} New Metrics: {result.get('new_metrics')}")
 
     except Exception as e:

@@ -38,6 +38,38 @@ def _get_pool():
             return None
     return _connection_pool
 
+
+def log_market_indicators(data):
+    """
+    시장 지표 및 신호 상태 DB 저장
+    data struct: {
+        'ticker': str,
+        'candle_time': datetime (NY),
+        'rsi': float, 'vr': float, 'atr': float, 'pivot_r1': float,
+        'gold_30m': str ('N' or 'YYYY-MM-DD HH:MM:SS'),
+        ...
+    }
+    """
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            sql = """
+            INSERT INTO market_indicators_log 
+            (ticker, candle_time, rsi_14, vol_ratio, atr, pivot_r1, gold_30m, gold_5m, dead_30m, dead_5m)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """
+            cursor.execute(sql, (
+                data['ticker'], data['candle_time'], 
+                data.get('rsi', 0), data.get('vr', 0), data.get('atr', 0), data.get('pivot_r1', 0),
+                data.get('gold_30m', 'N'), data.get('gold_5m', 'N'),
+                data.get('dead_30m', 'N'), data.get('dead_5m', 'N')
+            ))
+            conn.commit()
+    except Exception as e:
+        print(f"Log Indicators Error: {e}")
+    finally:
+        conn.close()
+
 def get_connection():
     """Get database connection from pool (with context manager support)"""
     pool = _get_pool()
@@ -201,6 +233,26 @@ def init_db():
             )
             """
             cursor.execute(sql_upro)
+
+            # 10. Market Indicators Log (Analysis History)
+            sql_indicators = """
+            CREATE TABLE IF NOT EXISTS market_indicators_log (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                ticker VARCHAR(10) NOT NULL,
+                candle_time DATETIME NOT NULL COMMENT '기준 캔들 시간(NY)',
+                rsi_14 DECIMAL(10, 2),
+                vol_ratio DECIMAL(10, 2),
+                atr DECIMAL(10, 4),
+                pivot_r1 DECIMAL(10, 2),
+                gold_30m VARCHAR(30) DEFAULT 'N' COMMENT '30분 골든 발생시간(KR) or N',
+                gold_5m VARCHAR(30) DEFAULT 'N' COMMENT '5분 골든 발생시간(KR) or N',
+                dead_30m VARCHAR(30) DEFAULT 'N' COMMENT '30분 데드 발생시간(KR) or N',
+                dead_5m VARCHAR(30) DEFAULT 'N' COMMENT '5분 데드 발생시간(KR) or N',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '분석 실행 시간(Log Time)'
+            )
+            """
+            cursor.execute(sql_indicators)
+
 
 
 
