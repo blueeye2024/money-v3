@@ -624,9 +624,17 @@ def api_get_transactions():
 
 @app.post("/api/transactions")
 def api_add_transaction(txn: TransactionModel):
-    if add_transaction(txn.dict()):
+    result = add_transaction(txn.dict())
+    if isinstance(result, tuple):
+        success, msg = result
+        if success:
+            return {"status": "success", "message": msg}
+        else:
+             return JSONResponse(status_code=400, content={"status": "error", "message": msg})
+    # Fallback if boolean
+    if result:
         return {"status": "success"}
-    return {"status": "error"}
+    return JSONResponse(status_code=400, content={"status": "error", "message": "Transaction failed"})
 
 @app.put("/api/transactions/{id}")
 def api_update_transaction(id: int, txn: TransactionModel):
