@@ -251,6 +251,78 @@ def fetch_data(tickers=None, force=False, override_period=None):
                 except Exception as e:
                     print(f"KIS Patch Error ({ticker}): {e}")
 
+            # [NEW] Synthetic Candle Patch (Real-time Fallback)
+            # If latest candle is old (>30m), append a "Synthetic" candle using Current Price
+            # This ensures Master Control Tower reflects NOW price even if Candle API is delayed.
+            try:
+                for ticker in CORE_TICKERS:
+                    # check current price
+                    curr_data = kis_client.get_price(ticker)
+                    if not curr_data or curr_data['price'] <= 0: continue
+                    
+                    curr_price = float(curr_data['price'])
+                    
+                    # 1. 30m Patch
+                    d30 = _DATA_CACHE.get("30m")
+                    if d30 and ticker in d30:
+                        df = d30[ticker]
+                        if not df.empty:
+                            last_time = df.index[-1]
+                            # Check time diff in minutes
+                            now_ny = datetime.now(timezone.utc).astimezone(ny_tz)
+                            diff_min = (now_ny - last_time).total_seconds() / 60
+                            
+                            # If gap > 20 mins, assume we need a current candle
+                            # We just duplicate the last candle or create new one with current close
+                            if diff_min > 20:
+                                new_time = now_ny.replace(second=0, microsecond=0)
+                                # Snap to 30m? Or just use current time?
+                                # Snap to 30m for consistency
+                                min_snap = new_time.minute - (new_time.minute % 30)
+                                new_time = new_time.replace(minute=min_snap)
+                                
+                                # If the snapped time is same as last, update last
+                                if new_time == last_time:
+                                    df.at[last_time, 'Close'] = curr_price
+                                    # Update High/Low if breached?
+                                    if curr_price > df.at[last_time, 'High']: df.at[last_time, 'High'] = curr_price
+                                    if curr_price < df.at[last_time, 'Low']: df.at[last_time, 'Low'] = curr_price
+                                    print(f"  ⚡ Synthetic Update 30m {ticker}: Updated Cl=${curr_price}")
+                                elif new_time > last_time:
+                                    # Create new row
+                                    new_row = pd.DataFrame([{
+                                        'Open': curr_price, 'High': curr_price, 'Low': curr_price, 'Close': curr_price, 'Volume': 0
+                                    }], index=[new_time])
+                                    df = pd.concat([df, new_row])
+                                    d30[ticker] = df
+                                    print(f"  ⚡ Synthetic Append 30m {ticker}: ${curr_price} @ {new_time.strftime('%H:%M')}")
+
+                    # 2. 5m Patch
+                    d5 = _DATA_CACHE.get("5m")
+                    if d5 and ticker in d5:
+                        df = d5[ticker]
+                        if not df.empty:
+                            last_time = df.index[-1]
+                            now_ny = datetime.now(timezone.utc).astimezone(ny_tz)
+                            
+                            # Snap to 5m
+                            new_time = now_ny.replace(second=0, microsecond=0)
+                            min_snap = new_time.minute - (new_time.minute % 5)
+                            new_time = new_time.replace(minute=min_snap)
+                            
+                            if new_time == last_time:
+                                df.at[last_time, 'Close'] = curr_price
+                                if curr_price > df.at[last_time, 'High']: df.at[last_time, 'High'] = curr_price
+                                if curr_price < df.at[last_time, 'Low']: df.at[last_time, 'Low'] = curr_price
+                            elif new_time > last_time:
+                                new_row = pd.DataFrame([{
+                                    'Open': curr_price, 'High': curr_price, 'Low': curr_price, 'Close': curr_price, 'Volume': 0
+                                }], index=[new_time])
+                                df = pd.concat([df, new_row])
+                                d5[ticker] = df
+            except Exception as e:
+                print(f"Synthetic Candle Error: {e}")
+
 
         except Exception as e:
             print(f"Incremental Fetch Error: {e}")
