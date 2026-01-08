@@ -237,16 +237,80 @@ def load_data_from_db(target_list=None):
         
         for ticker in target_list:
             # 30m
-            df30 = load_market_candles(ticker, "30m", limit=1000)
+            df30 = None
+            if ticker in ["SOXL", "SOXS", "UPRO"]:
+                # Ver 3.0 Engine: Validated Tables
+                from db import get_connection
+                try:
+                    query = f"SELECT candle_date, hour, minute, close_price, volume FROM {ticker.lower()}_candle_data ORDER BY candle_date ASC, hour ASC, minute ASC"
+                    conn = get_connection()
+                    with conn.cursor() as cursor:
+                        cursor.execute(query)
+                        rows = cursor.fetchall()
+                    
+                    if rows:
+                        data = []
+                        ny_tz = pytz.timezone('America/New_York')
+                        for r in rows:
+                            # Construct datetime
+                            dt_str = f"{r['candle_date']} {r['hour']:02d}:{r['minute']:02d}:00"
+                            dt_obj = datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S")
+                            dt_obj = ny_tz.localize(dt_obj)
+                            data.append({
+                                'Datetime': dt_obj,
+                                'Close': float(r['close_price']),
+                                'Volume': int(r['volume'])
+                            })
+                        df30_raw = pd.DataFrame(data).set_index('Datetime')
+                        # Resample to 30m
+                        df30 = df30_raw.resample('30min').agg({'Close': 'last', 'Volume': 'sum'}).dropna()
+                except Exception as e:
+                    print(f"Ver3 Table Load Error ({ticker}): {e}")
+
+            if df30 is None:
+                # Fallback to Legacy
+                df30 = load_market_candles(ticker, "30m", limit=1000)
+
             if df30 is not None and not df30.empty:
                 df30 = df30.dropna(subset=['Close'])
                 cache_30m[ticker] = df30
             
             # 5m
-            df5 = load_market_candles(ticker, "5m", limit=2000)
+            df5 = None
+            if ticker in ["SOXL", "SOXS", "UPRO"]:
+                 # Already fetched rows above? Let's just re-use logic since it's cheap (300 rows)
+                 # Actually better to start from df30_raw above if we had scope.
+                 # Let's repeat for now for simplicity or cache 'raw' in a local var?
+                 # Re-fetching 300 rows is instant.
+                 try:
+                    query = f"SELECT candle_date, hour, minute, close_price, volume FROM {ticker.lower()}_candle_data ORDER BY candle_date ASC, hour ASC, minute ASC"
+                    conn = get_connection()
+                    with conn.cursor() as cursor:
+                       cursor.execute(query)
+                       rows = cursor.fetchall()
+                    if rows:
+                        data = []
+                        ny_tz = pytz.timezone('America/New_York')
+                        for r in rows:
+                            dt_str = f"{r['candle_date']} {r['hour']:02d}:{r['minute']:02d}:00"
+                            dt_obj = datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S")
+                            dt_obj = ny_tz.localize(dt_obj)
+                            data.append({
+                                'Datetime': dt_obj,
+                                'Close': float(r['close_price']),
+                                'Volume': int(r['volume'])
+                            })
+                        df5 = pd.DataFrame(data).set_index('Datetime')
+                        # It is already 5m base.
+                 except: pass
+
+            if df5 is None:
+                df5 = load_market_candles(ticker, "5m", limit=2000)
+
             if df5 is not None and not df5.empty:
                 df5 = df5.dropna(subset=['Close'])
                 cache_5m[ticker] = df5
+
                 
             # 1d
             df1 = load_market_candles(ticker, "1d", limit=180)
