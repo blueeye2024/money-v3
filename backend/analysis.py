@@ -1807,13 +1807,12 @@ def check_triple_filter(ticker, data_30m, data_5m):
 
         print(f"DEBUG: {ticker} current_price={result.get('current_price')}, daily_change={result.get('daily_change')}")
 
-        # [Ver 3.9] Market Intelligence - Advanced Metrics (Optimization)
-        # [Ver 3.9] Market Intelligence - Advanced Metrics (Optimization)
+
+# [Ver 3.9] Market Intelligence - Advanced Metrics (Optimization)
         if df30 is not None and not df30.empty:
             result['new_metrics'] = calculate_market_intelligence(df30)
             # result['new_metrics'] = {} # Dummy to prevent Key Error if used later
             print(f"DEBUG: {ticker} New Metrics: {result.get('new_metrics')}")
-
 
     except Exception as e:
         print(f"Triple Filter Error ({ticker}): {e}")
@@ -1824,27 +1823,27 @@ def check_triple_filter(ticker, data_30m, data_5m):
 
 # --- Antigravity V2.1 Helper Functions ---
 
-
-
 # --- Helper Functions for Market Intelligence ---
 def calculate_market_intelligence(df):
     """
-    Calculate advanced metrics: Vol Ratio, ATR, Pivot R1
+    Calculate advanced metrics: Vol Ratio, ATR, Pivot R1, RSI
     """
     metrics = {}
     try:
-        # 1. Vol Ratio (Current Vol / 20-period Avg Vol)
+        # 1. Vol Ratio (Current Vol / 20-period Avg Vol) with Safety Check
         if 'Volume' in df.columns and len(df) >= 20:
             vol_sma = ta.sma(df['Volume'], length=20)
-            if vol_sma is not None and vol_sma.iloc[-1] > 0:
-                metrics['vol_ratio'] = round(df['Volume'].iloc[-1] / vol_sma.iloc[-1], 2)
+            cur_vol = df['Volume'].iloc[-1]
+            avg_vol = vol_sma.iloc[-1] if vol_sma is not None else 0
+            
+            if avg_vol > 0:
+                metrics['vol_ratio'] = round((cur_vol / avg_vol) * 100, 2) # Percent
             else:
                 metrics['vol_ratio'] = 0.0
         else:
             metrics['vol_ratio'] = 0.0
 
         # 2. ATR (Average True Range, 14 period)
-        # pandas_ta atr requires High, Low, Close
         try:
              atr_series = ta.atr(df['High'], df['Low'], df['Close'], length=14)
              if atr_series is not None:
@@ -1863,9 +1862,22 @@ def calculate_market_intelligence(df):
             close = df['Close'].iloc[-1]
             pivot = (high + low + close) / 3
             r1 = (2 * pivot) - low
+            r2 = pivot + (high - low)
             metrics['pivot_r1'] = round(r1, 2)
+            metrics['pivot_r2'] = round(r2, 2)
         except:
             metrics['pivot_r1'] = 0.0
+            metrics['pivot_r2'] = 0.0
+
+        # 4. RSI (14) - Include it here for easy access
+        try:
+             rsi_series = ta.rsi(df['Close'], length=14)
+             if rsi_series is not None:
+                 metrics['rsi'] = round(rsi_series.iloc[-1], 2)
+             else:
+                 metrics['rsi'] = 50.0
+        except:
+             metrics['rsi'] = 50.0
 
     except Exception as e:
         print(f"Market Intelligence Error: {e}")
@@ -2126,6 +2138,10 @@ def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None):
     # If Volume Ratio > 2.0 AND Trend is UP, it's a strong signal -> Reduce Penalty or Boost
     if vol_ratio > 2.0 and breakdown['cheongan'] > 30:
         score += 5
+    elif breakdown['cheongan'] > 30 and vol_ratio < 1.0:
+        # User Rule: VR Check (Signal Compression)
+        # If breakout signal but low volume, reduce confidence
+        score -= 5
         
     # Policy 3: Resistance Proximity
     # If Price is very close to Pivot R1 (within 0.5%) AND we are holding -> Warning (No score change but maybe use in commentary)
@@ -2135,6 +2151,18 @@ def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None):
         if 0 < dist_to_r1 < 0.005: # < 0.5% left to R1
              # Resistance ahead, limit max score?
              score = min(score, 88) # Cap at 88 (prevent 90+ Strong Buy right at resistance)
+
+    # Policy 4: RSI Overbought Limit (User Request)
+    # If RSI >= 70, restrict Entry (Cap score to 'Hold' or 'Weak Buy')
+    if rsi >= 70:
+        # Even if trend is perfect, do not recommend "Strong Buy"
+        # 60 is threshold for "Buy", so cap at 65 or reduce score significantly?
+        # User said "진입 보류" (Hold entry). Score < 60 means "Neutral/Hold".
+        # Let's cap at 58 to enforce "Neutral" if purely looking for entry.
+        # But if we already hold, we shouldn't force sell.
+        if not is_v2_holding:
+            score = min(score, 58) 
+            breakdown['penalty'] += 10 # Mark as penalty constraint
 
     score = max(0, min(100, score - penalty))
     
