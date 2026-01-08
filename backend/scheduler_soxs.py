@@ -11,8 +11,11 @@ def run_maintenance_job():
     print(f"⏰ [Maintenance] Starting Candle Data Maintenance Job at {time.strftime('%Y-%m-%d %H:%M:%S')}...")
     try:
         populate_ticker_candle_data("SOXS")
+        time.sleep(5) # Delay to prevent rate limiting
         populate_ticker_candle_data("SOXL")
-        print("✅ [Maintenance] SOXS/SOXL Data Refreshed Successfully.")
+        time.sleep(5)
+        populate_ticker_candle_data("UPRO")
+        print("✅ [Maintenance] SOXS/SOXL/UPRO Data Refreshed Successfully.")
     except Exception as e:
         print(f"❌ [Maintenance] Job Failed: {e}")
 
