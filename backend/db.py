@@ -748,6 +748,11 @@ def add_transaction(ticker_or_data, trade_type=None, qty=None, price=None, trade
         qty = int(qty) if qty else 0
         price = float(price) if price else 0
 
+    try:
+        with open("/tmp/db_debug.log", "a") as f:
+            f.write(f"ADD_TXN: ticker={ticker}, type={trade_type}, qty={qty}, price={price}\n")
+    except: pass
+
     # 1. Insert into journal_transactions (Source of Truth for Analysis)
     conn = get_connection()
     try:
@@ -830,6 +835,10 @@ def update_holding(ticker, qty_change_or_new_qty, price, memo=None, is_reset=Fal
                 # RESET: Overwrite Quantity and Avg Price
                 new_qty = qty_change_or_new_qty
                 new_avg = price
+                try:
+                    with open("/tmp/db_debug.log", "a") as f:
+                        f.write(f"UPDATE_HOLDING [RESET]: ticker={ticker}, new_qty={new_qty}, new_avg={new_avg}\n")
+                except: pass
             else:
                 # Incremental Calculation
                 current_qty = row['quantity'] or 0
