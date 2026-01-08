@@ -205,21 +205,26 @@ const JournalPage = () => {
 
     // Delete entire holding? Or just reduce qty?
     // "Delete" usually means reset to 0.
+    // Delete holding (Reset to 0)
     const handleDelete = async (ticker) => {
-        if (!window.confirm('이 종목의 보유량을 0으로 초기화하시겠습니까?')) return;
+        if (!window.confirm('정말 이 보유 종목을 삭제하시겠습니까? (수량 0 처리)')) return;
         try {
-            // We simulate a sell of all quantity
-            // First find the holding
             const h = holdings.find(i => i.ticker === ticker);
             if (h) {
+                // Use RESET to 0
                 await axios.post('/api/transactions', {
                     ticker: ticker,
-                    trade_type: 'SELL',
-                    qty: h.qty,
-                    price: h.currentPrice, // Price doesn't matter for qty 0 but affects history if we kept it
+                    trade_type: 'RESET',
+                    qty: 0,
+                    price: 0,
                     trade_date: new Date().toISOString(),
-                    memo: 'Reset'
+                    memo: 'Deleted'
                 });
+
+                // Optimistic Update: Remove from list
+                setHoldings(prev => prev.filter(item => item.ticker !== ticker));
+
+                // Also Refresh Background
                 fetchHoldings();
             }
         } catch (e) { alert('삭제 실패'); }
@@ -510,7 +515,7 @@ const JournalPage = () => {
                                             <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
                                                 {/* Edit: Trigger Add form with pre-filled price, just to modify state easier */}
                                                 <button onClick={() => handleEdit(h)} style={{ padding: '0.5rem 0.75rem', background: 'rgba(59,130,246,0.2)', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '600', color: '#1e40af' }}>변경</button>
-                                                <button onClick={() => handleDelete(h.ticker)} style={{ padding: '0.5rem 0.75rem', background: 'rgba(239,68,68,0.2)', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '600', color: '#dc2626' }}>초기화</button>
+                                                <button onClick={() => handleDelete(h.ticker)} style={{ padding: '0.5rem 0.75rem', background: 'rgba(239,68,68,0.2)', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '600', color: '#dc2626' }}>삭제</button>
                                             </div>
                                         </td>
                                     </tr>
