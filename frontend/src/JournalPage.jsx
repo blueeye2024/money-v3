@@ -43,37 +43,39 @@ const JournalPage = () => {
     const fetchAll = async () => {
         setLoading(true);
         try {
+            // [OPTIMIZATION] Fast Initial Load
+            // 1. Fetch fast data and render immediately
             await Promise.all([fetchHoldings(), fetchStocks(), fetchCapital()]);
+            setLoading(false); // Hide spinner ASAP based on fast data
+
+            // 2. Fetch slow data (Exchange Rate) in background
+            fetchReportData();
         } catch (e) {
             console.error(e);
-        } finally {
             setLoading(false);
         }
     };
 
-    const fetchHoldings = async (existingRate = null) => {
+    const fetchReportData = async () => {
         try {
-            // [OPTIMIZATION] Parallel Fetching
-            // Fetch Transacrtions and Report (for Rate) in parallel if rate not provided
-            let rate = existingRate || exchangeRate;
-            let rawData = [];
-
-            if (!existingRate) {
-                // If we don't have a fresh rate, fetch both
-                // But to be super fast, we can use the 'exchangeRate' state if it's not default?
-                // For safety, let's fetch report in parallel.
-                const [txRes, reportRes] = await Promise.all([
-                    axios.get('/api/transactions'),
-                    axios.get('/api/report')
-                ]);
-                rawData = txRes.data || [];
-                rate = reportRes.data.market?.KRW?.value || 1444.5;
+            const res = await axios.get('/api/report');
+            const rate = res.data.market?.KRW?.value;
+            if (rate) {
                 setExchangeRate(rate);
-            } else {
-                // Just fetch transactions
-                const res = await axios.get('/api/transactions');
-                rawData = res.data || [];
+                // Refresh holdings with new rate if it changed significantly?
+                // Or just re-fetch since it's cheap (0.01s)
+                fetchHoldings(rate);
             }
+        } catch (e) { console.error("Report fetch failed:", e); }
+    };
+
+    const fetchHoldings = async (rateOverride = null) => {
+        try {
+            const currentRate = rateOverride || exchangeRate;
+
+            // Only fetch transactions (0.01s)
+            const res = await axios.get('/api/transactions');
+            const rawData = res.data || [];
 
             const processed = rawData.map(h => {
                 const qty = h.qty || 0;
@@ -92,7 +94,7 @@ const JournalPage = () => {
                     currentPrice: curPrice,
                     totalCost,
                     currentValue,
-                    currentValueKRW: currentValue * rate,
+                    currentValueKRW: currentValue * currentRate,
                     profit,
                     profitPct,
                     stockId: h.ticker // Use ticker as ID
