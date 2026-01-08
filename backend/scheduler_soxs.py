@@ -1,17 +1,18 @@
 
 from apscheduler.schedulers.background import BackgroundScheduler
-from populate_soxs import populate_soxs_data
+from populate_candles import populate_ticker_candle_data
 import time
 
 def run_maintenance_job():
     """
-    Job to maintain exactly 3 days of SOXS data.
-    Runs populate_soxs_data() which now handles TRUNCATE + Fetch 3 days logic.
+    Job to maintain exactly 3 days of SOXS/SOXL data.
+    Runs populate_ticker_candle_data() which handles TRUNCATE + Fetch 3 days logic.
     """
-    print(f"⏰ [Maintenance] Starting SOXS 3-Day Window Maintenance Job at {time.strftime('%Y-%m-%d %H:%M:%S')}...")
+    print(f"⏰ [Maintenance] Starting Candle Data Maintenance Job at {time.strftime('%Y-%m-%d %H:%M:%S')}...")
     try:
-        populate_soxs_data()
-        print("✅ [Maintenance] SOXS Data Refreshed Successfully.")
+        populate_ticker_candle_data("SOXS")
+        populate_ticker_candle_data("SOXL")
+        print("✅ [Maintenance] SOXS/SOXL Data Refreshed Successfully.")
     except Exception as e:
         print(f"❌ [Maintenance] Job Failed: {e}")
 

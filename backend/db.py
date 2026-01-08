@@ -168,6 +168,24 @@ def init_db():
             """
             cursor.execute(sql_soxs)
 
+            # 8. SOXL Specific Candle Data (User Custom Table)
+            sql_soxl = """
+            CREATE TABLE IF NOT EXISTS soxl_candle_data (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                seq INT COMMENT '순번',
+                candle_date DATE COMMENT '일자',
+                is_30m CHAR(1) COMMENT '30분봉 사용 (Y)',
+                hour INT COMMENT '시간',
+                minute INT COMMENT '분',
+                close_price DECIMAL(10, 4) COMMENT '종가 가격',
+                volume BIGINT COMMENT '거래량',
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '업데이트 시간',
+                source VARCHAR(50) COMMENT '출처'
+            )
+            """
+            cursor.execute(sql_soxl)
+
+
 
             # 6. Auto Trade History (Simulated)
             sql_trade = """
