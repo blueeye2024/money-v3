@@ -319,6 +319,10 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
         { key: 'sell_sig3_yn', label: '3차: 30분봉 DC', desc: '추세 이탈', rawKey: 'sell3' }
     ];
 
+    // --- Ver 3.0 Market Intelligence Metrics ---
+    const metrics = renderInfo?.new_metrics || {};
+    const signals = metrics.signals || {};
+
     const renderSteps = (stepType, data, isActiveMode) => {
         const stepList = getSteps(stepType);
 
@@ -342,12 +346,28 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
                 {stepList.map((step, idx) => {
                     const isActive = data?.[step.key] === 'Y';
 
+                    // Ver 3.0 Signal Time Logic
+                    let signalTimeDisplay = null;
+                    if (step.key === 'buy_sig1_yn') signalTimeDisplay = signals.gold_5m; // 1차 매수 (5분 골든)
+                    if (step.key === 'buy_sig3_yn') signalTimeDisplay = signals.gold_30m; // 3차 매수 (30분 골든)
+                    if (step.key === 'sell_sig1_yn') signalTimeDisplay = signals.dead_5m; // 1차 매도 (5분 데드)
+                    if (step.key === 'sell_sig3_yn') signalTimeDisplay = signals.dead_30m; // 3차 매도 (30분 데드)
+
+                    // Clean Time String (remove date if today, or just show HH:mm)
+                    if (signalTimeDisplay && signalTimeDisplay !== 'N' && typeof signalTimeDisplay === 'string') {
+                        try {
+                            // KST timestamp format expected "YYYY-MM-DD HH:MM:SS"
+                            const timePart = signalTimeDisplay.split(' ')[1]?.substring(0, 5); // HH:MM
+                            if (timePart) signalTimeDisplay = timePart;
+                        } catch (e) { }
+                    } else {
+                        signalTimeDisplay = null;
+                    }
+
                     return (
                         <div key={idx} style={{ zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', flex: 1 }}>
                             <div
                                 onClick={() => {
-                                    // [MODIFIED] Allow Manual Signal Start even if no active record
-                                    // if (!activeData?.manage_id) return Swal.fire('알림', "활성 기록이 없어 수동 신호 등록이 불가능합니다.\n(첫 5분봉 신호는 자동 감지를 기다려주세요)", 'info');
                                     setModal({ type: 'MANUAL_SIGNAL', isOpen: true, key: step.rawKey });
                                 }}
                                 style={{
@@ -359,29 +379,33 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
                                     transition: 'all 0.3s ease',
                                     cursor: 'pointer'
                                 }}
-                                title="수동 신호 발생 (클릭)"
+                                title={signalTimeDisplay ? `신호 발생: ${signals.gold_5m || 'N/A'}` : "수동 신호 발생 (클릭)"}
                             >
                                 <span style={{ fontSize: '1rem', color: isActive ? '#fff' : '#64748b', fontWeight: 'bold' }}>
                                     {isActive ? '✓' : idx + 1}
                                 </span>
                             </div>
                             <div style={{ textAlign: 'center' }}>
-                                <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: isActive ? '#f1f5f9' : '#64748b' }}>
+                                <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: isActive ? '#f1f5f9' : '#64748b', whiteSpace: 'nowrap' }}>
                                     {step.label}
                                 </div>
                                 <div style={{ fontSize: '0.65rem', color: '#475569', marginTop: '2px' }}>
-                                    {/* [MODIFIED] Show Price/Target instead of Description when Active */}
-                                    {isActive ? (
-                                        (stepType === 'BUY' && step.key === 'buy_sig2_yn' && data?.target_box_price) ?
-                                            `Target: ${formatPrice(data.target_box_price)}` :
-                                            ((stepType === 'SELL' && step.key === 'sell_sig2_yn' && data?.target_stop_price) ?
-                                                `Target: ${formatPrice(data.target_stop_price)}` :
-                                                (data?.[step.key + '_price'] ? Number(data[step.key + '_price']).toFixed(2) : 'Done'))
+                                    {/* Priority: Active Signal Time > Active Price/Target > Description */}
+                                    {isActive && signalTimeDisplay ? (
+                                        <span style={{ color: '#fbbf24', fontWeight: 'bold' }}>⏰ {signalTimeDisplay}</span>
                                     ) : (
-                                        data?.[step.key + '_date'] ? new Date(data[step.key + '_date']).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : step.desc
+                                        isActive ? (
+                                            (stepType === 'BUY' && step.key === 'buy_sig2_yn' && data?.target_box_price) ?
+                                                `Target: ${formatPrice(data.target_box_price)}` :
+                                                ((stepType === 'SELL' && step.key === 'sell_sig2_yn' && data?.target_stop_price) ?
+                                                    `Target: ${formatPrice(data.target_stop_price)}` :
+                                                    (data?.[step.key + '_price'] ? Number(data[step.key + '_price']).toFixed(2) : 'Done'))
+                                        ) : (
+                                            // Inactive + Signal Time Exists (Pre-signal or missed?) -> Show signal time if exists for context
+                                            signalTimeDisplay ? <span style={{ color: '#64748b' }}>({signalTimeDisplay})</span> : step.desc
+                                        )
                                     )}
                                 </div>
-                                {/* Price redundant with description area now */}
 
                                 {/* Custom Target Badge (Click to Open Modal) */}
                                 {isActiveMode && (
@@ -451,10 +475,26 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
                             )}
                         </div>
                     )}
+
+                    {/* [NEW] Market Metrics Mini-Bar */}
+                    {metrics && (
+                        <div style={{ display: 'flex', gap: '8px', marginTop: '6px', flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: '0.7rem', background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px', color: '#ccc' }}>
+                                RSI <b style={{ color: (metrics.rsi > 70 || metrics.rsi < 30) ? '#facc15' : '#fff' }}>{metrics.rsi ? Number(metrics.rsi).toFixed(0) : '-'}</b>
+                            </span>
+                            <span style={{ fontSize: '0.7rem', background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px', color: '#ccc' }}>
+                                VR <b style={{ color: (metrics.vol_ratio > 1.2) ? '#facc15' : '#fff' }}>{metrics.vol_ratio ? Number(metrics.vol_ratio).toFixed(1) : '-'}</b>
+                            </span>
+                            <span style={{ fontSize: '0.7rem', background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px', color: '#ccc' }}>
+                                P.R1 <b style={{ color: '#f87171' }}>{metrics.pivot_r1 ? Number(metrics.pivot_r1).toFixed(2) : '-'}</b>
+                            </span>
+                        </div>
+                    )}
                 </div>
 
                 {/* Visual Badge - Real Buy Info */}
                 <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
+
                     {!isHolding && activeData?.buy_sig1_yn === 'Y' && (
                         <div style={{ fontSize: '0.8rem', color: themeColor, animation: 'pulse 1.5s infinite', fontWeight: 'bold' }}>
                             Signal Active!
