@@ -1950,6 +1950,14 @@ def check_triple_filter(ticker, data_30m, data_5m):
                 
                 log_market_indicators(log_data)
                 
+                # [NEW] Add Signal Timings to Result for Frontend
+                result['new_metrics']['signals'] = {
+                    'gold_30m': gold_30m,
+                    'gold_5m': gold_5m,
+                    'dead_30m': dead_30m,
+                    'dead_5m': dead_5m
+                }
+                
             except Exception as e:
                 print(f"Logging Market Indicators Failed ({ticker}): {e}")
 
