@@ -659,7 +659,25 @@ def get_holdings():
             ORDER BY ticker ASC
             """
             cursor.execute(sql)
-            return cursor.fetchall()
+            rows = cursor.fetchall()
+            
+            # Convert Decimal/Datetime for JSON safety
+            cleaned = []
+            for r in rows:
+                row = dict(r)
+                for k, v in row.items():
+                    import decimal
+                    from datetime import datetime
+                    if isinstance(v, decimal.Decimal):
+                        row[k] = float(v)
+                    elif isinstance(v, datetime):
+                        row[k] = v.strftime('%Y-%m-%d %H:%M:%S')
+                cleaned.append(row)
+            return cleaned
+
+    except Exception as e:
+        print(f"Get Holdings Error: {e}")
+        return []
     finally:
         conn.close()
 
