@@ -11,12 +11,19 @@ def send_sms(stock_name, signal_type, price, signal_time, reason=""):
     # Format current time for senddate
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
+    # [FIX] Enforce Global SMS Check
+    try:
+        from db import get_global_config
+        if not get_global_config("sms_enabled", True):
+            print(f"SMS Skipped (Global OFF): {stock_name} {signal_type}")
+            return False
+    except ImportError:
+        pass # Fallback if db import fails (e.g. testing)
+
     # Format message
-    # Msg Format: [yyyy.MM.dd HH:mm] [SOXL] [매수] [45.20] [85점]
-    # signal_time arg is passed from main.py
-    
-    msg_time = signal_time if signal_time else datetime.now().strftime("%Y.%m.%d %H:%M")
-    msg = f"[{msg_time}] [{stock_name}] [{signal_type}] [${price}] [{reason}]"
+    # User Request: Remove Time from Body.
+    # Msg Format: [SOXL] [매수] [45.20] [85점]
+    msg = f"[{stock_name}] [{signal_type}] [${price}] [{reason}]"
     
     data = {
         "sms_id": "leeyw94",
