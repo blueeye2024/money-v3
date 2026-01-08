@@ -138,6 +138,18 @@ def init_db():
             )
             """
             cursor.execute(sql_ticker_settings)
+            
+            # 6. Market Indices (S&P500, NASDAQ, GOLD, KRW)
+            sql_indices = """
+            CREATE TABLE IF NOT EXISTS market_indices (
+                ticker VARCHAR(20) PRIMARY KEY,
+                name VARCHAR(50),
+                current_price DECIMAL(10, 2),
+                change_pct DECIMAL(5, 2),
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )
+            """
+            cursor.execute(sql_indices)
 
             # 6. Auto Trade History (Simulated)
             sql_trade = """
@@ -2113,5 +2125,42 @@ def delete_v2_sell_only(manage_id):
     except Exception as e:
         print(f"Delete Sell Only Error: {e}")
         return False
+    finally:
+        conn.close()
+
+def update_market_indices(data_list):
+    """
+    Update market indices in bulk.
+    data_list: list of dicts {'ticker': 'S&P500', 'name': 'S&P 500', 'price': 1234.56, 'change': 1.23}
+    """
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            sql = """
+            INSERT INTO market_indices (ticker, name, current_price, change_pct)
+            VALUES (%s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+            current_price = VALUES(current_price),
+            change_pct = VALUES(change_pct)
+            """
+            for item in data_list:
+                cursor.execute(sql, (item['ticker'], item['name'], item['price'], item['change']))
+        conn.commit()
+    except Exception as e:
+        print(f"Update Indices Error: {e}")
+    finally:
+        conn.close()
+
+def get_market_indices():
+    """Return dict { ticker: {price, change, updated_at} }"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT * FROM market_indices")
+            rows = cursor.fetchall()
+            return {row['ticker']: {'price': float(row['current_price']), 'change': float(row['change_pct'])} for row in rows}
+    except Exception as e:
+        print(f"Get Indices Error: {e}")
+        return {}
     finally:
         conn.close()

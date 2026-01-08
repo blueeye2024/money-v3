@@ -95,8 +95,45 @@ def is_market_open():
     
     return market_start <= now_est <= market_end
 
+
+def refresh_market_indices():
+    """Fetches live market indices and updates DB"""
+    try:
+        print("🌍 refreshing Market Indices to DB...")
+        from db import update_market_indices
+        data_list = []
+        for name, tic_sym in MARKET_INDICATORS.items():
+            try:
+                t = yf.Ticker(tic_sym)
+                # Fetch minimal history to get Last and Change
+                hist = t.history(period="5d")
+                if not hist.empty:
+                    val = hist['Close'].iloc[-1]
+                    change = 0.0
+                    if len(hist) >= 2:
+                        prev = hist['Close'].iloc[-2]
+                        change = ((val - prev) / prev) * 100
+                    
+                    data_list.append({
+                        'ticker': name, # Use Key as Ticker ID in DB
+                        'name': tic_sym,
+                        'price': float(val),
+                        'change': float(change)
+                    })
+            except Exception as e:
+                print(f"Index Fetch Error {name}: {e}")
+        
+        if data_list:
+            update_market_indices(data_list)
+            print(f"✅ Market Indices Updated: {len(data_list)}")
+            return True
+    except Exception as e:
+        print(f"Refresh Indices Error: {e}")
+    return False
+
 def fetch_data(tickers=None, force=False, override_period=None):
     global _DATA_CACHE
+
     
     target_list = tickers if tickers else TARGET_TICKERS
     now = time.time()
@@ -406,14 +443,10 @@ def fetch_data(tickers=None, force=False, override_period=None):
                 _DATA_CACHE["1d"] = cache_1d
                 print(f"✅ Loaded {len(cache_1d)} tickers 1d data from DB")
             
-            print("Fetching market data (Indices)...")
-            market_data = {}
-            for name, tic_sym in MARKET_INDICATORS.items():
-                t = yf.Ticker(tic_sym)
-                hist = t.history(period="5d")
-                if not hist.empty: market_data[name] = hist
-                elif _DATA_CACHE.get("market") and name in _DATA_CACHE["market"]:
-                    market_data[name] = _DATA_CACHE["market"][name]
+
+            print("Fetching market data (Indices) from DB...")
+            from db import get_market_indices
+            market_data = get_market_indices()
             _DATA_CACHE["market"] = market_data
 
             print("Fetching Daily data for Market Regime...")
@@ -1335,14 +1368,21 @@ def run_analysis(held_tickers=[], force_update=False):
     
     # 4. Generate Trade Guidelines (Simplified)cators Data with Change %
     indicators = {}
-    for name, df in market_data.items():
+    for name, data in market_data.items():
         try:
             val = 0.0
             change = 0.0
-            if not df.empty and 'Close' in df.columns:
-                val = df['Close'].iloc[-1]
-                if len(df) >= 2:
-                    prev = df['Close'].iloc[-2]
+            
+            # [DB Mode] Data is dict {'price': ..., 'change': ...}
+            if isinstance(data, dict):
+                val = data.get('price', 0.0)
+                change = data.get('change', 0.0)
+                
+            # [Legacy Mode] Data is DataFrame
+            elif isinstance(data, pd.DataFrame) and not data.empty and 'Close' in data.columns:
+                val = data['Close'].iloc[-1]
+                if len(data) >= 2:
+                    prev = data['Close'].iloc[-2]
                     change = ((val - prev) / prev) * 100
             
             indicators[name] = {

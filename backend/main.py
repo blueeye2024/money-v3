@@ -223,6 +223,10 @@ def monitor_signals():
     print(f"[{datetime.now()}] Monitoring Signals... SMS Enabled: {SMS_ENABLED}")
     
     try:
+        # [NEW] Refresh Market Indices (S&P500, etc) to DB First
+        from analysis import refresh_market_indices
+        refresh_market_indices()
+
         # Use run_analysis for all processing to ensure consistency with dashboard
         # Force update cache in background job so frontend gets fast cached data
         full_report = run_analysis(force_update=True)
