@@ -655,7 +655,7 @@ def get_holdings():
             sql = """
             SELECT ticker, name, quantity as qty, avg_price, current_price, is_market_open, is_manual_price
             FROM managed_stocks 
-            WHERE quantity > 0 OR is_active = TRUE
+            WHERE quantity > 0
             ORDER BY ticker ASC
             """
             cursor.execute(sql)
