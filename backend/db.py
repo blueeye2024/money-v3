@@ -711,6 +711,9 @@ def update_holding(ticker, qty_change, price, memo=None):
 def get_transactions():
     return get_holdings()
 
+def get_current_holdings():
+    return get_holdings()
+
 
 def add_transaction(ticker_or_data, trade_type=None, qty=None, price=None, trade_date=None, memo=''):
     # [FIX] Support both Dictionary (from API) and Individual Args
