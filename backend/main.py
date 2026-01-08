@@ -57,8 +57,13 @@ def on_startup():
     # [New] Cheongan V2 Signal Analysis (Every 5 mins)
     scheduler.add_job(run_v2_signal_analysis, 'interval', minutes=5)
     
+    # [New] SOXS Data Maintenance Scheduler (User Request: 3 Days Rolling)
+    from scheduler_soxs import start_maintenance_scheduler as start_soxs_sched
+    start_soxs_sched()
+
     scheduler.start()
-    print("✅ Scheduler Started: Monitor(1m), PriceUpdate(5m)")
+    print("✅ Scheduler Started: Monitor(1m), PriceUpdate(5m), SOXS_Maintenance(5m)")
+
 
 # ... (API endpoints)
 
