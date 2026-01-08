@@ -748,11 +748,6 @@ def add_transaction(ticker_or_data, trade_type=None, qty=None, price=None, trade
         qty = int(qty) if qty else 0
         price = float(price) if price else 0
 
-    try:
-        with open("/home/blue/debug_money.log", "a") as f:
-            f.write(f"ADD_TXN: ticker={ticker}, type={trade_type}, qty={qty}, price={price}\n")
-    except: pass
-
     # 1. Insert into journal_transactions (Source of Truth for Analysis)
     conn = get_connection()
     try:
@@ -835,10 +830,6 @@ def update_holding(ticker, qty_change_or_new_qty, price, memo=None, is_reset=Fal
                 # RESET: Overwrite Quantity and Avg Price
                 new_qty = qty_change_or_new_qty
                 new_avg = price
-                try:
-                    with open("/home/blue/debug_money.log", "a") as f:
-                        f.write(f"UPDATE_HOLDING [RESET]: ticker={ticker}, new_qty={new_qty}, new_avg={new_avg}\n")
-                except: pass
             else:
                 # Incremental Calculation
                 current_qty = row['quantity'] or 0
@@ -1071,57 +1062,7 @@ def get_latest_market_status():
         conn.close()
 
 
-def get_current_holdings():
-    """Returns a dict of tickers currently held {ticker: {'qty': qty, 'avg_price': price}} using FIFO logic"""
-    conn = get_connection()
-    try:
-        with conn.cursor() as cursor:
-            # Fetch all txs sorted
-            sql = "SELECT ticker, trade_type, qty, price, trade_date FROM journal_transactions ORDER BY trade_date ASC"
-            cursor.execute(sql)
-            txs = cursor.fetchall()
-            
-            # FIFO Calculation
-            queues = {} # ticker -> list of {price, qty}
-            
-            for tx in txs:
-                t = tx['ticker']
-                if t not in queues: queues[t] = []
-                
-                # [NEW] RESET Logic (Clears history, sets snapshot)
-                if tx['trade_type'] == 'RESET':
-                    # Clear existing queue and set new state (Assume this is the new single 'lot')
-                    queues[t] = [{'p': float(tx['price']), 'q': int(tx['qty'])}]
-                
-                elif tx['trade_type'] == 'BUY':
-                    queues[t].append({'p': float(tx['price']), 'q': int(tx['qty'])})
-                else:
-                    # SELL logic
-                    sell_q = int(tx['qty'])
-                    while sell_q > 0 and queues[t]:
-                        batch = queues[t][0]
-                        if batch['q'] > sell_q:
-                            batch['q'] -= sell_q
-                            sell_q = 0
-                        else:
-                            sell_q -= batch['q']
-                            queues[t].pop(0)
 
-            # Summarize results
-            result = {}
-            for t, q_list in queues.items():
-                total_q = sum(item['q'] for item in q_list)
-                if total_q > 0:
-                    total_cost = sum(item['q'] * item['p'] for item in q_list)
-                    avg = total_cost / total_q
-                    result[t] = {'qty': total_q, 'avg_price': avg}
-            
-            return result
-    except Exception as e:
-        print(f"Error fetching holdings: {e}")
-        return {}
-    finally:
-        conn.close()
 
 def get_ticker_settings():
     """Returns a dict of ticker settings {ticker: is_visible}"""

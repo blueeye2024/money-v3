@@ -624,11 +624,6 @@ def api_get_transactions():
 
 @app.post("/api/transactions")
 def api_add_transaction(txn: TransactionModel):
-    try:
-        with open("/home/blue/debug_money.log", "a") as f:
-            f.write(f"API_ADD_TXN: {txn.dict()}\n")
-    except: pass
-
     result = add_transaction(txn.dict())
     if isinstance(result, tuple):
         success, msg = result
