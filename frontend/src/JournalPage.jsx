@@ -158,11 +158,11 @@ const JournalPage = () => {
     const handleEdit = (holding) => {
         setForm({
             ticker: holding.ticker,
-            qty: 1, // Default to 1 for new trade 
-            price: holding.currentPrice,
-            trade_type: 'BUY'
+            qty: holding.qty, // [FIX] Use existing Quantity
+            price: holding.avgPrice, // [FIX] Use existing Average Price
+            trade_type: 'BUY' // Default to Buy for editing, user can switch if needed logic requires
         });
-        setEditingId(holding.ticker); // Mark as editing this ticker
+        setEditingId(holding.ticker);
         setShowForm(true);
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };

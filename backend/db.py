@@ -715,7 +715,20 @@ def get_transactions():
 def get_current_holdings():
     return get_holdings()
 
-def add_transaction(ticker, trade_type, qty, price, trade_date, memo):
+def add_transaction(ticker_or_data, trade_type=None, qty=None, price=None, trade_date=None, memo=''):
+    # [FIX] Support both Dictionary (from API) and Individual Args
+    if isinstance(ticker_or_data, dict):
+        data = ticker_or_data
+        ticker = data['ticker']
+        trade_type = data['trade_type']
+        qty = int(data.get('qty', 0))
+        price = float(data.get('price', 0))
+        memo = data.get('memo', '')
+    else:
+        ticker = ticker_or_data
+        qty = int(qty) if qty else 0
+        price = float(price) if price else 0
+
     # Adapter: Convert Trade Input -> Holding Update
     qty_change = qty if trade_type == 'BUY' else -qty
     return update_holding(ticker, qty_change, price, memo)

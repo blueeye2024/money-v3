@@ -2730,7 +2730,13 @@ def run_v2_signal_analysis():
                     is_sig2_met = (curr_price >= float(custom_buy_target))
                     sig2_reason = f"지정가도달(${custom_buy_target})"
                 else:
-                    is_sig2_met = is_sig2 # Default 2% logic
+                    # [FIX] Use Buy Signal 1 Price as baseline if available, otherwise Fallback to Day Logic
+                    baseline_price = float(buy_record.get('buy_sig1_price') or 0)
+                    if baseline_price > 0:
+                         is_sig2_met = (curr_price >= baseline_price * 1.02) # +2% from Entry
+                         sig2_reason = f"진입대비+2%(${baseline_price:.2f})"
+                    else:
+                         is_sig2_met = is_sig2 # Fallback to Day Gain logic if no Entry Price
                 
                 if buy_record['buy_sig2_yn'] == 'N' and is_sig2_met:
                     if save_v2_buy_signal(manage_id, 'sig2', curr_price):
