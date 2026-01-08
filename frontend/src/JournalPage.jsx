@@ -51,25 +51,29 @@ const JournalPage = () => {
         }
     };
 
-    const fetchHoldings = async () => {
+    const fetchHoldings = async (existingRate = null) => {
         try {
-            // API now returns merged holdings from managed_stocks
-            // Structure: [{ticker, name, qty, avg_price, current_price, ...}, ...]
-            const res = await axios.get('/api/transactions');
-            const rawData = res.data || [];
+            // [OPTIMIZATION] Parallel Fetching
+            // Fetch Transacrtions and Report (for Rate) in parallel if rate not provided
+            let rate = existingRate || exchangeRate;
+            let rawData = [];
 
-            // Calculate derived metrics (Profit, Value, etc.)
-            // We need Exchange Rate first, but it might be async. 
-            // For now, use the state exchangeRate or fetch fresh if needed.
-            // Actually, let's fetch report first to get exchange rate? 
-            // Better: fetchHoldings waits for the basic data.
-            // Let's assume exchangeRate is updated by another call or we update it here.
-
-            // Note: fetchCurrentPrices was removed because get_holdings returns current_price!
-            // But we still need Exchange Rate.
-            const reportRes = await axios.get('/api/report');
-            const rate = reportRes.data.market?.KRW?.value || 1444.5;
-            setExchangeRate(rate);
+            if (!existingRate) {
+                // If we don't have a fresh rate, fetch both
+                // But to be super fast, we can use the 'exchangeRate' state if it's not default?
+                // For safety, let's fetch report in parallel.
+                const [txRes, reportRes] = await Promise.all([
+                    axios.get('/api/transactions'),
+                    axios.get('/api/report')
+                ]);
+                rawData = txRes.data || [];
+                rate = reportRes.data.market?.KRW?.value || 1444.5;
+                setExchangeRate(rate);
+            } else {
+                // Just fetch transactions
+                const res = await axios.get('/api/transactions');
+                rawData = res.data || [];
+            }
 
             const processed = rawData.map(h => {
                 const qty = h.qty || 0;
@@ -140,10 +144,47 @@ const JournalPage = () => {
 
             await axios.post('/api/transactions', dataToSend);
 
+            // [OPTIMIZATION] Optimistic Update / Immediate Refresh
+            // Instead of waiting for full fetch, we can manually update the list if we know the data.
+            // But getting 'current_price' might be tricky if it's a new stock.
+            // Simplest speedup: Call fetchHoldings but pass the KNOWN exchange rate to verify parallel fetch isn't needed.
+            // Even better: Manually update the 'holdings' state for the specific ticker.
+
+            if (form.trade_type === 'RESET' || editingId) {
+                // We know exactly what the new state should be
+                const newQty = parseInt(form.qty);
+                const newAvg = parseFloat(form.price);
+
+                setHoldings(prev => prev.map(h => {
+                    if (h.ticker === form.ticker) {
+                        const curPrice = h.currentPrice || newAvg;
+                        const totalCost = newQty * newAvg;
+                        const currentValue = newQty * curPrice;
+                        const profit = currentValue - totalCost - (currentValue * (costRate / 100)); // approximate cost calc
+                        // Re-calculate derived fields
+                        return {
+                            ...h,
+                            qty: newQty,
+                            avgPrice: newAvg,
+                            totalCost,
+                            currentValue,
+                            currentValueKRW: currentValue * exchangeRate,
+                            profit,
+                            profitPct: totalCost > 0 ? (profit / totalCost) * 100 : 0
+                        };
+                    }
+                    return h;
+                }));
+            }
+
+            // Clean up form immediately
             setForm({ ticker: '', qty: 1, price: '', trade_type: 'BUY' });
             setEditingId(null);
             setShowForm(false);
-            await fetchHoldings();
+
+            // Background refresh to ensure consistency
+            fetchHoldings(exchangeRate);
+
         } catch (e) {
             console.error('저장 오류:', e);
             alert('저장 실패: ' + (e.response?.data?.detail || e.message));
