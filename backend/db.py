@@ -761,21 +761,57 @@ def add_transaction(ticker_or_data, trade_type=None, qty=None, price=None, trade
             conn.commit()
     except Exception as e:
         print(f"Insert Transaction Error: {e}")
-        # Continue to update managed_stocks even if log fails? 
-        # No, if log fails, maybe we should abort? But let's try to sync.
     finally:
         conn.close()
 
     # 2. Update Managed Stocks (Snapshot for Frontend)
-    # Adapter: Convert Trade Input -> Holding Update
-    
     if trade_type == 'RESET':
-        # Direct Overwrite
         return update_holding(ticker, qty, price, memo, is_reset=True)
     else:
-        # Incremental
         qty_change = qty if trade_type == 'BUY' else -qty
         return update_holding(ticker, qty_change, price, memo, is_reset=False)
+
+def update_transaction(id, data):
+    # Backward compatibility: For now, we just update journal_transactions log.
+    # Recalculating holdings from history is complex.
+    # Recommendation: User should use RESET to correct holdings.
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            sql = """
+            UPDATE journal_transactions 
+            SET ticker=%s, trade_type=%s, qty=%s, price=%s, trade_date=%s, memo=%s
+            WHERE id=%s
+            """
+            cursor.execute(sql, (
+                data['ticker'],
+                data['trade_type'],
+                data['qty'],
+                data['price'],
+                data['trade_date'],
+                data.get('memo', ''),
+                id
+            ))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Update Transaction Error: {e}")
+        return False
+    finally:
+        conn.close()
+
+def delete_transaction(id):
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("DELETE FROM journal_transactions WHERE id=%s", (id,))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Delete Transaction Error: {e}")
+        return False
+    finally:
+        conn.close()
 
 def update_holding(ticker, qty_change_or_new_qty, price, memo=None, is_reset=False):
     """보유량 및 평단가 업데이트 (매수/매도/RESET)"""

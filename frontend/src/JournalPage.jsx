@@ -131,17 +131,12 @@ const JournalPage = () => {
             // Default to BUY (Add)
             const dataToSend = {
                 ticker: form.ticker,
-                trade_type: 'BUY',
+                trade_type: form.trade_type, // [FIX] Use selected type (BUY, SELL, or RESET)
                 qty: parseInt(form.qty),
                 price: parseFloat(form.price),
-                trade_date: new Date().toISOString(), // Ignored by backend but required by API signature maybe?
+                trade_date: new Date().toISOString(),
                 memo: ''
             };
-
-            // Determine if SELL (Subtract) - We need a UI toggle for Buy/Sell or just use signs?
-            // User asked for "Simplification". Let's assume standard Buy/Sell buttons in form?
-            // I'll add a Trade Type selector to the form.
-            if (form.trade_type === 'SELL') dataToSend.trade_type = 'SELL';
 
             await axios.post('/api/transactions', dataToSend);
 
