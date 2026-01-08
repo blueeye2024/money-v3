@@ -59,7 +59,17 @@ class KisApi:
             self.access_token = self._issue_token()
             if not self.access_token: return None
             
+        # [FIX] Prioritize 'NAS'/'AMS' but ensure iteration if failed.
+        # If exchange is provided, try it first, then others if failed? 
+        # Actually user logic in db.py passes exchange. KIS get_price tries specified list.
+        # Let's ensure if exchange is passed, we ONLY try that? No, try others as fallback.
         exchanges = [exchange] if exchange else ["NAS", "NYS", "AMS"]
+        if exchange and exchange in ["NAS", "NYS", "AMS"]:
+             # If specific exchange failed, maybe try others? 
+             # For now, trust the list.
+             # Add fallback to others if single exchange passed?
+             other_exchanges = [e for e in ["NAS", "NYS", "AMS"] if e != exchange]
+             exchanges.extend(other_exchanges)
         
         for excd in exchanges:
             print(f"  KIS API: Checking {excd} for {symbol}...")

@@ -1443,11 +1443,13 @@ def update_stock_prices():
                     print("⚠️ 등록된 종목이 없습니다")
                     return False
                 
-                print(f"📊 {len(rows)}개 종목 현재가 업데이트 시작...")
+                print(f"📊 {len(rows)}개 종목 현재가 업데이트 시작 (KIS -> YF Fallback)...")
                 
                 updated_count = 0
                 skipped_count = 0
                 failed_count = 0
+                
+                import yfinance as yf # Lazy import
                 
                 for row in rows:
                     ticker = row['ticker']
@@ -1466,39 +1468,60 @@ def update_stock_prices():
                         if not exchange:
                             exchange = get_exchange_code(ticker)
                         
-                        # KIS API로 현재가 조회
-                        print(f"  🔍 {ticker} ({exchange}) 조회 중...")
+                        current_price = 0
+                        is_market_open = False
+                        source = "None"
+
+                        # 1. KIS API로 현재가 조회
+                        # print(f"  🔍 {ticker} ({exchange}) 조회 중... (KIS)")
                         price_data = get_current_price(ticker, exchange)
                         
                         if price_data and price_data.get('price', 0) > 0:
                             current_price = price_data['price']
                             is_market_open = price_data.get('is_open', True)
-                            
+                            source = "KIS"
+                        else:
+                            # 2. Skip fallback for SOXS/SOXL? No, user wants ALL.
+                            # Fallback to YFinance (Extended Hours)
+                            # print(f"  ⚠️ KIS Failed for {ticker}. Trying YF...")
+                            try:
+                                t = yf.Ticker(ticker)
+                                # Get fast info first
+                                fast_info = t.fast_info
+                                last_price = fast_info.last_price
+                                
+                                # Check Pre/Post market if available
+                                # yfinance often needs history(period="1d", interval="1m", prepost=True) to see latest
+                                df = t.history(period="1d", interval="1m", prepost=True)
+                                if not df.empty:
+                                    last_price = float(df['Close'].iloc[-1])
+                                    source = "YF(Ext)"
+                                else:
+                                    source = "YF(Fast)" # Fallback to last close
+                                
+                                if last_price > 0:
+                                    current_price = last_price
+                                    is_market_open = True # Assume open if we got data? Or derived path.
+                            except Exception as ey:
+                                print(f"  ❌ YF Fallback Failed: {ey}")
+                        
+                        if current_price > 0:
                             # 현재가 업데이트
                             update_sql = """
                                 UPDATE managed_stocks 
                                 SET current_price = %s, 
-                                    price_updated_at = NOW(), 
-                                    is_market_open = %s,
-                                    exchange = %s
-                                WHERE ticker = %s
-                            """
-                            cursor.execute(update_sql, (current_price, is_market_open, exchange, ticker))
-                            updated_count += 1
-                            print(f"  ✅ {ticker}: ${current_price:.2f}")
-                        else:
-                            # 가격 데이터 없음 (휴장일 또는 오류)
-                            update_sql = """
-                                UPDATE managed_stocks 
-                                SET is_market_open = FALSE, 
                                     price_updated_at = NOW(),
-                                    exchange = %s
+                                    is_market_open = %s
                                 WHERE ticker = %s
                             """
-                            cursor.execute(update_sql, (exchange, ticker))
+                            cursor.execute(update_sql, (current_price, is_market_open, ticker))
+                            conn.commit() # Commit per row to ensure partial success
+                            updated_count += 1
+                            print(f"  ✅ {ticker}: ${current_price:,.2f} ({source})")
+                        else:
+                            print(f"  ❌ {ticker}: 가격 조회 실패")
                             failed_count += 1
-                            print(f"  ⚠️ {ticker}: 가격 조회 실패 (휴장 또는 오류)")
-                    
+
                     except Exception as e:
                         print(f"  ❌ {ticker} 업데이트 오류: {e}")
                         failed_count += 1
