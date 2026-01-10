@@ -1,4 +1,4 @@
-# MASTER CONTROL TOWER 지침 (Ver 3.6)
+# MASTER CONTROL TOWER 지침 (Ver 3.6.1)
 
 ## 1. 개요
 **MASTER CONTROL TOWER**는 SOXL(BULL)과 SOXS(BEAR)의 매매 신호를 관리하는 최상위 관제 시스템입니다.
@@ -96,7 +96,14 @@ Ver 3.6에서는 **V2 Signal System**을 도입하여 단계별 매수/매도 �
 
 ## 7. 버전 히스토리 (Version History)
 
-### Ver 3.6 (2026-01-07) [CURRENT]
+### Ver 3.6.1 (2026-01-10) [CURRENT]
+- **market_indices 단일 소스**: 모든 현재가/등락률을 `market_indices` 테이블에서만 조회하도록 통합
+- **DB 구조 개선**: `buy_stock`, `sell_stock` 테이블에서 `current_price` 필드 제거
+- **수동 테스트 패널**: SOXL/SOXS 가격 및 등락률을 임의로 변경하여 신호 테스트 가능
+- **API 개선**: `/api/v2/status`에 market_info 필드 추가 (current_price, change_pct)
+- **즉시 반영**: 테스트 패널 또는 실시간 API 업데이트 시 10초 내 UI 반영
+
+### Ver 3.6 (2026-01-07)
 - **Manual Control**: 신호 취소 기능, 매도 기록만 삭제 기능 추가.
 - **UI UX**: SweetAlert2 도입, 페이지 새로고침 제거(Soft Refresh).
 - **Logic**: History 30분 중복 방지 로직 적용.
@@ -112,6 +119,7 @@ Ver 3.6에서는 **V2 Signal System**을 도입하여 단계별 매수/매도 �
 ---
 
 ## 8. 관련 파일 (Related Files)
-- **Frontend**: `frontend/src/components/V2SignalStatus.jsx`
-- **Backend**: `backend/db.py` (Functions: `manual_update_signal`, `log_history`, `delete_v2_*`)
-- **Backend API**: `backend/main.py` (`/api/v2/*`)
+- **Frontend**: `frontend/src/components/V2SignalStatus.jsx`, `frontend/src/components/MarketInsight.jsx`
+- **Backend**: `backend/db.py` (Functions: `manual_update_signal`, `manual_update_market_indices`, `log_history`, `delete_v2_*`)
+- **Backend API**: `backend/main.py` (`/api/v2/*`, `/api/market-indices/manual`)
+
