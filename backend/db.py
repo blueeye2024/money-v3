@@ -2258,15 +2258,47 @@ def update_market_indices(data_list):
         conn.close()
 
 def get_market_indices():
-    """Return dict { ticker: {price, change, updated_at} }"""
+    """Return list of market_indices records"""
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
             cursor.execute("SELECT * FROM market_indices")
-            rows = cursor.fetchall()
-            return {row['ticker']: {'price': float(row['current_price']), 'change': float(row['change_pct'])} for row in rows}
+            return cursor.fetchall()
     except Exception as e:
         print(f"Get Indices Error: {e}")
-        return {}
+        return []
+    finally:
+        conn.close()
+
+def manual_update_market_indices(ticker, price, change_pct=0.0):
+    """수동으로 market_indices 특정 ticker 가격 업데이트"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            # Check if ticker exists
+            cursor.execute("SELECT 1 FROM market_indices WHERE ticker = %s", (ticker,))
+            exists = cursor.fetchone()
+            
+            if exists:
+                # Update existing
+                sql = """
+                    UPDATE market_indices 
+                    SET current_price = %s, change_pct = %s, updated_at = NOW()
+                    WHERE ticker = %s
+                """
+                cursor.execute(sql, (price, change_pct, ticker))
+            else:
+                # Insert new
+                sql = """
+                    INSERT INTO market_indices (ticker, name, current_price, change_pct)
+                    VALUES (%s, %s, %s, %s)
+                """
+                cursor.execute(sql, (ticker, ticker, price, change_pct))
+                
+        conn.commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        print(f"Manual Market Indices Update Error: {e}")
+        return False
     finally:
         conn.close()

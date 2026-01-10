@@ -100,6 +100,89 @@ const SystemPerformanceReport = ({ trades = [] }) => {
     );
 };
 
+
+const ManualTestPanel = ({ onRefresh }) => {
+    const [prices, setPrices] = React.useState({ SOXL: '', SOXS: '', UPRO: '' });
+
+    const handlePriceSubmit = async (ticker) => {
+        const price = prices[ticker];
+        if (!price || parseFloat(price) <= 0) return;
+
+        try {
+            const res = await fetch('/api/market-indices/manual', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ticker, price: parseFloat(price) })
+            });
+            const data = await res.json();
+            if (data.status === 'success') {
+                setPrices({ ...prices, [ticker]: '' });
+                if (onRefresh) onRefresh();
+            }
+        } catch (e) {
+            console.error('Manual price update error:', e);
+        }
+    };
+
+    return (
+        <div style={{
+            background: 'rgba(255, 193, 7, 0.1)',
+            padding: '1.5rem',
+            borderRadius: '12px',
+            border: '1px solid rgba(255, 193, 7, 0.3)',
+            marginBottom: '2rem'
+        }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
+                <div style={{ fontSize: '1.8rem' }}>🔧</div>
+                <h3 style={{ margin: 0, color: '#ffc107', fontSize: '1.2rem', fontWeight: '700' }}>수동 테스트 패널</h3>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+                {['SOXL', 'SOXS', 'UPRO'].map(ticker => (
+                    <div key={ticker} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        <label style={{ fontSize: '0.85rem', color: '#cbd5e1', fontWeight: '600' }}>
+                            {ticker} 현재가
+                        </label>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            <input
+                                type="number"
+                                step="0.01"
+                                value={prices[ticker]}
+                                onChange={(e) => setPrices({ ...prices, [ticker]: e.target.value })}
+                                onKeyPress={(e) => e.key === 'Enter' && handlePriceSubmit(ticker)}
+                                placeholder="가격 입력"
+                                style={{
+                                    flex: 1,
+                                    padding: '0.6rem',
+                                    background: '#1e293b',
+                                    border: '1px solid #334155',
+                                    color: '#fff',
+                                    borderRadius: '6px',
+                                    fontSize: '0.9rem'
+                                }}
+                            />
+                            <button
+                                onClick={() => handlePriceSubmit(ticker)}
+                                style={{
+                                    padding: '0.6rem 1rem',
+                                    background: '#ffc107',
+                                    color: '#000',
+                                    border: 'none',
+                                    borderRadius: '6px',
+                                    fontWeight: 'bold',
+                                    cursor: 'pointer',
+                                    fontSize: '0.85rem'
+                                }}
+                            >
+                                적용
+                            </button>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
 const MarketInsight = ({ market, stocks, signalHistory, onRefresh }) => {
     if (!market) return <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>데이터 로딩 중...</div>;
 
@@ -156,6 +239,9 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh }) => {
 
     return (
         <div className="glass-panel" style={{ padding: '2rem', marginBottom: '3rem', display: 'flex', flexDirection: 'column', gap: '2.5rem' }}>
+
+            {/* 0. 수동 테스트 패널 */}
+            <ManualTestPanel onRefresh={onRefresh} />
 
             {/* 1. MASTER CONTROL TOWER (V2.3) */}
             <div>

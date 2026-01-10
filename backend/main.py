@@ -814,13 +814,20 @@ def me_api(token: str):
 
 @app.get("/api/v2/status/{ticker}")
 def get_v2_status(ticker: str):
-    """Get V2 Signal Status (Buy/Sell)"""
+    """Get V2 Signal Status (Buy/Sell) + Market Info"""
     try:
-        from db import get_v2_buy_status, get_v2_sell_status
+        from db import get_v2_buy_status, get_v2_sell_status, get_market_indices
         ticker = ticker.upper()
         
         buy_record = get_v2_buy_status(ticker)
         sell_record = get_v2_sell_status(ticker)
+        
+        # Get current_price from market_indices (Single Source of Truth)
+        market_data = get_market_indices()
+        market_info = next((m for m in market_data if m['ticker'] == ticker), None)
+        
+        current_price = float(market_info['current_price']) if market_info else 0.0
+        change_pct = float(market_info.get('change_pct', 0.0)) if market_info else 0.0
         
         # Convert decimals to float for JSON serialization
         def serialize(obj):
@@ -838,7 +845,11 @@ def get_v2_status(ticker: str):
         return {
             "status": "success",
             "buy": serialize(buy_record),
-            "sell": serialize(sell_record)
+            "sell": serialize(sell_record),
+            "market_info": {
+                "current_price": current_price,
+                "change_pct": change_pct
+            }
         }
     except Exception as e:
         print(f"V2 Status Error: {e}")
@@ -929,6 +940,27 @@ def api_delete_sell_record(manage_id: str):
             return {"status": "success", "message": "Sell Record Deleted"}
         else:
             return {"status": "error", "message": "Delete Failed"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+class ManualPriceUpdate(BaseModel):
+    ticker: str
+    price: float
+    change_pct: float = 0.0
+
+@app.post("/api/market-indices/manual")
+def update_manual_market_price(data: ManualPriceUpdate):
+    """수동으로 market_indices 가격 업데이트"""
+    from db import manual_update_market_indices
+    try:
+        success = manual_update_market_indices(
+            data.ticker.upper(), 
+            data.price, 
+            data.change_pct
+        )
+        if success:
+            return {"status": "success"}
+        return {"status": "error", "message": "Update failed"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
