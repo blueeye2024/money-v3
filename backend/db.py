@@ -2015,29 +2015,29 @@ def save_v2_sell_signal(manage_id, signal_type, price):
     finally:
         conn.close()
 
-def update_v2_target_price(manage_id, target_type, price):
+def update_v2_target_price(ticker, target_type, price):
     """Set custom target price for Box(Buy2) or Stop(Sell2)"""
     # target_type: 'box' or 'stop'
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
             if target_type == 'box':
-                sql = "UPDATE buy_stock SET target_box_price=%s WHERE manage_id=%s"
+                sql = "UPDATE buy_stock SET target_box_price=%s WHERE ticker=%s"
             elif target_type == 'stop':
-                sql = "UPDATE sell_stock SET target_stop_price=%s WHERE manage_id=%s"
+                sql = "UPDATE sell_stock SET target_stop_price=%s WHERE ticker=%s"
             else:
                 return False
             
-            cursor.execute(sql, (price, manage_id))
-        conn.commit()
-        return True
+            cursor.execute(sql, (price, ticker))
+            conn.commit()
+            return True
     except Exception as e:
-        print(f"Update Target Price Error: {e}")
+        print(f"Update Target Error: {e}")
         return False
     finally:
         conn.close()
 
-def confirm_v2_buy(manage_id, price, qty):
+def confirm_v2_buy(ticker, price, qty):
     """사용자 실제 매수 확정 입력"""
     conn = get_connection()
     try:
@@ -2049,22 +2049,27 @@ def confirm_v2_buy(manage_id, price, qty):
                     real_buy_price = %s, 
                     real_buy_qn = %s,
                     real_buy_dt = NOW()
-                WHERE manage_id = %s
+                WHERE ticker = %s
             """
-            cursor.execute(sql, (price, qty, manage_id))
+            cursor.execute(sql, (price, qty, ticker))
             
-            # Log
-            log_history(manage_id, 'SOXS', '실매수확정', f"가격:${price}/수량:{qty}", price)
+            # Optional: Create sell_stock entry if doesn't exist
+            sql2 = """
+                INSERT INTO sell_stock (ticker, sell_mode, created_at)
+                VALUES (%s, 'ACTIVE', NOW())
+                ON DUPLICATE KEY UPDATE sell_mode='ACTIVE'
+            """
+            cursor.execute(sql2, (ticker,))
             
         conn.commit()
-        return True, "Success"
+        return True, "Buy Confirmed"
     except Exception as e:
-        print(f"Confirm V2 Buy Error: {e}")
+        print(f"Confirm Buy Error: {e}")
         return False, str(e)
     finally:
         conn.close()
 
-def confirm_v2_sell(manage_id, price, qty, is_end=False):
+def confirm_v2_sell(ticker, price, qty, is_end=False):
     """사용자 실제 매도(청산) 확정 입력"""
     conn = get_connection()
     try:
@@ -2082,15 +2087,13 @@ def confirm_v2_sell(manage_id, price, qty, is_end=False):
                         real_sell_dt = NOW(),
                         close_yn = 'Y',
                         final_sell_yn = 'Y'
-                    WHERE manage_id = %s
+                    WHERE ticker = %s
                 """
-                cursor.execute(sql, (price, qty, manage_id))
+                cursor.execute(sql, (price, qty, ticker))
                 
                 # Also Close BUY Record (final_buy_yn = 'Y') to allow new cycle
-                sql_buy = "UPDATE buy_stock SET final_buy_yn = 'Y', row_dt = NOW() WHERE manage_id = %s"
-                cursor.execute(sql_buy, (manage_id,))
-                
-                log_history(manage_id, 'SYSTEM', '미션종료', f"최종청산: ${price} / {qty}개", price)
+                sql_buy = "UPDATE buy_stock SET final_buy_yn = 'Y', row_dt = NOW() WHERE ticker = %s"
+                cursor.execute(sql_buy, (ticker,))
             else:
                 # Partial Update: Just update info, keep holding
                 sql = """
@@ -2098,13 +2101,12 @@ def confirm_v2_sell(manage_id, price, qty, is_end=False):
                     SET real_sell_avg_price = %s,
                         real_sell_qn = %s,
                         real_sell_dt = NOW()
-                    WHERE manage_id = %s
+                    WHERE ticker = %s
                 """
-                cursor.execute(sql, (price, qty, manage_id))
-                log_history(manage_id, 'SYSTEM', '중간청산', f"수량/금액 업데이트", price)
+                cursor.execute(sql, (price, qty, ticker))
 
             if cursor.rowcount == 0:
-                 return False, "참조하는 매매 데이터(ManageID)를 찾을 수 없습니다."
+                 return False, "참조하는 매매 데이터(Ticker)를 찾을 수 없습니다."
 
         conn.commit()
         return True, "Success"
@@ -2114,12 +2116,12 @@ def confirm_v2_sell(manage_id, price, qty, is_end=False):
     finally:
         conn.close()
 
-def manual_update_signal(manage_id, signal_key, price, status='Y', ticker=None):
+def manual_update_signal(ticker, signal_key, price, status='Y'):
     """
     수동으로 신호 상태 변경 (1차, 2차, 3차)
     signal_key: 'buy1', 'buy2', 'buy3', 'sell1', 'sell2', 'sell3'
     status: 'Y' (Set) or 'N' (Cancel)
-    ticker: Optional, used to create new record if not exists
+    ticker: SOXL, SOXS, etc.
     """
     conn = get_connection()
     try:
@@ -2140,25 +2142,20 @@ def manual_update_signal(manage_id, signal_key, price, status='Y', ticker=None):
         
         with conn.cursor() as cursor:
             # Check existence first
-            check_sql = f"SELECT 1 FROM {table} WHERE manage_id=%s"
-            cursor.execute(check_sql, (manage_id,))
+            check_sql = f"SELECT 1 FROM {table} WHERE ticker=%s"
+            cursor.execute(check_sql, (ticker,))
             exists = cursor.fetchone()
             
             if not exists:
-                if ticker and table == 'buy_stock' and status == 'Y':
-                    # Create New Record
-                    # Note: For sell_stock, user should terminate buy first or we need buy record logic? 
-                    # If auto creating sell, we need entry price? 
-                    # For now only support auto-create BUY cycle.
+                if table == 'buy_stock' and status == 'Y':
+                    # Create New Record for buy_stock
                     sql_insert = f"""
-                        INSERT INTO buy_stock (manage_id, ticker, row_dt, {col_yn}, {col_price}, {col_dt})
-                        VALUES (%s, %s, NOW(), %s, %s, NOW())
+                        INSERT INTO buy_stock (ticker, row_dt, {col_yn}, {col_price}, {col_dt})
+                        VALUES (%s, NOW(), %s, %s, NOW())
                     """
-                    cursor.execute(sql_insert, (manage_id, ticker, status, price))
-                    log_history(manage_id, ticker, '수동신호생성', f"Manual Start {signal_key}", price)
-                    # Commit via main flow
+                    cursor.execute(sql_insert, (ticker, status, price))
                 else:
-                    print(f"Manual Update Skipped: Record not found for {manage_id} (Ticker={ticker})")
+                    print(f"Manual Update Skipped: Record not found for {ticker}")
                     return False
             else:
                 # Update existing
@@ -2167,30 +2164,23 @@ def manual_update_signal(manage_id, signal_key, price, status='Y', ticker=None):
                     SET {col_yn} = %s, 
                         {col_price} = %s, 
                         {col_dt} = NOW()
-                    WHERE manage_id = %s
+                    WHERE ticker = %s
                 """
-                cursor.execute(sql, (status, price, manage_id))
+                cursor.execute(sql, (status, price, ticker))
             
             # [FIX] Clear Custom Targets when Resetting Signal 2
             if status == 'N':
                 if signal_key == 'buy2':
-                    cursor.execute(f"UPDATE {table} SET target_box_price = NULL WHERE manage_id=%s", (manage_id,))
-                    log_history(manage_id, ticker, 'SYSTEM', '목표가 초기화(Buy)', 0)
+                    clear_sql = "UPDATE buy_stock SET target_box_price = NULL WHERE ticker=%s"
+                    cursor.execute(clear_sql, (ticker,))
                 elif signal_key == 'sell2':
-                    cursor.execute(f"UPDATE {table} SET target_stop_price = NULL WHERE manage_id=%s", (manage_id,))
-                    log_history(manage_id, ticker, 'SYSTEM', '목표가 초기화(Sell)', 0)
+                    clear_sql = "UPDATE sell_stock SET target_stop_price = NULL WHERE ticker=%s"
+                    cursor.execute(clear_sql, (ticker,))
 
             # Logic for final_buy only if status is 'Y'
             if status == 'Y' and signal_key == 'buy3':
-                 cursor.execute("UPDATE buy_stock SET final_buy_yn='Y', final_buy_price=%s, final_buy_dt=NOW() WHERE manage_id=%s", (price, manage_id))
+                 cursor.execute("UPDATE buy_stock SET final_buy_yn='Y', final_buy_price=%s, final_buy_dt=NOW() WHERE ticker=%s", (price, ticker))
             
-            # Log
-            log_ticker = ticker if ticker else 'SOXS' # fallback if not passed (though existence implies we might know it, but DB doesn't select it)
-            if exists: # Try to fetch ticker if exists to log correctly? 
-                 # For efficiency skip fetching ticker if not sure.
-                 pass
-            
-            log_history(manage_id, log_ticker, '수동신호변경', f"{signal_key}:{status}", price)
             
         conn.commit()
         return True
@@ -2200,36 +2190,33 @@ def manual_update_signal(manage_id, signal_key, price, status='Y', ticker=None):
     finally:
         conn.close()
 
-def delete_v2_record(manage_id):
-    """기록 삭제 (전체 - 매수+매도)"""
+def delete_v2_record(ticker):
+    """Delete both buy and sell records (full cycle reset) by ticker"""
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
-            # Delete from buy_stock and sell_stock
-            cursor.execute("DELETE FROM buy_stock WHERE manage_id = %s", (manage_id,))
-            cursor.execute("DELETE FROM sell_stock WHERE manage_id = %s", (manage_id,))
-            
-            log_history(manage_id, 'SOXS', '기록삭제(전체)', 'User Request (All)', 0)
-            
+            cursor.execute("DELETE FROM sell_stock WHERE ticker=%s", (ticker,))
+            cursor.execute("DELETE FROM buy_stock WHERE ticker=%s", (ticker,))
         conn.commit()
         return True
     except Exception as e:
-        print(f"Delete Record Error: {e}")
+        print(f"Delete V2 Record Error: {e}")
         return False
     finally:
         conn.close()
 
-def delete_v2_sell_only(manage_id):
-    """매도(Sell) 기록만 삭제 (매수는 유지 - 다시 매도 사이클 시작 가능)"""
+def delete_v2_sell_only(ticker):
+    """Delete sell record only (reset to buy mode) by ticker"""
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
-            cursor.execute("DELETE FROM sell_stock WHERE manage_id = %s", (manage_id,))
-            log_history(manage_id, 'SOXS', '매도기록삭제', 'User Request (Sell Only)', 0)
+            cursor.execute("DELETE FROM sell_stock WHERE ticker=%s", (ticker,))
+            # Reset buy final flag to allow new cycle
+            cursor.execute("UPDATE buy_stock SET final_buy_yn='N' WHERE ticker=%s", (ticker,))
         conn.commit()
         return True
     except Exception as e:
-        print(f"Delete Sell Only Error: {e}")
+        print(f"Delete Sell Record Error: {e}")
         return False
     finally:
         conn.close()

@@ -862,20 +862,21 @@ def get_v2_status(ticker: str):
 # --- Trade Confirmation Endpoints ---
 
 class ConfirmTradeModel(BaseModel):
-    manage_id: str
+    ticker: str  # Changed from manage_id
     price: float
     qty: float
     is_end: bool = False
 
 class UpdateTargetModel(BaseModel):
-    manage_id: str
-    target_type: str # 'box', 'stop'
+    ticker: str  # Changed from manage_id
+    target_type: str  # 'box', 'stop'
     price: float
 
 @app.post("/api/v2/update-target")
 def api_update_target(data: UpdateTargetModel):
     from db import update_v2_target_price
-    if update_v2_target_price(data.manage_id, data.target_type, data.price):
+    # Use ticker instead of manage_id
+    if update_v2_target_price(data.ticker, data.target_type, data.price):
         return {"status": "success", "message": "Target Price Updated"}
     else:
         return {"status": "error", "message": "Failed to update target price"}
@@ -884,7 +885,8 @@ def api_update_target(data: UpdateTargetModel):
 def api_confirm_buy(data: ConfirmTradeModel):
     from db import confirm_v2_buy
     try:
-        success, msg = confirm_v2_buy(data.manage_id, data.price, data.qty)
+        # Use ticker instead of manage_id
+        success, msg = confirm_v2_buy(data.ticker, data.price, data.qty)
         if success:
             return {"status": "success", "message": "Buy Confirmed"}
         else:
@@ -896,7 +898,8 @@ def api_confirm_buy(data: ConfirmTradeModel):
 def api_confirm_sell(data: ConfirmTradeModel):
     from db import confirm_v2_sell
     try:
-        success, msg = confirm_v2_sell(data.manage_id, data.price, data.qty, data.is_end)
+        # Use ticker instead of manage_id
+        success, msg = confirm_v2_sell(data.ticker, data.price, data.qty, data.is_end)
         if success:
             return {"status": "success", "message": "Sell Confirmed"}
         else:
@@ -905,8 +908,7 @@ def api_confirm_sell(data: ConfirmTradeModel):
         return {"status": "error", "message": str(e)}
 
 class ManualSignalModel(BaseModel):
-    manage_id: str
-    ticker: str = None # [NEW] Optional ticker for new records
+    ticker: str
     signal_key: str
     price: float
     status: str = 'Y'
@@ -915,19 +917,21 @@ class ManualSignalModel(BaseModel):
 def api_manual_signal(data: ManualSignalModel):
     from db import manual_update_signal
     try:
-        success = manual_update_signal(data.manage_id, data.signal_key, data.price, data.status, data.ticker)
+        # Use ticker instead of manage_id
+        success = manual_update_signal(data.ticker, data.signal_key, data.price, data.status)
         if success:
             return {"status": "success", "message": "Signal Updated"}
         else:
-            return {"status": "error", "message": "Update Failed (Invalid Key/ID?)"}
+            return {"status": "error", "message": "Update Failed (Invalid Key/Ticker?)"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
-@app.delete("/api/v2/record/{manage_id}")
-def api_delete_record(manage_id: str):
+@app.delete("/api/v2/record/{ticker}")
+def api_delete_record(ticker: str):
     from db import delete_v2_record
     try:
-        success = delete_v2_record(manage_id)
+        # Use ticker instead of manage_id
+        success = delete_v2_record(ticker)
         if success:
             return {"status": "success", "message": "Record Deleted"}
         else:
@@ -935,11 +939,12 @@ def api_delete_record(manage_id: str):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
-@app.delete("/api/v2/sell-record/{manage_id}")
-def api_delete_sell_record(manage_id: str):
+@app.delete("/api/v2/sell-record/{ticker}")
+def api_delete_sell_record(ticker: str):
     from db import delete_v2_sell_only
     try:
-        success = delete_v2_sell_only(manage_id)
+        # Use ticker instead of manage_id
+        success = delete_v2_sell_only(ticker)
         if success:
             return {"status": "success", "message": "Sell Record Deleted"}
         else:
