@@ -1258,15 +1258,26 @@ def run_analysis(held_tickers=[], force_update=False):
     
     # 4. Generate Trade Guidelines (Simplified)cators Data with Change %
     indicators = {}
-    for name, data in market_data.items():
+    
+    # Convert market_data from list to dict if needed
+    market_data_dict = {}
+    if isinstance(market_data, list):
+        # market_data is a list of dicts from get_market_indices()
+        for item in market_data:
+            if isinstance(item, dict) and 'ticker' in item:
+                market_data_dict[item['ticker']] = item
+    elif isinstance(market_data, dict):
+        market_data_dict = market_data
+    
+    for name, data in market_data_dict.items():
         try:
             val = 0.0
             change = 0.0
             
             # [DB Mode] Data is dict {'price': ..., 'change': ...}
             if isinstance(data, dict):
-                val = data.get('price', 0.0)
-                change = data.get('change', 0.0)
+                val = data.get('current_price', data.get('price', 0.0))
+                change = data.get('change_pct', data.get('change', 0.0))
                 
             # [Legacy Mode] Data is DataFrame
             elif isinstance(data, pd.DataFrame) and not data.empty and 'Close' in data.columns:

@@ -1885,7 +1885,7 @@ def get_v2_buy_status(ticker):
             sql = """
                 SELECT * FROM buy_stock 
                 WHERE ticker = %s 
-                ORDER BY idx DESC LIMIT 1
+                ORDER BY row_dt DESC LIMIT 1
             """
             cursor.execute(sql, (ticker,))
             return cursor.fetchone()
@@ -1941,7 +1941,7 @@ def get_v2_sell_status(ticker):
             sql = """
                 SELECT * FROM sell_stock 
                 WHERE ticker = %s AND close_yn = 'N'
-                ORDER BY idx DESC LIMIT 1
+                ORDER BY row_dt DESC LIMIT 1
             """
             cursor.execute(sql, (ticker,))
             return cursor.fetchone()

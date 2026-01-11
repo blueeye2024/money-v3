@@ -832,7 +832,11 @@ def get_v2_status(ticker: str):
         # Convert decimals to float for JSON serialization
         def serialize(obj):
             if not obj: return None
-            new_obj = dict(obj)
+            # Ensure obj is a dict, not a list
+            if isinstance(obj, list):
+                return None
+            # If it's already a dict, use it; otherwise convert
+            new_obj = obj if isinstance(obj, dict) else dict(obj)
             for k, v in new_obj.items():
                 from decimal import Decimal
                 from datetime import datetime
