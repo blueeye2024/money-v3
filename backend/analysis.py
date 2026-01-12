@@ -1624,36 +1624,56 @@ def check_triple_filter(ticker, data_30m, data_5m):
              now_utc = datetime.now(timezone.utc)
 
     # --- CALCULATIONS ---
-        # Filter 1: 30m Trend (SMA 10 > 30) - 골든크로스
-        if df30 is not None and len(df30) > 0:
-            sma10_30 = float(calculate_sma(df30['Close'], 10).iloc[-1])
-            sma30_30 = float(calculate_sma(df30['Close'], 30).iloc[-1])
-        else:
-            sma10_30 = 0
-            sma30_30 = 0
         
-        filter1_met = bool(sma10_30 > sma30_30)  # 골든크로스
-        # Filter 2: Daily Change (Breakout) - +2% 이상 상승
+        # 1. 30m Trend (Golden Cross) - Ver 5.0 Step 3
+        is_gold_30m = False
+        sma10_30 = 0.0
+        sma30_30 = 0.0
+        
+        if df30 is not None and not df30.empty:
+            try:
+                closes_30 = pd.to_numeric(df30['Close'], errors='coerce')
+                # Check valid data count (Lenient, rely on rolling)
+                if closes_30.notna().sum() >= 10:
+                    sma10_30 = closes_30.rolling(window=10).mean().iloc[-1]
+                    sma30_30 = closes_30.rolling(window=30).mean().iloc[-1]
+                    
+                    if pd.notnull(sma10_30) and pd.notnull(sma30_30):
+                        is_gold_30m = (float(sma10_30) > float(sma30_30))
+            except Exception as e30:
+                print(f"Calc 30m Error ({ticker}): {e30}")
+
+        # 2. 5m Timing (Golden Cross) - Ver 5.0 Step 1
+        is_gold_5m = False
+        sma10_5 = 0.0
+        sma30_5 = 0.0
+        
+        if df5 is not None and not df5.empty:
+            try:
+                 closes_5 = pd.to_numeric(df5['Close'], errors='coerce')
+                 if closes_5.notna().sum() >= 10:
+                      sma10_5 = closes_5.rolling(window=10).mean().iloc[-1]
+                      sma30_5 = closes_5.rolling(window=30).mean().iloc[-1]
+                      if pd.notnull(sma10_5) and pd.notnull(sma30_5):
+                           is_gold_5m = (float(sma10_5) > float(sma30_5))
+            except Exception as e5:
+                 print(f"Calc 5m Error ({ticker}): {e5}")
+
+        # 3. Momentum (Step 2 Breakout) logic - RESTORED
         filter2_met = False
         prev_close = None
+        target_v = 0
         try:
-            # Fetch 1-day data directly for prev close calculation (Priority: KIS > DF)
-            import yfinance as yf # Keep import if needed, but we try KIS first
-            
-            # [FIX] Priority 1: KIS Daily Data
+            # Priority 1: KIS Daily Data
             try:
                 k_daily = kis_client.get_daily_price(ticker)
                 if k_daily and len(k_daily) > 1:
-                     # KIS Daily usually returns [0]=Today(Live/Close), [1]=Yesterday.
-                     # We want Yesterday Close.
-                     prev_close = float(k_daily[1]['clos']) # Assuming 'clos' key or use safe get if unsure of key mapping in raw dict
-                     # Actually raw dict keys from KIS API are usually short. 
-                     # Let's rely on my previous knowledge or fallback.
-                     # But safer is to use the robust DF logic IF KIS fails or is ambiguous.
+                     prev_close = float(k_daily[1]['clos']) 
             except: pass
 
-            # [FIX] Priority 2: 1D DF with Date Logic (Smart)
+            # Priority 2: 1D DF
             if not prev_close:
+                import yfinance as yf
                 ticker_obj = yf.Ticker(ticker)
                 df_1d = ticker_obj.history(period="5d", interval="1d")
                 
@@ -1666,16 +1686,11 @@ def check_triple_filter(ticker, data_30m, data_5m):
                      if last_date >= today_est:
                          if len(df_1d) >= 2:
                              prev_close = float(df_1d['Close'].iloc[-2])
-                             print(f"DEBUG {ticker}: Today Candle ({last_date}). PrevClose(iloc[-2])={prev_close}")
                      else:
                          prev_close = float(df_1d['Close'].iloc[-1])
-                         print(f"DEBUG {ticker}: Last Candle Old ({last_date}). PrevClose(iloc[-1])={prev_close}")
 
             is_breakout = False
-            target_v = 0
-            
             if prev_close and prev_close > 0:
-                # +2% 이상 상승 시 돌파
                 target_v = round(prev_close * 1.02, 2)
                 if current_price >= target_v:
                     is_breakout = True
@@ -1685,16 +1700,6 @@ def check_triple_filter(ticker, data_30m, data_5m):
                  if not state.get("step2_done_time"):
                      state["step2_done_time"] = now_time_str
                      state["step2_done_price"] = current_price
-                     # Save History
-                     try:
-                         from db import save_signal
-                         save_signal({
-                             'ticker': ticker, 'signal_type': 'STEP2_BREAKOUT',
-                             'position': '박스권/목표가 돌파', 'current_price': current_price,
-                             'signal_time_raw': now_utc, 'score': 20,
-                             'interpretation': f"강력 상승 돌파 ({now_time_str})"
-                         })
-                     except: pass
                      
             change_pct = 0
             if prev_close and prev_close > 0:
@@ -1703,28 +1708,14 @@ def check_triple_filter(ticker, data_30m, data_5m):
             result["target"] = target_v
             result["daily_change"] = round(change_pct, 2)
 
-        except Exception as e:
-            print(f"Filter 2 Error ({ticker}): {e}")
-            import traceback
-            traceback.print_exc()
-            result["target"] = 0
-            filter2_met = False
-
-        # Filter 3: 5m Timing (Golden Cross SMA10 > SMA30)
-        filter3_met = False
-        if df5 is not None and not df5.empty and len(df5) > 30:
-             sma10_5 = float(calculate_sma(df5['Close'], 10).iloc[-1])
-             sma30_5 = float(calculate_sma(df5['Close'], 30).iloc[-1])
-             filter3_met = bool(sma10_5 > sma30_5)  # 골든크로스 상태 (10/30)
-
-
-        # Note: filter3_met is used for Step 3 (Final Entry Timing)
-        # Step 1 is filter1_met (30m trend), handled below
+        except Exception as e2:
+            print(f"Filter 2 Error ({ticker}): {e2}")
 
         # --- REAL-TIME FILTER CHECKS & DB UPDATE ---
-        # [FIX] MAPPING CORRECTION based on Frontend Labels
-        # Step 1: 5m GC (Timing) - Was Filter 3
-        # Step 3: 30m GC (Trend) - Was Filter 1
+        # [MAPPING CONFIRMED via Ver 5.0 Spec]
+        # Step 1: 5m GC (Timing)
+        # Step 2: 2% (Momentum)
+        # Step 3: 30m GC (Trend)
 
         # Import save function
         try:
@@ -1734,35 +1725,34 @@ def check_triple_filter(ticker, data_30m, data_5m):
 
         manage_id = state.get("manage_id")
 
-        # Step 1: 5m Golden Cross (Timing) - Was Filter 3
-        # Use Manual Flag to Override
+        # =========================================================
+        # Step 1: 5m Golden Cross (Timing)
+        # =========================================================
         if is_manual_1 == 'Y':
             result["step1"] = True
             result["step1_status"] = "수동 설정 (ON)"
-            state["buy_sig1_yn"] = 'Y' # Force State
+            state["buy_sig1_yn"] = 'Y'
         else:
-            result["step1"] = filter3_met
-            new_status_1 = 'Y' if filter3_met else 'N'
+            result["step1"] = is_gold_5m
+            new_status_1 = 'Y' if is_gold_5m else 'N'
             
-            # Logic Update (Always attempt to save to sync DB, save function handles optimization)
             if save_v2_buy_signal:
                  save_v2_buy_signal(ticker, 'sig1', current_price, new_status_1)
             
             state["buy_sig1_yn"] = new_status_1
 
-            if filter3_met:
-                result["step1_status"] = "현재 골든크로스 (진입적합)"
+            if is_gold_5m:
+                result["step1_status"] = "진입 타점 (5m Gold)"
                 if not state.get("step1_done_time"): state["step1_done_time"] = now_time_str
             else:
                 result["step1_color"] = "yellow"
-                result["step1_status"] = "현재 데드크로스 (대기)"
-                state["step1_done_time"] = None # Reset timing info
+                result["step1_status"] = "진입 대기 (5m Dead)"
+                state["step1_done_time"] = None 
 
+        # =========================================================
         # Step 2: +2% Breakout (Box)
+        # =========================================================
         change_pct = result.get("daily_change", 0)
-        
-        # Determine Step 2 Condition
-        # Merge filter2_met (Price Target) and change_pct check logic
         cond_step2 = filter2_met or (change_pct >= 2)
         
         if is_manual_2 == 'Y':
@@ -1790,40 +1780,41 @@ def check_triple_filter(ticker, data_30m, data_5m):
                 else:
                     result["step2_color"] = None
                     result["step2_status"] = "보합/대기"
-                state["step2_done_time"] = None # Reset
+                state["step2_done_time"] = None 
 
-        # Step 3: 30m Golden Cross (Trend) - Was Filter 1
+        # =========================================================
+        # Step 3: 30m Golden Cross (Trend)
+        # =========================================================
         if is_manual_3 == 'Y':
             result["step3"] = True
             result["step3_status"] = "수동 설정 (ON)"
             state["buy_sig3_yn"] = 'Y'
         else:
-            result["step3"] = filter1_met
-            new_status_3 = 'Y' if filter1_met else 'N'
+            result["step3"] = is_gold_30m
+            new_status_3 = 'Y' if is_gold_30m else 'N'
             
             if save_v2_buy_signal:
                  save_v2_buy_signal(ticker, 'sig3', current_price, new_status_3)
             
             state["buy_sig3_yn"] = new_status_3
             
-            if filter1_met:
-                result["step3_status"] = "추세 확정"
+            if is_gold_30m:
+                result["step3_status"] = "추세 확정 (30m Gold)"
                 if not state.get("step3_done_time"):
                     state["step3_done_time"] = now_time_str
             else:
                  result["step3_color"] = "yellow"
-                 result["step3_status"] = "주의 (데드크로스)"
-                 state["step3_done_time"] = None # Reset
-
+                 result["step3_status"] = "추세 미확보 (30m Dead)"
+                 state["step3_done_time"] = None 
 
         # FINAL ENTRY SIGNAL
-        # [FIX] Use Latched DB Status for Strict "All Done" Check
         all_met = (state.get("buy_sig1_yn") == 'Y' and 
                    state.get("buy_sig2_yn") == 'Y' and 
                    state.get("buy_sig3_yn") == 'Y')
 
         if all_met:
             result["final"] = True
+            # ... (omitted redundant final logic to keep diff small, wait, I need to include it to match EndLine)
             
             # Auto Update Logic for Final
             if save_v2_buy_signal:
@@ -1832,118 +1823,92 @@ def check_triple_filter(ticker, data_30m, data_5m):
             if not state.get("final_met"):
                 state["final_met"] = True
                 state["signal_time"] = now_time_str
-             
-                # ... (rest of notification logic)
-                try:
-                    ny_tz = pytz.timezone('America/New_York')
-                    kst_tz = pytz.timezone('Asia/Seoul')
-                    
-                    if now_utc.tzinfo is None:
-                        now_utc_aware = now_utc.replace(tzinfo=timezone.utc)
-                    else:
-                        now_utc_aware = now_utc
-                    
-                    time_kst_formatted = now_utc_aware.astimezone(kst_tz).strftime('%Y-%m-%d %H:%M')
-                    time_ny_formatted = now_utc_aware.astimezone(ny_tz).strftime('%Y-%m-%d %H:%M')
-                except:
-                    time_kst_formatted = now_time_str
-                    time_ny_formatted = ''
                 
+                # Make Save Master Signal
                 try:
                     from db import save_signal, get_connection
                     with get_connection() as conn:
                         with conn.cursor() as cursor:
-                            # Check recent BUY to avoid duplicates
                             cursor.execute("SELECT id FROM signal_history WHERE ticker=%s AND signal_type='BUY (MASTER)' AND created_at >= NOW() - INTERVAL 30 MINUTE LIMIT 1", (ticker,))
                             if not cursor.fetchone(): 
                                 save_signal({
                                     'ticker': ticker, 'name': f"Master Signal ({ticker})",
                                     'signal_type': "BUY (MASTER)", 
-                                    'signal_reason': "진입조건 완성 (30분추세+박스돌파+5분타이밍)",
-                                    'position': f"진입조건완성: 1.30분추세 2.박스돌파 3.5분타이밍\n시간: {now_time_str}\n가격: ${current_price}",
+                                    'signal_reason': "3단계 조건 충족 (5m+Box+30m)",
+                                    'position': f"매수 진입: \n1.5분타이밍\n2.박스돌파\n3.30분추세\n가격: ${current_price}",
                                     'current_price': current_price, 'signal_time_raw': now_utc,
-                                    'time_kst': time_kst_formatted,
-                                    'time_ny': time_ny_formatted,
-                                    'is_sent': True, 'score': 100, 'interpretation': "마스터 트리플 필터 진입"
+                                    'is_sent': True, 'score': 100, 'interpretation': "Strong Buy"
                                 })
-                except Exception as e:
-                    print(f"Master Signal Save Error: {e}")
+                except Exception as e: print(e)
+
         else:
             result["final"] = False
-            
-            # Check Real Buy Status (Holding)
-            # If real_buy_qn > 0, we must NOT turn off final_buy_yn in DB, otherwise UI exits 'Selling Mode'
+            # Check Holding
             real_buy_qn = 0
-            if buy_db:
-                 real_buy_qn = buy_db.get('real_buy_qn') or 0
+            if buy_db: real_buy_qn = buy_db.get('real_buy_qn') or 0
                  
             if real_buy_qn > 0:
-                 # Holding Mode: Keep state True in memory and DB
-                 result["final"] = True # Force UI to show "Holding"
+                 result["final"] = True
                  if not state.get("final_met"): state["final_met"] = True
             else:
-                 # Not Holding: Reset Logic
-                 if save_v2_buy_signal:
-                      save_v2_buy_signal(ticker, 'final', current_price, 'N')
-                 
+                 if save_v2_buy_signal: save_v2_buy_signal(ticker, 'final', current_price, 'N')
                  if state.get("final_met"):
                      state["final_met"] = False
                      state["signal_time"] = None
 
-
-
-        # --- POST-ENTRY WARNINGS (Only if currently in FINAL state) ---
+        # --- POST-ENTRY WARNINGS ---
         if result.get("final"):
             result["signal_time"] = state.get("signal_time", now_time_str)
             
-            # Warning 1: 5m Dead Cross (filter3_met is False) -> Yellow
-            if not filter3_met:
-                result["step3_color"] = "yellow"
+            # Warning 1: 5m Dead Cross (Step 1 OFF)
+            if not is_gold_5m:
+                result["step1_color"] = "yellow"  # Highlight Step 1
+                result["step3_color"] = "yellow"  # Legacy compat or decide which one
                 state["step3_color"] = "yellow"
-                result["step3"] = False # Visually not met (Warning)
-                # Send SMS/History
+                
+                # Send Warning
+                # Send Warning
                 try:
                     from db import save_signal, get_connection
                     with get_connection() as conn:
                         with conn.cursor() as cursor:
-                            # Use WARNING (5M) type
                             cursor.execute("SELECT id FROM signal_history WHERE ticker=%s AND signal_type='WARNING (5M)' AND created_at >= NOW() - INTERVAL 30 MINUTE LIMIT 1", (ticker,))
                             if not cursor.fetchone():
                                 save_signal({
                                     'ticker': ticker, 'name': f"Warning ({ticker})",
                                     'signal_type': "WARNING (5M)", 
-                                    'position': f"🟡 Yellow 경보: 5분봉 데드크로스 발생\n행동: 보유 주식 30% 매도\n현재가: ${current_price}\n시간: {now_time_str}",
+                                    'position': f"🟡 5분봉 데드크로스 발생 (단기청산고려)\n현재: ${current_price}",
                                     'current_price': current_price, 'signal_time_raw': now_utc,
-                                    'is_sent': True, 'score': -50, 'interpretation': "단기 조정 경고"
+                                    'is_sent': True, 'score': -50, 'interpretation': "Short Term Weakness"
                                 })
-                except Exception as e:
-                    print(f"Master Signal 5M Warning Save Error: {e}")
+                except Exception as e: print(f"Warning 1 Error: {e}")
             else:
-                state["step3_color"] = None
+                 result["step1_color"] = None
+                 state["step3_color"] = None 
 
-            # Warning 2: Price dropped below entry price -> Orange
-            entry_price = state.get("step2_done_price")
-            if entry_price and current_price < entry_price:
-                result["step2_color"] = "orange"
-                state["step2_color"] = "orange"
-                try:
+            # Warning 2: Price Drop below Entry (Step 2 Breakout Price)
+            entry_p = state.get("step2_done_price")
+            if entry_p and current_price < float(entry_p):
+                 result["step2_color"] = "orange"
+                 try:
                     from db import save_signal, get_connection
                     with get_connection() as conn:
                         with conn.cursor() as cursor:
                             cursor.execute("SELECT id FROM signal_history WHERE ticker=%s AND signal_type='WARNING (BOX)' AND created_at >= NOW() - INTERVAL 30 MINUTE LIMIT 1", (ticker,))
                             if not cursor.fetchone():
-                                price_drop_pct = ((current_price - entry_price) / entry_price) * 100
+                                drop_pct = ((current_price - float(entry_p))/float(entry_p))*100
                                 save_signal({
                                     'ticker': ticker, 'name': f"Warning ({ticker})",
                                     'signal_type': "WARNING (BOX)", 
-                                    'position': f"🟠 Orange 경보: 현재가가 진입가격보다 하락\n행동: 보유 주식 30% 매도\n진입: ${entry_price:.2f}, 현재: ${current_price:.2f} ({price_drop_pct:+.1f}%)\n시간: {now_time_str}",
+                                    'position': f"🟠 진입가 이탈 발생 (손실 관리)\n진입: {entry_p}, 현재: {current_price} ({drop_pct:.2f}%)",
                                     'current_price': current_price, 'signal_time_raw': now_utc,
-                                    'is_sent': True, 'score': -30, 'interpretation': "모멘텀 약화 경고"
+                                    'is_sent': True, 'score': -50, 'interpretation': "Loss Warning"
                                 })
-                except Exception as e:
-                    print(f"Master Signal Box Warning Save Error: {e}")
+                 except Exception as e: print(f"Warning 2 Error: {e}")
             else:
-                state["step2_color"] = None
+                 result["step2_color"] = None
+
+
 
         # --- PREPARE DETAILED LOGS ---
         if state.get("step1_done_time"): 
