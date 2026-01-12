@@ -1323,14 +1323,22 @@ def run_analysis(held_tickers=[], force_update=False):
     indicators = {}
     
     # Convert market_data from list to dict if needed
+    # Convert market_data from list to dict if needed
     market_data_dict = {}
+    
     if isinstance(market_data, list):
         # market_data is a list of dicts from get_market_indices()
         for item in market_data:
             if isinstance(item, dict) and 'ticker' in item:
                 market_data_dict[item['ticker']] = item
+                
     elif isinstance(market_data, dict):
         market_data_dict = market_data
+        
+    # [Fix] Ensure market_data_dict is a dictionary before .items() call
+    if not isinstance(market_data_dict, dict):
+        print(f"⚠️ market_data_dict is not dict (Type: {type(market_data_dict)}). Resetting to empty.")
+        market_data_dict = {}
     
     for name, data in market_data_dict.items():
         try:

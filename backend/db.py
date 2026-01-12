@@ -2258,7 +2258,29 @@ def confirm_v2_sell(ticker, price, qty, is_end=False):
     try:
         with conn.cursor() as cursor:
             if is_end:
-                # 종결/청산: 해당 ticker의 레코드 삭제 (새 사이클 준비)
+                # [Ver 5.0] 종결/청산 시 히스토리(system_trades) 저장
+                cursor.execute("SELECT real_buy_price, real_buy_qn FROM buy_stock WHERE ticker = %s", (ticker,))
+                buy_row = cursor.fetchone()
+                
+                if buy_row:
+                    buy_price = float(buy_row['real_buy_price'] or 0)
+                    # Use provided qty or fallback to stored buy qty
+                    close_qty = float(qty) if qty and float(qty) > 0 else float(buy_row['real_buy_qn'] or 0)
+                    
+                    if buy_price > 0:
+                        profit_pct = ((price - buy_price) / buy_price) * 100
+                        profit_amt = (price - buy_price) * close_qty
+                        
+                        # Save History
+                        hist_sql = """
+                            INSERT INTO system_trades
+                            (ticker, trade_type, price, qty, trade_time, profit_pct, realized_pl, strategy_note)
+                            VALUES (%s, 'SELL', %s, %s, NOW(), %s, %s, 'Ver5.0 종결')
+                        """
+                        cursor.execute(hist_sql, (ticker, price, close_qty, profit_pct, profit_amt))
+                        print(f"📜 [History] {ticker} Close: {profit_pct:.2f}% (${profit_amt:.2f}) Saved.")
+
+                # 종결/청산: 레코드 삭제
                 cursor.execute("DELETE FROM sell_stock WHERE ticker = %s", (ticker,))
                 cursor.execute("DELETE FROM buy_stock WHERE ticker = %s", (ticker,))
                 print(f"[종결/청산] {ticker} 레코드 삭제 완료 - 새 사이클 대기")
