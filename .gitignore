@@ -37,3 +37,18 @@ yarn-error.log*
 
 # Virtual Env
 /venv/
+-e 
+# Security Exclusions
+*.md
+.docs/
+필수지침/
+*.env
+kis_token.json
+backend/kis_token.json
+backend/response.json
+backend/report_output.json
+backend/user_alg_result.txt
+manual_start_soxs.py
+manual_create_sell.py
+*.log
+
