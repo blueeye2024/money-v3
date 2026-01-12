@@ -31,3 +31,9 @@ yarn-error.log*
 .vercel
 -e 
 *.log
+-e 
+# Backups
+/backup/
+
+# Virtual Env
+/venv/

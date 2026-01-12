@@ -39,34 +39,97 @@ def _get_pool():
     return _connection_pool
 
 
-def log_market_indicators(data):
+def save_market_snapshot(data):
     """
-    시장 지표 및 신호 상태 DB 저장
-    data struct: {
-        'ticker': str,
-        'candle_time': datetime (NY),
-        'rsi': float, 'vr': float, 'atr': float, 'pivot_r1': float,
-        'gold_30m': str ('N' or 'YYYY-MM-DD HH:MM:SS'),
-        ...
-    }
+    시장 지표 스냅샷 저장 (Latest State Only)
+    Update the market_indicators_snapshot table.
     """
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
             sql = """
-            INSERT INTO market_indicators_log 
-            (ticker, candle_time, rsi_14, vol_ratio, atr, pivot_r1, gold_30m, gold_5m, dead_30m, dead_5m)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO market_indicators_snapshot 
+            (ticker, candle_time, rsi_14, vol_ratio, atr, pivot_r1, macd, macd_sig, gold_30m, gold_5m, dead_30m, dead_5m, score, evaluation, strategy_comment, v2_state)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+                candle_time=VALUES(candle_time),
+                rsi_14=VALUES(rsi_14),
+                vol_ratio=VALUES(vol_ratio),
+                atr=VALUES(atr),
+                pivot_r1=VALUES(pivot_r1),
+                macd=VALUES(macd),
+                macd_sig=VALUES(macd_sig),
+                gold_30m=VALUES(gold_30m),
+                gold_5m=VALUES(gold_5m),
+                dead_30m=VALUES(dead_30m),
+                dead_5m=VALUES(dead_5m),
+                score=VALUES(score),
+                evaluation=VALUES(evaluation),
+                strategy_comment=VALUES(strategy_comment),
+                v2_state=VALUES(v2_state),
+                updated_at=CURRENT_TIMESTAMP
             """
             cursor.execute(sql, (
                 data['ticker'], data['candle_time'], 
                 data.get('rsi', 0), data.get('vr', 0), data.get('atr', 0), data.get('pivot_r1', 0),
+                data.get('macd', 0), data.get('macd_sig', 0),
                 data.get('gold_30m', 'N'), data.get('gold_5m', 'N'),
-                data.get('dead_30m', 'N'), data.get('dead_5m', 'N')
+                data.get('dead_30m', 'N'), data.get('dead_5m', 'N'),
+                data.get('score', 0), data.get('evaluation', ''), 
+                data.get('comment', ''), data.get('v2_state', '')
             ))
             conn.commit()
     except Exception as e:
-        print(f"Log Indicators Error: {e}")
+        print(f"Save Snapshot Error: {e}")
+    finally:
+        conn.close()
+
+def log_market_history(data):
+    """
+    시장 지표 히스토리 저장 (Append)
+    Insert into market_indicators_history table.
+    [Updated] Saves only if > 10 minutes have passed since last log for this ticker.
+    """
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            # 1. Check last save time
+            cursor.execute("SELECT created_at FROM market_indicators_history WHERE ticker=%s ORDER BY id DESC LIMIT 1", (data['ticker'],))
+            last_row = cursor.fetchone()
+            
+            should_save = True
+            if last_row:
+                last_time = last_row.get('created_at') # datetime object
+                if last_time:
+                    # Calculate diff
+                    now = datetime.now() # Server time (assuming DB time is close or convert)
+                    # DB created_at is likely Naive or Server Local. 
+                    # Let's rely on DB time diff to be safe? Or simple python diff.
+                    # Assuming running on same machine/timezone setup.
+                    diff = (now - last_time).total_seconds() / 60.0
+                    if diff < 10:
+                        should_save = False
+                        # print(f"Skipping History Log for {data['ticker']} (Last: {diff:.1f}m ago)")
+
+            if should_save:
+                sql = """
+                INSERT INTO market_indicators_history 
+                (ticker, candle_time, rsi_14, vol_ratio, atr, pivot_r1, macd, macd_sig, gold_30m, gold_5m, dead_30m, dead_5m, score, evaluation, strategy_comment, v2_state)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """
+                cursor.execute(sql, (
+                    data['ticker'], data['candle_time'], 
+                    data.get('rsi', 0), data.get('vr', 0), data.get('atr', 0), data.get('pivot_r1', 0),
+                    data.get('macd', 0), data.get('macd_sig', 0),
+                    data.get('gold_30m', 'N'), data.get('gold_5m', 'N'),
+                    data.get('dead_30m', 'N'), data.get('dead_5m', 'N'),
+                    data.get('score', 0), data.get('evaluation', ''), 
+                    data.get('comment', ''), data.get('v2_state', '')
+                ))
+                conn.commit()
+                # print(f"History Log Saved for {data['ticker']}")
+    except Exception as e:
+        print(f"Log History Error: {e}")
     finally:
         conn.close()
 
@@ -458,6 +521,45 @@ def init_db():
             )
             """
             cursor.execute(sql_sys_trade)
+
+            # 15. Trading Journal (거래일지)
+            sql_trade_journal = """
+            CREATE TABLE IF NOT EXISTS trade_journal (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                ticker VARCHAR(20) NOT NULL,
+                -- 매수 정보
+                buy_date DATETIME,
+                buy_price DECIMAL(10,4),
+                buy_qty INT DEFAULT 1,
+                buy_reason TEXT,
+                -- 매도 정보
+                sell_date DATETIME,
+                sell_price DECIMAL(10,4),
+                sell_qty INT,
+                sell_reason TEXT,
+                -- 분석 필드
+                market_condition VARCHAR(50),
+                emotion_before VARCHAR(20),
+                emotion_after VARCHAR(20),
+                score_at_entry INT,
+                score_at_exit INT,
+                -- 결과
+                realized_pnl DECIMAL(10,2),
+                realized_pnl_pct DECIMAL(5,2),
+                hold_days INT,
+                lesson TEXT,
+                tags VARCHAR(255),
+                screenshot LONGTEXT,
+                -- 메타
+                status ENUM('OPEN','CLOSED') DEFAULT 'OPEN',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX idx_ticker (ticker),
+                INDEX idx_status (status),
+                INDEX idx_buy_date (buy_date)
+            )
+            """
+            cursor.execute(sql_trade_journal)
 
             # --- Seed Initial Data ---
             # Seed Managed Stocks
@@ -1948,16 +2050,21 @@ def get_v2_sell_status(ticker):
     finally:
         conn.close()
 
-def create_v2_sell_record(manage_id, ticker, entry_price):
+def create_v2_sell_record(ticker, entry_price):
     """최종 진입 확정 시 sell_stock 레코드 생성"""
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
+            # Check if exists first
+            cursor.execute("SELECT 1 FROM sell_stock WHERE ticker=%s", (ticker,))
+            if cursor.fetchone():
+                return True # Already exists
+
             sql = """
-                INSERT INTO sell_stock (manage_id, ticker, final_sell_price, row_dt)
-                VALUES (%s, %s, 0, NOW())
+                INSERT INTO sell_stock (ticker, final_sell_price, row_dt)
+                VALUES (%s, 0, NOW())
             """
-            cursor.execute(sql, (manage_id, ticker))
+            cursor.execute(sql, (ticker,))
         conn.commit()
         return True
     except Exception as e:
@@ -1966,23 +2073,51 @@ def create_v2_sell_record(manage_id, ticker, entry_price):
     finally:
         conn.close()
 
-def save_v2_buy_signal(manage_id, signal_type, price):
-    """매수 신호 단계별 업데이트"""
+def save_v2_buy_signal(ticker, signal_type, price, status='Y'):
+    """매수 신호 단계별 업데이트 (Auto Logic) - Uses Ticker Only"""
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
+            # 1. Check Manual Flag & Existence
+            # Add ticker column to SELECT to ensure we are looking at the right record logic if needed, but ticker is passed.
+            cols = "is_manual_buy1, is_manual_buy2, is_manual_buy3"
+            cursor.execute(f"SELECT {cols} FROM buy_stock WHERE ticker=%s", (ticker,))
+            row = cursor.fetchone()
+            
+            # Logic: If row doesn't exist, we must create it IF signal is 'sig1' and status is 'Y'.
+            # If row exists, we check manual flags.
+            
+            if not row:
+                if signal_type == 'sig1' and status == 'Y':
+                    # Create New Record
+                    sql_insert = """
+                        INSERT INTO buy_stock (ticker, row_dt, buy_sig1_yn, buy_sig1_price, buy_sig1_dt)
+                        VALUES (%s, NOW(), 'Y', %s, NOW())
+                    """
+                    cursor.execute(sql_insert, (ticker, price))
+                    conn.commit()
+                    return True
+                else:
+                    return False # Cannot update non-existent record for later signals or if status is N
+            
+            # Row exists, check flags
+            is_man_1, is_man_2, is_man_3 = row
+            
             sql = ""
             if signal_type == 'sig1':
-                 sql = "UPDATE buy_stock SET buy_sig1_yn='Y', buy_sig1_price=%s, buy_sig1_dt=NOW() WHERE manage_id=%s"
+                if is_man_1 == 'Y': return True # Manual Override (Skip Auto)
+                sql = "UPDATE buy_stock SET buy_sig1_yn=%s, buy_sig1_price=%s, buy_sig1_dt=NOW() WHERE ticker=%s"
             elif signal_type == 'sig2':
-                 sql = "UPDATE buy_stock SET buy_sig2_yn='Y', buy_sig2_price=%s, buy_sig2_dt=NOW() WHERE manage_id=%s"
+                if is_man_2 == 'Y': return True
+                sql = "UPDATE buy_stock SET buy_sig2_yn=%s, buy_sig2_price=%s, buy_sig2_dt=NOW() WHERE ticker=%s"
             elif signal_type == 'sig3':
-                 sql = "UPDATE buy_stock SET buy_sig3_yn='Y', buy_sig3_price=%s, buy_sig3_dt=NOW() WHERE manage_id=%s"
+                if is_man_3 == 'Y': return True
+                sql = "UPDATE buy_stock SET buy_sig3_yn=%s, buy_sig3_price=%s, buy_sig3_dt=NOW() WHERE ticker=%s"
             elif signal_type == 'final':
-                 sql = "UPDATE buy_stock SET final_buy_yn='Y', final_buy_price=%s, final_buy_dt=NOW() WHERE manage_id=%s"
+                sql = "UPDATE buy_stock SET final_buy_yn=%s, final_buy_price=%s, final_buy_dt=NOW() WHERE ticker=%s"
             
             if sql:
-                cursor.execute(sql, (price, manage_id))
+                cursor.execute(sql, (status, price, ticker))
                 conn.commit()
                 return True
             return False
@@ -1992,28 +2127,75 @@ def save_v2_buy_signal(manage_id, signal_type, price):
     finally:
         conn.close()
 
-def save_v2_sell_signal(manage_id, signal_type, price):
-    """청산 신호 단계별 업데이트"""
+def save_v2_sell_signal(ticker, signal_type, price, status='Y'):
+    """청산 신호 단계별 업데이트 (Auto Logic) - Uses Ticker Only"""
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
-            if signal_type == 'sig1':
-                 sql = "UPDATE sell_stock SET sell_sig1_yn='Y', sell_sig1_price=%s, sell_sig1_dt=NOW() WHERE manage_id=%s"
-            elif signal_type == 'sig2':
-                 sql = "UPDATE sell_stock SET sell_sig2_yn='Y', sell_sig2_price=%s, sell_sig2_dt=NOW() WHERE manage_id=%s"
-            elif signal_type == 'sig3':
-                 sql = "UPDATE sell_stock SET sell_sig3_yn='Y', sell_sig3_price=%s, sell_sig3_dt=NOW() WHERE manage_id=%s"
-            elif signal_type == 'final':
-                 sql = "UPDATE sell_stock SET final_sell_yn='Y', final_sell_price=%s, final_sell_dt=NOW() WHERE manage_id=%s"
+             # Check Manual Flag First
+            cols = "is_manual_sell1, is_manual_sell2, is_manual_sell3"
+            cursor.execute(f"SELECT {cols} FROM sell_stock WHERE ticker=%s", (ticker,))
+            row = cursor.fetchone()
             
-            cursor.execute(sql, (price, manage_id))
-        conn.commit()
-        return True
+            if not row:
+                # If sell record doesn't exist, we usually don't create it here (created by confirm_buy or manually)
+                # But if user wants to track sell signals even before full buy confirmation? 
+                # Ideally sell_stock exists when we hold stock.
+                return False 
+                
+            is_man_1, is_man_2, is_man_3 = row
+
+            sql = ""
+            if signal_type == 'sig1':
+                if is_man_1 == 'Y': return True
+                sql = "UPDATE sell_stock SET sell_sig1_yn=%s, sell_sig1_price=%s, sell_sig1_dt=NOW() WHERE ticker=%s"
+            elif signal_type == 'sig2':
+                if is_man_2 == 'Y': return True
+                sql = "UPDATE sell_stock SET sell_sig2_yn=%s, sell_sig2_price=%s, sell_sig2_dt=NOW() WHERE ticker=%s"
+            elif signal_type == 'sig3':
+                if is_man_3 == 'Y': return True
+                sql = "UPDATE sell_stock SET sell_sig3_yn=%s, sell_sig3_price=%s, sell_sig3_dt=NOW() WHERE ticker=%s"
+            elif signal_type == 'final':
+                sql = "UPDATE sell_stock SET final_sell_yn=%s, final_sell_price=%s, final_sell_dt=NOW() WHERE ticker=%s"
+            
+            if sql:
+                cursor.execute(sql, (status, price, ticker))
+                conn.commit()
+                return True
+            return False
     except Exception as e:
         print(f"Save Sell Signal Error: {e}")
         return False
     finally:
         conn.close()
+
+
+
+def fetch_signal_status_dict(ticker):
+    """
+    Fetch comprehensive signal status for analysis logic (returns dict keys).
+    Returns {'buy': dict, 'sell': dict}
+    """
+    conn = get_connection()
+    try:
+        import pymysql.cursors
+        # Use DictCursor explicitly
+        with conn.cursor(pymysql.cursors.DictCursor) as cursor:
+            # 1. Buy Status
+            cursor.execute("SELECT * FROM buy_stock WHERE ticker=%s ORDER BY row_dt DESC LIMIT 1", (ticker,))
+            buy_row = cursor.fetchone()
+            
+            # 2. Sell Status
+            cursor.execute("SELECT * FROM sell_stock WHERE ticker=%s ORDER BY row_dt DESC LIMIT 1", (ticker,))
+            sell_row = cursor.fetchone()
+            
+            return {'buy': buy_row, 'sell': sell_row}
+    except Exception as e:
+        print(f"Fetch Signal Status Error: {e}")
+        return {'buy': None, 'sell': None}
+    finally:
+        conn.close()
+
 
 def update_v2_target_price(ticker, target_type, price):
     """Set custom target price for Box(Buy2) or Stop(Sell2)"""
@@ -2055,11 +2237,12 @@ def confirm_v2_buy(ticker, price, qty):
             
             # Optional: Create sell_stock entry if doesn't exist
             sql2 = """
-                INSERT INTO sell_stock (ticker, sell_mode, created_at)
-                VALUES (%s, 'ACTIVE', NOW())
-                ON DUPLICATE KEY UPDATE sell_mode='ACTIVE'
+                INSERT INTO sell_stock (ticker, row_dt)
+                VALUES (%s, NOW())
+                ON DUPLICATE KEY UPDATE row_dt=NOW()
             """
             cursor.execute(sql2, (ticker,))
+
             
         conn.commit()
         return True, "Buy Confirmed"
@@ -2074,28 +2257,13 @@ def confirm_v2_sell(ticker, price, qty, is_end=False):
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
-            # If is_end=True, we close the cycle (close_yn='Y')
-            close_flag = 'Y' if is_end else 'N'
-            
             if is_end:
-                # Terminate Trade: Set final flags
-                sql = """
-                    UPDATE sell_stock
-                    SET real_hold_yn = 'N', 
-                        real_sell_avg_price = %s,
-                        real_sell_qn = %s,
-                        real_sell_dt = NOW(),
-                        close_yn = 'Y',
-                        final_sell_yn = 'Y'
-                    WHERE ticker = %s
-                """
-                cursor.execute(sql, (price, qty, ticker))
-                
-                # Also Close BUY Record (final_buy_yn = 'Y') to allow new cycle
-                sql_buy = "UPDATE buy_stock SET final_buy_yn = 'Y', row_dt = NOW() WHERE ticker = %s"
-                cursor.execute(sql_buy, (ticker,))
+                # 종결/청산: 해당 ticker의 레코드 삭제 (새 사이클 준비)
+                cursor.execute("DELETE FROM sell_stock WHERE ticker = %s", (ticker,))
+                cursor.execute("DELETE FROM buy_stock WHERE ticker = %s", (ticker,))
+                print(f"[종결/청산] {ticker} 레코드 삭제 완료 - 새 사이클 대기")
             else:
-                # Partial Update: Just update info, keep holding
+                # 부분 매도 정보 업데이트 (종결 아닌 경우)
                 sql = """
                     UPDATE sell_stock
                     SET real_sell_avg_price = %s,
@@ -2104,9 +2272,8 @@ def confirm_v2_sell(ticker, price, qty, is_end=False):
                     WHERE ticker = %s
                 """
                 cursor.execute(sql, (price, qty, ticker))
-
-            if cursor.rowcount == 0:
-                 return False, "참조하는 매매 데이터(Ticker)를 찾을 수 없습니다."
+                if cursor.rowcount == 0:
+                    return False, "참조하는 매매 데이터(Ticker)를 찾을 수 없습니다."
 
         conn.commit()
         return True, "Success"
@@ -2115,6 +2282,7 @@ def confirm_v2_sell(ticker, price, qty, is_end=False):
         return False, str(e)
     finally:
         conn.close()
+
 
 def manual_update_signal(ticker, signal_key, price, status='Y'):
     """
@@ -2125,21 +2293,26 @@ def manual_update_signal(ticker, signal_key, price, status='Y'):
     """
     conn = get_connection()
     try:
-        # Map key to columns
+        # Map key to columns (Added is_manual column)
         mapping = {
-            'buy1': ('buy_stock', 'buy_sig1_yn', 'buy_sig1_price', 'buy_sig1_dt'),
-            'buy2': ('buy_stock', 'buy_sig2_yn', 'buy_sig2_price', 'buy_sig2_dt'),
-            'buy3': ('buy_stock', 'buy_sig3_yn', 'buy_sig3_price', 'buy_sig3_dt'),
-            'sell1': ('sell_stock', 'sell_sig1_yn', 'sell_sig1_price', 'sell_sig1_dt'),
-            'sell2': ('sell_stock', 'sell_sig2_yn', 'sell_sig2_price', 'sell_sig2_dt'),
-            'sell3': ('sell_stock', 'sell_sig3_yn', 'sell_sig3_price', 'sell_sig3_dt')
+            'buy1': ('buy_stock', 'buy_sig1_yn', 'buy_sig1_price', 'buy_sig1_dt', 'is_manual_buy1'),
+            'buy2': ('buy_stock', 'buy_sig2_yn', 'buy_sig2_price', 'buy_sig2_dt', 'is_manual_buy2'),
+            'buy3': ('buy_stock', 'buy_sig3_yn', 'buy_sig3_price', 'buy_sig3_dt', 'is_manual_buy3'),
+            'sell1': ('sell_stock', 'sell_sig1_yn', 'sell_sig1_price', 'sell_sig1_dt', 'is_manual_sell1'),
+            'sell2': ('sell_stock', 'sell_sig2_yn', 'sell_sig2_price', 'sell_sig2_dt', 'is_manual_sell2'),
+            'sell3': ('sell_stock', 'sell_sig3_yn', 'sell_sig3_price', 'sell_sig3_dt', 'is_manual_sell3')
         }
         
         if signal_key not in mapping:
             return False
             
-        table, col_yn, col_price, col_dt = mapping[signal_key]
+        table, col_yn, col_price, col_dt, col_manual = mapping[signal_key]
         
+        # Determine Manual Flag: 'Y' if setting signal (status='Y'), 'N' if cancelling (status='N')
+        # User wants: Manual Set -> Fixed ON (is_manual='Y')
+        #             Manual Cancel -> Auto Mode (is_manual='N')
+        is_manual_val = 'Y' if status == 'Y' else 'N'
+
         with conn.cursor() as cursor:
             # Check existence first
             check_sql = f"SELECT 1 FROM {table} WHERE ticker=%s"
@@ -2150,23 +2323,33 @@ def manual_update_signal(ticker, signal_key, price, status='Y'):
                 if table == 'buy_stock' and status == 'Y':
                     # Create New Record for buy_stock
                     sql_insert = f"""
-                        INSERT INTO buy_stock (ticker, row_dt, {col_yn}, {col_price}, {col_dt})
-                        VALUES (%s, NOW(), %s, %s, NOW())
+                        INSERT INTO buy_stock (ticker, row_dt, {col_yn}, {col_price}, {col_dt}, {col_manual})
+                        VALUES (%s, NOW(), %s, %s, NOW(), %s)
                     """
-                    cursor.execute(sql_insert, (ticker, status, price))
+                    cursor.execute(sql_insert, (ticker, status, price, is_manual_val))
+                elif table == 'sell_stock' and status == 'Y':
+                    # Create New Record for sell_stock (when in SELL mode)
+                    sql_insert = f"""
+                        INSERT INTO sell_stock (ticker, row_dt, {col_yn}, {col_price}, {col_dt}, {col_manual})
+                        VALUES (%s, NOW(), %s, %s, NOW(), %s)
+                    """
+                    cursor.execute(sql_insert, (ticker, status, price, is_manual_val))
                 else:
                     print(f"Manual Update Skipped: Record not found for {ticker}")
                     return False
+
             else:
                 # Update existing
                 sql = f"""
                     UPDATE {table}
                     SET {col_yn} = %s, 
                         {col_price} = %s, 
-                        {col_dt} = NOW()
+                        {col_dt} = NOW(),
+                        {col_manual} = %s
                     WHERE ticker = %s
                 """
-                cursor.execute(sql, (status, price, ticker))
+                cursor.execute(sql, (status, price, is_manual_val, ticker))
+
             
             # [FIX] Clear Custom Targets when Resetting Signal 2
             if status == 'N':
@@ -2289,3 +2472,234 @@ def manual_update_market_indices(ticker, price, change_pct=0.0):
         return False
     finally:
         conn.close()
+
+def get_latest_market_indicators(ticker):
+    """특정 Ticker의 최신 보조지표 조회 (Snapshot)"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            sql = """
+                SELECT * FROM market_indicators_snapshot 
+                WHERE ticker = %s 
+            """
+            cursor.execute(sql, (ticker,))
+            return cursor.fetchone()
+    except Exception as e:
+        print(f"Get Indicators Error: {e}")
+        return None
+    finally:
+        conn.close()
+
+def manual_update_market_indicators(ticker, rsi, vr, atr, pivot_r1):
+    """보조지표 수동 업데이트 (Upsert)"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            # Upsert Logic
+            sql = """
+                INSERT INTO market_indicators_log 
+                (ticker, candle_time, rsi_14, vol_ratio, atr, pivot_r1, created_at)
+                VALUES (%s, NOW(), %s, %s, %s, %s, NOW())
+                ON DUPLICATE KEY UPDATE
+                rsi_14 = VALUES(rsi_14),
+                vol_ratio = VALUES(vol_ratio),
+                atr = VALUES(atr),
+                pivot_r1 = VALUES(pivot_r1),
+                created_at = NOW(),
+                candle_time = NOW()
+            """
+            cursor.execute(sql, (ticker, rsi, vr, atr, pivot_r1))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Manual Indicators Update Error: {e}")
+        return False
+    finally:
+        conn.close()
+
+# ========================================
+# Trading Journal (거래일지) CRUD Functions
+# ========================================
+
+def get_trade_journals(status=None, ticker=None, limit=100):
+    """거래일지 목록 조회 (필터 지원)"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            sql = "SELECT * FROM trade_journal WHERE 1=1"
+            params = []
+            
+            if status:
+                sql += " AND status = %s"
+                params.append(status)
+            if ticker:
+                sql += " AND ticker = %s"
+                params.append(ticker)
+            
+            sql += " ORDER BY buy_date DESC LIMIT %s"
+            params.append(limit)
+            
+            cursor.execute(sql, params)
+            return cursor.fetchall()
+    except Exception as e:
+        print(f"Get Journals Error: {e}")
+        return []
+    finally:
+        conn.close()
+
+def get_trade_journal_by_id(journal_id):
+    """단일 거래 조회"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT * FROM trade_journal WHERE id = %s", (journal_id,))
+            return cursor.fetchone()
+    except Exception as e:
+        print(f"Get Journal Error: {e}")
+        return None
+    finally:
+        conn.close()
+
+def create_trade_journal(data):
+    """새 거래 기록 생성"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            sql = """
+            INSERT INTO trade_journal 
+            (ticker, buy_date, buy_price, buy_qty, buy_reason, 
+             market_condition, total_assets, prediction_score, score_at_entry, tags, screenshot, status)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'OPEN')
+            """
+            cursor.execute(sql, (
+                data.get('ticker'),
+                data.get('buy_date'),
+                data.get('buy_price'),
+                data.get('buy_qty', 1),
+                data.get('buy_reason'),
+                data.get('market_condition'),
+                data.get('total_assets'),
+                data.get('prediction_score'),
+                data.get('score_at_entry'),
+                data.get('tags'),
+                data.get('screenshot')
+            ))
+        conn.commit()
+        return cursor.lastrowid
+    except Exception as e:
+        print(f"Create Journal Error: {e}")
+        return None
+    finally:
+        conn.close()
+
+def update_trade_journal(journal_id, data):
+    """거래 수정 (청산 정보 추가 포함)"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            # Build dynamic update query
+            fields = []
+            params = []
+            
+            updatable = ['sell_date', 'sell_price', 'sell_qty', 'sell_reason',
+                         'market_condition', 'total_assets', 'prediction_score', 'emotion_after',
+                         'score_at_entry', 'score_at_exit', 'realized_pnl',
+                         'realized_pnl_pct', 'hold_days', 'lesson', 'tags', 'status',
+                         'buy_date', 'buy_price', 'buy_qty', 'buy_reason', 'screenshot']
+            
+            for field in updatable:
+                if field in data and data[field] is not None:
+                    fields.append(f"{field} = %s")
+                    params.append(data[field])
+            
+            if not fields:
+                return False
+            
+            params.append(journal_id)
+            sql = f"UPDATE trade_journal SET {', '.join(fields)} WHERE id = %s"
+            cursor.execute(sql, params)
+        conn.commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        print(f"Update Journal Error: {e}")
+        return False
+    finally:
+        conn.close()
+
+def delete_trade_journal(journal_id):
+    """거래 삭제"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("DELETE FROM trade_journal WHERE id = %s", (journal_id,))
+        conn.commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        print(f"Delete Journal Error: {e}")
+        return False
+    finally:
+        conn.close()
+
+def get_trade_journal_stats():
+    """거래일지 통계 조회"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            stats = {}
+            
+            # 총 거래 수
+            cursor.execute("SELECT COUNT(*) as total FROM trade_journal")
+            stats['total_trades'] = cursor.fetchone()['total']
+            
+            # OPEN / CLOSED 수
+            cursor.execute("SELECT status, COUNT(*) as cnt FROM trade_journal GROUP BY status")
+            for row in cursor.fetchall():
+                stats[f"{row['status'].lower()}_trades"] = row['cnt']
+            
+            # 승률 (CLOSED & profit > 0)
+            cursor.execute("""
+                SELECT 
+                    COUNT(*) as closed_total,
+                    SUM(CASE WHEN realized_pnl > 0 THEN 1 ELSE 0 END) as wins,
+                    SUM(CASE WHEN realized_pnl < 0 THEN 1 ELSE 0 END) as losses,
+                    AVG(realized_pnl_pct) as avg_pnl_pct,
+                    SUM(realized_pnl) as total_pnl
+                FROM trade_journal WHERE status = 'CLOSED'
+            """)
+            closed_stats = cursor.fetchone()
+            stats['closed_total'] = closed_stats['closed_total'] or 0
+            stats['wins'] = closed_stats['wins'] or 0
+            stats['losses'] = closed_stats['losses'] or 0
+            stats['win_rate'] = round((stats['wins'] / stats['closed_total'] * 100), 1) if stats['closed_total'] > 0 else 0
+            stats['avg_pnl_pct'] = round(float(closed_stats['avg_pnl_pct'] or 0), 2)
+            stats['total_pnl'] = round(float(closed_stats['total_pnl'] or 0), 2)
+            
+            # 종목별 통계
+            cursor.execute("""
+                SELECT ticker, COUNT(*) as cnt, 
+                       SUM(CASE WHEN realized_pnl > 0 THEN 1 ELSE 0 END) as wins,
+                       AVG(realized_pnl_pct) as avg_pnl
+                FROM trade_journal WHERE status = 'CLOSED'
+                GROUP BY ticker
+            """)
+            stats['by_ticker'] = cursor.fetchall()
+            
+            return stats
+    except Exception as e:
+        print(f"Get Stats Error: {e}")
+        return {}
+    finally:
+        conn.close()
+
+# ========================================
+# Daily Assets & Strategy Functions Import
+# ========================================
+from db_asset_strategy import (
+    get_daily_assets, upsert_daily_asset, delete_daily_asset, get_asset_summary,
+    get_asset_goals, create_asset_goal, update_asset_goal, delete_asset_goal,
+    get_trading_strategies, get_trading_strategy_by_id, 
+    create_trading_strategy, update_trading_strategy, delete_trading_strategy,
+    get_strategy_performance
+)
+
+

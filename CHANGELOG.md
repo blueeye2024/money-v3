@@ -1,6 +1,62 @@
 # CHANGELOG
 
-## [Ver 3.5.0] - 2026-01-06
+## [Ver 4.3.0] - 2026-01-12
+
+### 수정 (Fixed)
+- **1차 신호(5분봉 골든크로스) 실시간 생성 복구**:
+  - `save_v2_buy_signal` 로직에서 `INSERT` 기능이 누락되어 최초 신호가 생성되지 않던 치명적 오류 수정.
+  - 신규 신호 발생 시 DB 레코드가 없으면 자동으로 생성(`INSERT`)하도록 로직 복원.
+- **백엔드 리팩토링 및 롤백**:
+  - `manage_id` 의존성 완전 제거: 모든 DB 업데이트 및 분석 로직을 `ticker` 기준으로 변경.
+  - `db.py` 및 `analysis.py`의 모든 관련 함수 시그니처 수정.
+
+### 기능 개선 (Feature)
+- **자동/수동 하이브리드 신호 시스템 구현**:
+  - **수동 고정(Manual Override)**: 사용자가 수동으로 켠 신호는 자동 로직과 무관하게 유지(`Locked`).
+  - **자동 토글(Auto Toggle)**: 수동 설정이 없는 경우, 조건 부합 여부에 따라 실시간으로 신호 ON/OFF (Non-Sticky).
+  - **보유 상태 유지**: 실매수(`real_buy_qn > 0`) 상태에서는 진입 조건이 해제되어도 '매도 감시 중'(`final`) 상태 유지.
+
+### DB 변경 (Database)
+- **수동 플래그 컬럼 추가**: `buy_stock`, `sell_stock` 테이블에 `is_manual_buy1~3`, `is_manual_sell1~3` 컬럼 추가 (Default 'N').
+
+## [Ver 3.6.1] - 2026-01-11
+
+### 추가 (Added)
+- **market_indices 단일 소스 시스템**: 모든 가격/등락률 데이터를 `market_indices` 테이블에서만 조회
+- **수동 테스트 패널**: SOXL/SOXS/UPRO 가격을 임의로 변경하여 신호 테스트 가능
+  - Frontend 컴포넌트: `ManualTestPanel` (MarketInsight.jsx)
+  - 노란색 테마 UI, 각 종목별 입력 필드 및 "적용" 버튼
+- **테스트 API 엔드포인트**: `POST /api/test/market-price` 추가
+  - 테스트 가이드에 명시된 엔드포인트 구현
+  - 기존 `/api/market-indices/manual`과 동일 기능, 명확한 테스트 목적
+
+### 수정 (Changed)
+- **DB 구조 개선**: `buy_stock`/`sell_stock` 테이블에서 `current_price` 필드 제거
+  ```sql
+  ALTER TABLE buy_stock DROP COLUMN current_price;
+  ALTER TABLE sell_stock DROP COLUMN current_price;
+  ```
+- **데이터 일관성 확보**: 신호 테이블은 신호 상태만 저장, 가격은 `market_indices`에서 조인 조회
+- **즉시 반영 메커니즘**: 수동 테스트 패널 또는 실시간 API 업데이트 시 10초 이내 UI 반영
+- **API 응답 구조**: `/api/v2/status`가 `market_indices`와 신호 테이블을 조인하여 통합 응답
+
+### 문서화 (Documentation)
+- **MASTER CONTROL TOWER 신호 테스트 가이드** 추가 (`.docs/`)
+  - 테스트 방법 (API, SQL)
+  - 테스트 시나리오 3가지
+  - 트러블슈팅 가이드
+- **MASTER CONTROL TOWER 개발 지침** Ver 3.6.1 업데이트 (`.docs/개발지침/`)
+  - `market_indices` 단일 소스 원칙 명시
+  - Primary Key 원칙 (Ticker 사용, manage_id 금지)
+  - 버전 히스토리 및 아키텍처 다이어그램 추가
+
+### 아키텍처 원칙 (Architecture Principles)
+1. ✅ **가격 데이터 단일 소스**: `market_indices`만 사용
+2. ✅ **신호 상태 분리**: `buy_stock`, `sell_stock`은 신호 상태만 저장
+3. ✅ **Primary Key 원칙**: Ticker를 PK로 사용, 종목당 1개 레코드 (Upsert)
+4. ❌ **manage_id 금지**: 절대 생성/의존 금지
+
+
 
 ### 추가 (Added)
 - **버전 및 빌드 시간 표시**: 웹사이트 하단(Footer)에 현재 버전과 마지막 업데이트 시간(Build Time)을 자동으로 표시.

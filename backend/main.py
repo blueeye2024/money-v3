@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from typing import Optional
 from pydantic import BaseModel
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime
@@ -816,7 +817,7 @@ def me_api(token: str):
 def get_v2_status(ticker: str):
     """Get V2 Signal Status (Buy/Sell) + Market Info"""
     try:
-        from db import get_v2_buy_status, get_v2_sell_status, get_market_indices
+        from db import get_v2_buy_status, get_v2_sell_status, get_market_indices, get_latest_market_indicators
         ticker = ticker.upper()
         
         buy_record = get_v2_buy_status(ticker)
@@ -828,6 +829,9 @@ def get_v2_status(ticker: str):
         
         current_price = float(market_info['current_price']) if market_info else 0.0
         change_pct = float(market_info.get('change_pct', 0.0)) if market_info else 0.0
+
+        # Get latest indicators for metrics display
+        indicators = get_latest_market_indicators(ticker)
         
         # Convert decimals to float for JSON serialization
         def serialize(obj):
@@ -853,7 +857,8 @@ def get_v2_status(ticker: str):
             "market_info": {
                 "current_price": current_price,
                 "change_pct": change_pct
-            }
+            },
+            "metrics": serialize(indicators)  # Add metrics from market_indicators_log
         }
     except Exception as e:
         print(f"V2 Status Error: {e}")
@@ -956,10 +961,40 @@ class ManualPriceUpdate(BaseModel):
     ticker: str
     price: float
     change_pct: float = 0.0
+    indicators: dict = None
 
 @app.post("/api/market-indices/manual")
 def update_manual_market_price(data: ManualPriceUpdate):
-    """수동으로 market_indices 가격 업데이트"""
+    """수동으로 market_indices 가격 및 보조지표 업데이트"""
+    from db import manual_update_market_indices, manual_update_market_indicators
+    try:
+        # 1. Price Update
+        price_success = manual_update_market_indices(
+            data.ticker.upper(), 
+            data.price, 
+            data.change_pct
+        )
+
+        # 2. Indicators Update (if provided)
+        indicator_success = True
+        if data.indicators:
+            indicator_success = manual_update_market_indicators(
+                data.ticker.upper(),
+                data.indicators.get('rsi'),
+                data.indicators.get('vr'),
+                data.indicators.get('atr'),
+                data.indicators.get('pr1')
+            )
+
+        if price_success and indicator_success:
+            return {"status": "success"}
+        return {"status": "error", "message": "Update failed (Check console)"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/api/test/market-price")
+def test_update_market_price(data: ManualPriceUpdate):
+    """테스트용 market_indices 가격 업데이트 (별칭 엔드포인트)"""
     from db import manual_update_market_indices
     try:
         success = manual_update_market_indices(
@@ -968,10 +1003,347 @@ def update_manual_market_price(data: ManualPriceUpdate):
             data.change_pct
         )
         if success:
-            return {"status": "success"}
+            return {"status": "success", "message": f"{data.ticker} 가격이 ${data.price}로 업데이트되었습니다."}
         return {"status": "error", "message": "Update failed"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
+# ========================================
+# Trading Journal (거래일지) API Endpoints
+# ========================================
+
+class TradeJournalCreate(BaseModel):
+    ticker: str
+    buy_date: str
+    buy_price: float
+    buy_qty: int = 1
+    buy_reason: str = None
+    market_condition: str = None
+    prediction_score: str = None
+    total_assets: float = None
+    score_at_entry: int = None
+    tags: str = None
+    screenshot: Optional[str] = None  # Base64 encoded image
+
+class TradeJournalUpdate(BaseModel):
+    sell_date: str = None
+    sell_price: float = None
+    sell_qty: int = None
+    sell_reason: str = None
+    market_condition: str = None
+    prediction_score: str = None
+    total_assets: float = None
+    emotion_after: str = None
+    score_at_entry: int = None
+    score_at_exit: int = None
+    realized_pnl: float = None
+    realized_pnl_pct: float = None
+    hold_days: int = None
+    lesson: str = None
+    tags: str = None
+    status: str = None
+    buy_date: str = None
+    buy_price: float = None
+    buy_qty: int = None
+    buy_reason: str = None
+    screenshot: str = None
+
+@app.get("/api/journal")
+def get_journals(status: str = None, ticker: str = None, limit: int = 100):
+    """거래일지 목록 조회"""
+    from db import get_trade_journals
+    journals = get_trade_journals(status=status, ticker=ticker, limit=limit)
+    # Convert datetime objects to ISO strings for JSON
+    for j in journals:
+        for key in ['buy_date', 'sell_date', 'created_at', 'updated_at']:
+            if j.get(key) and hasattr(j[key], 'isoformat'):
+                j[key] = j[key].isoformat()
+    return journals
+
+@app.get("/api/journal/stats")
+def get_journal_stats():
+    """거래일지 통계 조회"""
+    from db import get_trade_journal_stats
+    return get_trade_journal_stats()
+
+@app.get("/api/journal/{journal_id}")
+def get_journal(journal_id: int):
+    """단일 거래 조회"""
+    from db import get_trade_journal_by_id
+    journal = get_trade_journal_by_id(journal_id)
+    if not journal:
+        return {"error": "Not found"}
+    # Convert datetime
+    for key in ['buy_date', 'sell_date', 'created_at', 'updated_at']:
+        if journal.get(key) and hasattr(journal[key], 'isoformat'):
+            journal[key] = journal[key].isoformat()
+    return journal
+
+@app.post("/api/journal")
+def create_journal(data: TradeJournalCreate):
+    """새 거래 기록 생성"""
+    from db import create_trade_journal
+    journal_id = create_trade_journal(data.model_dump())
+    if journal_id:
+        return {"status": "success", "id": journal_id}
+    return {"status": "error", "message": "Failed to create journal"}
+
+@app.put("/api/journal/{journal_id}")
+def update_journal(journal_id: int, data: TradeJournalUpdate):
+    """거래 수정 (청산 정보 추가 포함)"""
+    from db import update_trade_journal, get_trade_journal_by_id
+    
+    update_data = {k: v for k, v in data.model_dump().items() if v is not None}
+    
+    # Auto-calculate realized PnL if closing trade
+    if update_data.get('sell_price') and update_data.get('status') == 'CLOSED':
+        journal = get_trade_journal_by_id(journal_id)
+        if journal:
+            buy_price = float(journal['buy_price'])
+            buy_qty = int(journal['buy_qty'])
+            sell_price = float(update_data['sell_price'])
+            sell_qty = int(update_data.get('sell_qty', buy_qty))
+            
+            # Calculate P&L
+            cost = buy_price * buy_qty
+            revenue = sell_price * sell_qty
+            pnl = revenue - cost
+            pnl_pct = (pnl / cost) * 100 if cost > 0 else 0
+            
+            update_data['realized_pnl'] = round(pnl, 2)
+            update_data['realized_pnl_pct'] = round(pnl_pct, 2)
+            
+            # Calculate hold days
+            if journal.get('buy_date') and update_data.get('sell_date'):
+                from datetime import datetime
+                buy_dt = journal['buy_date'] if isinstance(journal['buy_date'], datetime) else datetime.fromisoformat(str(journal['buy_date']))
+                sell_dt = datetime.fromisoformat(update_data['sell_date'])
+                update_data['hold_days'] = (sell_dt - buy_dt).days
+    
+    success = update_trade_journal(journal_id, update_data)
+    if success:
+        return {"status": "success"}
+    return {"status": "error", "message": "Failed to update journal"}
+
+@app.delete("/api/journal/{journal_id}")
+def delete_journal(journal_id: int):
+    """거래 삭제"""
+    from db import delete_trade_journal
+    success = delete_trade_journal(journal_id)
+    if success:
+        return {"status": "success"}
+    return {"status": "error", "message": "Failed to delete journal"}
+
+# ========================================
+# Daily Assets (일별 자산) API Endpoints
+# ========================================
+
+class DailyAssetCreate(BaseModel):
+    record_date: str
+    total_assets: float
+    daily_return_pct: Optional[float] = None  # 수익률 (%)
+    daily_pnl: Optional[float] = None  # 손익 (원)
+    note: Optional[str] = None
+
+@app.get("/api/assets")
+def get_assets(start_date: str = None, end_date: str = None, limit: int = 365):
+    """일별 자산 목록 조회"""
+    from db import get_daily_assets
+    assets = get_daily_assets(start_date=start_date, end_date=end_date, limit=limit)
+    # Convert date objects
+    for a in assets:
+        if a.get('record_date'):
+            a['record_date'] = str(a['record_date'])
+    return assets
+
+@app.post("/api/assets")
+def create_asset(data: DailyAssetCreate):
+    """일별 자산 등록/수정"""
+    from db import upsert_daily_asset
+    success = upsert_daily_asset(
+        record_date=data.record_date,
+        total_assets=data.total_assets,
+        daily_return_pct=data.daily_return_pct,
+        daily_pnl=data.daily_pnl,
+        note=data.note
+    )
+    if success:
+        return {"status": "success"}
+    return {"status": "error", "message": "Failed to save asset"}
+
+@app.get("/api/assets/summary")
+def get_assets_summary():
+    """자산 요약 통계"""
+    from db import get_asset_summary
+    summary = get_asset_summary()
+    # Convert dates
+    if summary.get('latest') and summary['latest'].get('record_date'):
+        summary['latest']['record_date'] = str(summary['latest']['record_date'])
+    if summary.get('active_goal') and summary['active_goal'].get('target_date'):
+        summary['active_goal']['target_date'] = str(summary['active_goal']['target_date'])
+    return summary
+
+@app.delete("/api/assets/{record_date}")
+def delete_asset(record_date: str):
+    """일별 자산 삭제"""
+    from db import delete_daily_asset
+    success = delete_daily_asset(record_date)
+    if success:
+        return {"status": "success"}
+    return {"status": "error", "message": "Failed to delete asset"}
+
+# ========================================
+# Asset Goals (목표 금액) API Endpoints
+# ========================================
+
+
+class AssetGoalCreate(BaseModel):
+    goal_name: str
+    target_amount: float
+    target_date: Optional[str] = None
+
+class AssetGoalUpdate(BaseModel):
+    goal_name: Optional[str] = None
+    target_amount: Optional[float] = None
+    target_date: Optional[str] = None
+    is_active: Optional[bool] = None
+
+@app.get("/api/goals")
+def get_goals():
+    """목표 금액 목록 조회"""
+    from db import get_asset_goals
+    goals = get_asset_goals()
+    for g in goals:
+        if g.get('target_date'):
+            g['target_date'] = str(g['target_date'])
+    return goals
+
+@app.post("/api/goals")
+def create_goal(data: AssetGoalCreate):
+    """목표 금액 등록"""
+    from db import create_asset_goal
+    goal_id = create_asset_goal(
+        goal_name=data.goal_name,
+        target_amount=data.target_amount,
+        target_date=data.target_date
+    )
+    if goal_id:
+        return {"status": "success", "id": goal_id}
+    return {"status": "error", "message": "Failed to create goal"}
+
+@app.put("/api/goals/{goal_id}")
+def update_goal(goal_id: int, data: AssetGoalUpdate):
+    """목표 금액 수정"""
+    from db import update_asset_goal
+    update_data = {k: v for k, v in data.dict().items() if v is not None}
+    success = update_asset_goal(goal_id, update_data)
+    if success:
+        return {"status": "success"}
+    return {"status": "error", "message": "Failed to update goal"}
+
+@app.delete("/api/goals/{goal_id}")
+def delete_goal(goal_id: int):
+    """목표 금액 삭제"""
+    from db import delete_asset_goal
+    success = delete_asset_goal(goal_id)
+    if success:
+        return {"status": "success"}
+    return {"status": "error", "message": "Failed to delete goal"}
+
+# ========================================
+# Trading Strategies (전략) API Endpoints
+# ========================================
+
+
+class StrategyCreate(BaseModel):
+    strategy_name: str
+    description: Optional[str] = None
+    start_date: str
+    end_date: Optional[str] = None
+    initial_assets: Optional[float] = None
+    target_assets: Optional[float] = None
+    target_return_pct: Optional[float] = None
+    status: str = "ACTIVE"
+
+class StrategyUpdate(BaseModel):
+    strategy_name: Optional[str] = None
+    description: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    initial_assets: Optional[float] = None
+    target_assets: Optional[float] = None
+    target_return_pct: Optional[float] = None
+    status: Optional[str] = None
+
+@app.get("/api/strategies")
+def get_strategies(status: str = None):
+    """전략 목록 조회"""
+    from db import get_trading_strategies
+    strategies = get_trading_strategies(status=status)
+    for s in strategies:
+        for key in ['start_date', 'end_date', 'created_at', 'updated_at']:
+            if s.get(key) and hasattr(s[key], 'isoformat'):
+                s[key] = s[key].isoformat()
+            elif s.get(key):
+                s[key] = str(s[key])
+    return strategies
+
+@app.get("/api/strategies/{strategy_id}")
+def get_strategy(strategy_id: int):
+    """전략 상세 조회"""
+    from db import get_trading_strategy_by_id
+    strategy = get_trading_strategy_by_id(strategy_id)
+    if not strategy:
+        return {"error": "Not found"}
+    for key in ['start_date', 'end_date', 'created_at', 'updated_at']:
+        if strategy.get(key) and hasattr(strategy[key], 'isoformat'):
+            strategy[key] = strategy[key].isoformat()
+    return strategy
+
+@app.post("/api/strategies")
+def create_strategy(data: StrategyCreate):
+    """전략 등록"""
+    from db import create_trading_strategy
+    strategy_id = create_trading_strategy(data.dict())
+    if strategy_id:
+        return {"status": "success", "id": strategy_id}
+    return {"status": "error", "message": "Failed to create strategy"}
+
+@app.put("/api/strategies/{strategy_id}")
+def update_strategy(strategy_id: int, data: StrategyUpdate):
+    """전략 수정"""
+    from db import update_trading_strategy
+    update_data = {k: v for k, v in data.dict().items() if v is not None}
+    success = update_trading_strategy(strategy_id, update_data)
+    if success:
+        return {"status": "success"}
+    return {"status": "error", "message": "Failed to update strategy"}
+
+@app.delete("/api/strategies/{strategy_id}")
+def delete_strategy(strategy_id: int):
+    """전략 삭제"""
+    from db import delete_trading_strategy
+    success = delete_trading_strategy(strategy_id)
+    if success:
+        return {"status": "success"}
+    return {"status": "error", "message": "Failed to delete strategy"}
+
+@app.get("/api/strategies/{strategy_id}/performance")
+def get_strategy_perf(strategy_id: int):
+    """전략 성과 분석"""
+    from db import get_strategy_performance
+    perf = get_strategy_performance(strategy_id)
+    if not perf:
+        return {"error": "Not found or no data"}
+    # Convert dates in strategy
+    if perf.get('strategy'):
+        for key in ['start_date', 'end_date', 'created_at', 'updated_at']:
+            if perf['strategy'].get(key) and hasattr(perf['strategy'][key], 'isoformat'):
+                perf['strategy'][key] = perf['strategy'][key].isoformat()
+            elif perf['strategy'].get(key):
+                perf['strategy'][key] = str(perf['strategy'][key])
+    return perf
+
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8080, reload=True)
+

@@ -101,81 +101,104 @@ const SystemPerformanceReport = ({ trades = [] }) => {
 };
 
 
-const ManualTestPanel = ({ onRefresh }) => {
-    const [prices, setPrices] = React.useState({ SOXL: '', SOXS: '', UPRO: '' });
+const ManualTestPanel = ({ onRefresh, marketData, v2Status }) => {
+    const [inputs, setInputs] = React.useState({
+        SOXL: { price: '', change: '', rsi: '', vr: '', atr: '', pr1: '' },
+        SOXS: { price: '', change: '', rsi: '', vr: '', atr: '', pr1: '' }
+    });
 
-    const handlePriceSubmit = async (ticker) => {
-        const price = prices[ticker];
+    // 현재 값 가져오기 Helper
+    const getCurrent = (ticker, type) => {
+        if (type === 'price' || type === 'change') {
+            if (!marketData) return '';
+            const item = marketData.find(m => m.ticker === ticker);
+            if (!item) return '';
+            return type === 'price' ? item.current_price : item.change_pct;
+        } else {
+            // Indicators
+            const metrics = v2Status?.[ticker]?.metrics;
+            if (!metrics) return '';
+            const map = { rsi: 'rsi_14', vr: 'vol_ratio', atr: 'atr', pr1: 'pivot_r1' };
+            return metrics[map[type]] || '';
+        }
+    };
+
+    const handleChange = (ticker, field, value) => {
+        setInputs({
+            ...inputs,
+            [ticker]: { ...inputs[ticker], [field]: value }
+        });
+    };
+
+    const handleSubmit = async (ticker) => {
+        const inp = inputs[ticker];
+        const price = inp.price || getCurrent(ticker, 'price');
+        const change = inp.change || getCurrent(ticker, 'change');
+
         if (!price || parseFloat(price) <= 0) return;
 
         try {
+            const payload = {
+                ticker,
+                price: parseFloat(price),
+                change_pct: parseFloat(change) || 0,
+                indicators: {
+                    rsi: inp.rsi ? parseFloat(inp.rsi) : null,
+                    vr: inp.vr ? parseFloat(inp.vr) : null,
+                    atr: inp.atr ? parseFloat(inp.atr) : null,
+                    pr1: inp.pr1 ? parseFloat(inp.pr1) : null
+                }
+            };
+
             const res = await fetch('/api/market-indices/manual', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ticker, price: parseFloat(price) })
+                body: JSON.stringify(payload)
             });
             const data = await res.json();
             if (data.status === 'success') {
-                setPrices({ ...prices, [ticker]: '' });
+                // Clear inputs
+                setInputs({ ...inputs, [ticker]: { price: '', change: '', rsi: '', vr: '', atr: '', pr1: '' } });
                 if (onRefresh) onRefresh();
             }
         } catch (e) {
-            console.error('Manual price update error:', e);
+            console.error('Manual update error:', e);
         }
+    };
+
+    const inputStyle = {
+        background: '#0f172a', border: '1px solid #334155', color: '#fff',
+        borderRadius: '6px', fontSize: '0.8rem', padding: '0.4rem', flex: 1, minWidth: '60px'
     };
 
     return (
         <div style={{
-            background: 'rgba(255, 193, 7, 0.1)',
-            padding: '1.5rem',
-            borderRadius: '12px',
-            border: '1px solid rgba(255, 193, 7, 0.3)',
-            marginBottom: '2rem'
+            background: 'rgba(56, 189, 248, 0.05)', padding: '1.2rem',
+            borderRadius: '12px', border: '1px solid rgba(56, 189, 248, 0.2)', marginBottom: '1rem'
         }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
-                <div style={{ fontSize: '1.8rem' }}>🔧</div>
-                <h3 style={{ margin: 0, color: '#ffc107', fontSize: '1.2rem', fontWeight: '700' }}>수동 테스트 패널</h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', marginBottom: '1rem' }}>
+                <div style={{ fontSize: '1.2rem' }}>🧪</div>
+                <h3 style={{ margin: 0, color: '#38bdf8', fontSize: '1rem', fontWeight: '700' }}>수동 테스트 (가격 & 보조지표)</h3>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                {['SOXL', 'SOXS', 'UPRO'].map(ticker => (
-                    <div key={ticker} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                        <label style={{ fontSize: '0.85rem', color: '#cbd5e1', fontWeight: '600' }}>
-                            {ticker} 현재가
-                        </label>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                            <input
-                                type="number"
-                                step="0.01"
-                                value={prices[ticker]}
-                                onChange={(e) => setPrices({ ...prices, [ticker]: e.target.value })}
-                                onKeyPress={(e) => e.key === 'Enter' && handlePriceSubmit(ticker)}
-                                placeholder="가격 입력"
-                                style={{
-                                    flex: 1,
-                                    padding: '0.6rem',
-                                    background: '#1e293b',
-                                    border: '1px solid #334155',
-                                    color: '#fff',
-                                    borderRadius: '6px',
-                                    fontSize: '0.9rem'
-                                }}
-                            />
-                            <button
-                                onClick={() => handlePriceSubmit(ticker)}
-                                style={{
-                                    padding: '0.6rem 1rem',
-                                    background: '#ffc107',
-                                    color: '#000',
-                                    border: 'none',
-                                    borderRadius: '6px',
-                                    fontWeight: 'bold',
-                                    cursor: 'pointer',
-                                    fontSize: '0.85rem'
-                                }}
-                            >
-                                적용
-                            </button>
-                        </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {['SOXL', 'SOXS'].map(ticker => (
+                    <div key={ticker} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px', background: 'rgba(0,0,0,0.2)', padding: '8px', borderRadius: '8px' }}>
+                        <label style={{ width: '40px', fontSize: '0.9rem', color: '#38bdf8', fontWeight: '700' }}>{ticker}</label>
+
+                        <input type="number" step="0.01" placeholder={`$${getCurrent(ticker, 'price')}`} value={inputs[ticker].price} onChange={e => handleChange(ticker, 'price', e.target.value)} style={{ ...inputStyle, minWidth: '70px' }} title="Current Price" />
+                        <input type="number" step="0.1" placeholder={`${getCurrent(ticker, 'change')}%`} value={inputs[ticker].change} onChange={e => handleChange(ticker, 'change', e.target.value)} style={{ ...inputStyle, width: '60px' }} title="Change %" />
+
+                        <div style={{ width: '1px', height: '20px', background: '#334155', margin: '0 4px' }}></div>
+
+                        <input type="number" placeholder={`RSI ${getCurrent(ticker, 'rsi')}`} value={inputs[ticker].rsi} onChange={e => handleChange(ticker, 'rsi', e.target.value)} style={inputStyle} title="RSI" />
+                        <input type="number" placeholder={`VR ${getCurrent(ticker, 'vr')}`} value={inputs[ticker].vr} onChange={e => handleChange(ticker, 'vr', e.target.value)} style={inputStyle} title="Volume Ratio" />
+                        <input type="number" placeholder={`ATR ${getCurrent(ticker, 'atr')}`} value={inputs[ticker].atr} onChange={e => handleChange(ticker, 'atr', e.target.value)} style={inputStyle} title="ATR" />
+                        <input type="number" placeholder={`PR1 ${getCurrent(ticker, 'pr1')}`} value={inputs[ticker].pr1} onChange={e => handleChange(ticker, 'pr1', e.target.value)} style={inputStyle} title="Pivot R1" />
+
+                        <button onClick={() => handleSubmit(ticker)} style={{
+                            padding: '0.4rem 0.8rem', background: '#38bdf8', color: '#0f172a',
+                            border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.8rem', marginLeft: 'auto'
+                        }}>적용</button>
                     </div>
                 ))}
             </div>
@@ -183,11 +206,40 @@ const ManualTestPanel = ({ onRefresh }) => {
     );
 };
 
-const MarketInsight = ({ market, stocks, signalHistory, onRefresh }) => {
+const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, setPollingMode, marketStatus, lastUpdateTime }) => {
     if (!market) return <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>데이터 로딩 중...</div>;
 
     const { market_regime } = market;
     const regimeDetails = market_regime?.details;
+
+    // V2 Status 실시간 폴링 (market_indices 최신 가격)
+    const [v2Status, setV2Status] = React.useState({ SOXL: null, SOXS: null });
+
+    React.useEffect(() => {
+        const fetchV2Status = async () => {
+            try {
+                const [soxlRes, soxsRes] = await Promise.all([
+                    fetch('/api/v2/status/SOXL'),
+                    fetch('/api/v2/status/SOXS')
+                ]);
+                const soxlData = await soxlRes.json();
+                const soxsData = await soxsRes.json();
+
+                if (soxlData.status === 'success' && soxsData.status === 'success') {
+                    setV2Status({
+                        SOXL: soxlData,
+                        SOXS: soxsData
+                    });
+                }
+            } catch (e) {
+                console.error('V2 Status fetch error:', e);
+            }
+        };
+
+        fetchV2Status();
+        const interval = setInterval(fetchV2Status, 5000); // 5초마다 (DB에서 가져오므로 부하 최소)
+        return () => clearInterval(interval);
+    }, []);
 
     const activeStocks = stocks && Array.isArray(stocks)
         ? [...stocks].sort((a, b) => (b.current_ratio || 0) - (a.current_ratio || 0))
@@ -240,9 +292,6 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh }) => {
     return (
         <div className="glass-panel" style={{ padding: '2rem', marginBottom: '3rem', display: 'flex', flexDirection: 'column', gap: '2.5rem' }}>
 
-            {/* 0. 수동 테스트 패널 */}
-            <ManualTestPanel onRefresh={onRefresh} />
-
             {/* 1. MASTER CONTROL TOWER (V2.3) */}
             <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
@@ -250,43 +299,163 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh }) => {
                         <div style={{ width: '48px', height: '48px', background: 'rgba(212, 175, 55, 0.1)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.8rem' }}>🛰️</div>
                         <h3 style={{ margin: 0, fontSize: '1.4rem', color: 'var(--accent-gold)', letterSpacing: '1px', fontWeight: '900' }}>MASTER CONTROL TOWER</h3>
                     </div>
-                    <div style={{ textAlign: 'right' }}>
-                        <div style={{
-                            background: market_regime?.regime?.includes('Bull') ? 'rgba(74, 222, 128, 0.1)' : market_regime?.regime?.includes('Bear') ? 'rgba(248, 113, 113, 0.1)' : 'rgba(255,255,255,0.05)',
-                            padding: '0.5rem 1rem', borderRadius: '10px', border: `1px solid ${market_regime?.regime?.includes('Bull') ? '#4ade8055' : market_regime?.regime?.includes('Bear') ? '#f8717155' : '#ffffff22'}`,
+                    <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        {/* 1. Regime (상승장/하락장/보합장) - 맨 앞, Darker Colors */}
+                        <span style={{
+                            color: market_regime?.regime?.includes('Bull') ? '#16a34a' : market_regime?.regime?.includes('Bear') ? '#dc2626' : '#9ca3af',
+                            fontWeight: 'bold', fontSize: '0.9rem'
                         }}>
-                            <span style={{ color: market_regime?.regime?.includes('Bull') ? '#4ade80' : market_regime?.regime?.includes('Bear') ? '#f87171' : '#ccc', fontWeight: '900', fontSize: '1.1rem' }}>
-                                {regimeDetails?.reason || market_regime?.regime}
-                            </span>
-                        </div>
+                            {market_regime?.regime?.includes('Bull') ? '상승장' : market_regime?.regime?.includes('Bear') ? '하락장' : '보합장'}
+                        </span>
+
+                        {/* 2. 시장 상태 (장중/휴장) */}
+                        <span style={{
+                            color: marketStatus === 'open' ? '#4ade80' : marketStatus === 'pre-after' ? '#facc15' : '#f87171',
+                            fontWeight: 'bold', fontSize: '0.9rem'
+                        }}>
+                            {marketStatus === 'open' ? '장중' : marketStatus === 'pre-after' ? '장외' : '휴장'}
+                        </span>
+
+                        {/* 3. 폴링 모드 (자동/수동ON/수동OFF) - Orange/Blue Colors */}
+                        <span
+                            onClick={() => {
+                                const modes = ['auto', 'on', 'off'];
+                                const nextIndex = (modes.indexOf(pollingMode) + 1) % modes.length;
+                                setPollingMode(modes[nextIndex]);
+                            }}
+                            style={{
+                                color: pollingMode === 'on' ? '#f97316' : pollingMode === 'off' ? '#3b82f6' : '#4ade80',
+                                cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9rem'
+                            }}
+                            title="클릭하여 폴링 모드 변경"
+                        >
+                            {pollingMode === 'auto' ? '자동' : pollingMode === 'on' ? '수동ON' : '수동OFF'}
+                        </span>
+
+                        {/* 4. 시간 */}
+                        <span style={{ color: '#888', fontSize: '0.9rem', fontWeight: '500' }}>
+                            {lastUpdateTime}
+                        </span>
                     </div>
                 </div>
 
-                {/* Insight Comment Box */}
-                <div style={{ background: 'rgba(255,255,255,0.03)', padding: '1.2rem', borderRadius: '16px', marginBottom: '2rem', borderLeft: '5px solid var(--accent-gold)' }}>
-                    <p style={{ margin: 0, color: '#bbb', fontSize: '0.95rem', lineHeight: '1.6', fontWeight: '500' }}>
-                        {regimeDetails?.comment || "시장 상황을 실시간 분석 중입니다."}
-                    </p>
-                </div>
+                {/* Insight Comment Box with VIX Alert */}
+                {(() => {
+                    // Get VIX from market indices
+                    const vixData = market?.indices?.find(m => m.ticker === 'VIX');
+                    const vixValue = vixData ? Number(vixData.current_price || vixData.price) : null;
+
+                    // VIX Level Classification
+                    let vixAlert = null;
+                    let alertStyle = {};
+
+                    if (vixValue !== null) {
+                        if (vixValue >= 30) {
+                            vixAlert = { level: 'EXTREME', icon: '🚨', text: `VIX ${vixValue.toFixed(1)} - 극도의 공포 구간! 시장 급변동 주의`, color: '#ef4444', bg: 'rgba(239, 68, 68, 0.1)' };
+                        } else if (vixValue >= 25) {
+                            vixAlert = { level: 'HIGH', icon: '⚠️', text: `VIX ${vixValue.toFixed(1)} - 높은 변동성! 신규 진입 자제 권고`, color: '#f97316', bg: 'rgba(249, 115, 22, 0.1)' };
+                        } else if (vixValue >= 20) {
+                            vixAlert = { level: 'ELEVATED', icon: '📊', text: `VIX ${vixValue.toFixed(1)} - 변동성 상승 구간`, color: '#eab308', bg: 'rgba(234, 179, 8, 0.1)' };
+                        } else if (vixValue >= 15) {
+                            vixAlert = { level: 'NORMAL', icon: '✅', text: `VIX ${vixValue.toFixed(1)} - 정상 시장 상태`, color: '#22c55e', bg: 'rgba(34, 197, 94, 0.05)' };
+                        } else {
+                            vixAlert = { level: 'LOW', icon: '😌', text: `VIX ${vixValue.toFixed(1)} - 매우 낮은 변동성 (과열 가능성)`, color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.05)' };
+                        }
+                    }
+
+                    return (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', marginBottom: '2rem' }}>
+                            {/* VIX Alert Banner (if warning level) */}
+                            {vixAlert && vixAlert.level !== 'NORMAL' && vixAlert.level !== 'LOW' && (
+                                <div style={{
+                                    background: vixAlert.bg,
+                                    padding: '1rem 1.2rem',
+                                    borderRadius: '12px',
+                                    border: `1px solid ${vixAlert.color}33`,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '12px',
+                                    animation: vixAlert.level === 'EXTREME' ? 'pulse 1.5s infinite' : 'none'
+                                }}>
+                                    <span style={{ fontSize: '1.5rem' }}>{vixAlert.icon}</span>
+                                    <div style={{ flex: 1 }}>
+                                        <div style={{ color: vixAlert.color, fontWeight: '700', fontSize: '0.95rem' }}>
+                                            공포 지수 {vixAlert.level === 'EXTREME' ? '경보' : '주의'}
+                                        </div>
+                                        <div style={{ color: vixAlert.color, fontSize: '0.85rem', opacity: 0.9, marginTop: '2px' }}>
+                                            {vixAlert.text}
+                                        </div>
+                                    </div>
+                                    <div style={{
+                                        background: vixAlert.color,
+                                        color: '#fff',
+                                        padding: '4px 10px',
+                                        borderRadius: '20px',
+                                        fontSize: '0.8rem',
+                                        fontWeight: 'bold'
+                                    }}>
+                                        VIX {vixValue.toFixed(1)}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Main Comment Box */}
+                            <div style={{
+                                background: 'rgba(255,255,255,0.03)',
+                                padding: '1.2rem',
+                                borderRadius: '16px',
+                                borderLeft: `5px solid ${vixAlert?.color || 'var(--accent-gold)'}`,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '12px'
+                            }}>
+                                {vixAlert && (
+                                    <div style={{
+                                        background: vixAlert.bg,
+                                        padding: '8px 12px',
+                                        borderRadius: '8px',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        alignItems: 'center',
+                                        minWidth: '70px'
+                                    }}>
+                                        <span style={{ fontSize: '0.7rem', color: '#888' }}>VIX</span>
+                                        <span style={{ fontSize: '1.2rem', fontWeight: '800', color: vixAlert.color }}>
+                                            {vixValue?.toFixed(1) || '-'}
+                                        </span>
+                                    </div>
+                                )}
+                                <p style={{ margin: 0, color: '#bbb', fontSize: '0.95rem', lineHeight: '1.6', fontWeight: '500', flex: 1 }}>
+                                    {regimeDetails?.comment || "시장 상황을 실시간 분석 중입니다."}
+                                </p>
+                            </div>
+                        </div>
+                    );
+                })()}
 
                 <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', marginBottom: '2.5rem' }}>
                     <V2SignalStatus
                         title="SOXL (BULL TOWER)"
-                        buyStatus={regimeDetails?.soxl?.v2_buy}
-                        sellStatus={regimeDetails?.soxl?.v2_sell}
-                        renderInfo={regimeDetails?.soxl}
+                        buyStatus={v2Status.SOXL?.buy || regimeDetails?.soxl?.v2_buy}
+                        sellStatus={v2Status.SOXL?.sell || regimeDetails?.soxl?.v2_sell}
+                        renderInfo={v2Status.SOXL?.market_info || regimeDetails?.soxl}
+                        metrics={v2Status.SOXL?.metrics}
                         isBear={false}
                         onRefresh={onRefresh}
                     />
                     <V2SignalStatus
                         title="SOXS (BEAR TOWER)"
-                        buyStatus={regimeDetails?.soxs?.v2_buy}
-                        sellStatus={regimeDetails?.soxs?.v2_sell}
-                        renderInfo={regimeDetails?.soxs}
+                        buyStatus={v2Status.SOXS?.buy || regimeDetails?.soxs?.v2_buy}
+                        sellStatus={v2Status.SOXS?.sell || regimeDetails?.soxs?.v2_sell}
+                        renderInfo={v2Status.SOXS?.market_info || regimeDetails?.soxs}
+                        metrics={v2Status.SOXS?.metrics}
                         isBear={true}
                         onRefresh={onRefresh}
                     />
                 </div>
+
+                {/* 수동 테스트 패널 (Params 전달) */}
+                <ManualTestPanel onRefresh={onRefresh} marketData={market?.indices} v2Status={v2Status} />
 
                 {/* 2. Prime Guide : Action Plan (V3.5 Comprehensive Score) */}
                 <div style={{ background: 'rgba(15, 23, 42, 0.9)', padding: '1.5rem', borderRadius: '20px', border: '1px solid rgba(56, 189, 248, 0.5)', boxShadow: '0 0 30px rgba(56, 189, 248, 0.1)', marginBottom: '24px' }}>
@@ -295,7 +464,7 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh }) => {
                             <div style={{ width: '12px', height: '12px', background: '#38bdf8', borderRadius: '50%', boxShadow: '0 0 15px #38bdf8', flexShrink: 0 }} />
                             <h3 style={{ margin: 0, fontSize: '1.4rem', color: '#38bdf8', fontWeight: '900', letterSpacing: '-0.5px', whiteSpace: 'nowrap' }}>청안 Prime Guide : Action Plan</h3>
                         </div>
-                        <div style={{ fontSize: '0.8rem', color: '#64748b', background: '#0f172a', padding: '4px 10px', borderRadius: '20px' }}>Ver 3.9 Market Intelligence</div>
+                        <div style={{ fontSize: '0.8rem', color: '#64748b', background: '#0f172a', padding: '4px 10px', borderRadius: '20px' }}>Ver 3.6.1 Market Intelligence</div>
                     </div>
 
                     {/* Dual Guide Layout */}
@@ -354,57 +523,102 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh }) => {
                             🌐 Market Intelligence Center (심층 분석)
                         </h4>
 
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '20px' }}>
-                            {['UPRO', 'SOXL', 'SOXS'].map(ticker => {
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '15px', marginBottom: '20px' }}>
+                            {['SOXL', 'SOXS'].map(ticker => {
+                                // Use v2Status metrics from DB (market_indicators_snapshot)
+                                const dbMetrics = v2Status?.[ticker]?.metrics || {};
                                 const guideData = regimeDetails?.prime_guide || {};
-                                const scoreObj = guideData.scores?.[ticker] || { score: 0, breakdown: {}, new_metrics: {} };
-                                const tech = guideData.tech_summary?.[ticker] || {};
+                                const scoreObj = guideData.scores?.[ticker] || { score: 0, breakdown: {} };
+                                const breakdown = scoreObj.breakdown || {};
                                 const comment = guideData.tech_comments?.[ticker] || "-";
-                                const metrics = scoreObj.new_metrics || {};
 
-                                const color = ticker === 'SOXL' ? '#06b6d4' : ticker === 'SOXS' ? '#a855f7' : '#f59e0b';
+                                const color = ticker === 'SOXL' ? '#06b6d4' : '#a855f7';
+
+                                // Helper for score color
+                                const getScoreColor = (score) => score > 0 ? '#4ade80' : score < 0 ? '#f87171' : '#888';
+                                const formatScore = (score) => score > 0 ? `+${score}` : score;
 
                                 return (
                                     <div key={ticker} style={{ background: 'rgba(255,255,255,0.03)', padding: '15px', borderRadius: '12px', border: `1px solid ${color}22` }}>
                                         {/* Header */}
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                                            <span style={{ fontWeight: 'bold', color: color, fontSize: '1rem' }}>{ticker}</span>
-                                            <span style={{ fontWeight: 'bold', color: 'white', fontSize: '1.1rem' }}>{scoreObj.score} <span style={{ fontSize: '0.7rem', color: '#888' }}>pt</span></span>
+                                        <div style={{ fontWeight: 'bold', color: color, marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <span style={{ fontSize: '1rem' }}>{ticker} 안티그래비티 스코어</span>
+                                            <span style={{
+                                                fontSize: '1.3rem', fontWeight: '900',
+                                                color: scoreObj.score >= 90 ? '#22c55e' : scoreObj.score >= 70 ? '#4ade80' : scoreObj.score >= 60 ? '#fbbf24' : '#94a3b8'
+                                            }}>
+                                                {scoreObj.score}점
+                                            </span>
                                         </div>
 
-                                        {/* AI Tags */}
-                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '10px' }}>
-                                            {(metrics.ai_tags || []).length > 0 ? (
-                                                metrics.ai_tags.map((tag, i) => (
-                                                    <span key={i} style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: `${tag.color}22`, color: tag.color, border: `1px solid ${tag.color}44` }}>
-                                                        {tag.text}
+                                        {/* 청안 지수 */}
+                                        <div style={{ background: 'rgba(255,255,255,0.05)', padding: '8px', borderRadius: '6px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between' }}>
+                                            <span style={{ color: '#e2e8f0', fontSize: '0.85rem' }}>📊 청안 지수 (V2 신호)</span>
+                                            <span style={{ color: breakdown.cheongan >= 60 ? '#4ade80' : breakdown.cheongan >= 30 ? '#fbbf24' : '#94a3b8', fontWeight: 'bold' }}>
+                                                {breakdown.cheongan || 0}점
+                                            </span>
+                                        </div>
+
+                                        {/* 보조지표 그리드 */}
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.8rem' }}>
+                                            {/* RSI */}
+                                            <div style={{ background: 'rgba(255,255,255,0.05)', padding: '8px', borderRadius: '4px' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                    <span style={{ color: '#94a3b8', fontSize: '0.7rem' }}>RSI (14)</span>
+                                                    <span style={{ color: getScoreColor(breakdown.rsi), fontWeight: 'bold', fontSize: '0.75rem' }}>
+                                                        {formatScore(breakdown.rsi || 0)}
                                                     </span>
-                                                ))
-                                            ) : (
-                                                <span style={{ fontSize: '0.65rem', color: '#666' }}>No Tags</span>
-                                            )}
-                                        </div>
-
-                                        {/* Quantitative Metrics Grid */}
-                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.75rem', marginBottom: '10px', background: 'rgba(0,0,0,0.2)', padding: '8px', borderRadius: '8px' }}>
-                                            <div style={{ color: '#aaa' }}>RSI(14)</div>
-                                            <div style={{ textAlign: 'right', color: (tech.rsi > 70 || tech.rsi < 30) ? '#facc15' : 'white' }}>{Number(tech.rsi || 0).toFixed(1)}</div>
-
-                                            <div style={{ color: '#aaa' }}>Vol Ratio</div>
-                                            <div style={{ textAlign: 'right', color: metrics.vol_ratio > 1.5 ? '#facc15' : 'white' }}>
-                                                {metrics.vol_ratio ? `${metrics.vol_ratio}x` : '-'}
+                                                </div>
+                                                <div style={{ color: '#e2e8f0', fontWeight: 'bold', marginTop: '2px' }}>
+                                                    {dbMetrics.rsi_14 ? Number(dbMetrics.rsi_14).toFixed(1) : '-'}
+                                                </div>
                                             </div>
-
-                                            <div style={{ color: '#aaa' }}>ATR (Vol)</div>
-                                            <div style={{ textAlign: 'right', color: '#fff' }}>{metrics.atr || '-'}</div>
-
-                                            <div style={{ color: '#aaa' }}>Pivot R1</div>
-                                            <div style={{ textAlign: 'right', color: '#f87171' }}>{metrics.pivot_r1 || '-'}</div>
+                                            {/* MACD */}
+                                            <div style={{ background: 'rgba(255,255,255,0.05)', padding: '8px', borderRadius: '4px' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                    <span style={{ color: '#94a3b8', fontSize: '0.7rem' }}>MACD</span>
+                                                    <span style={{ color: getScoreColor(breakdown.macd), fontWeight: 'bold', fontSize: '0.75rem' }}>
+                                                        {formatScore(breakdown.macd || 0)}
+                                                    </span>
+                                                </div>
+                                                <div style={{ color: (Number(dbMetrics.macd) > Number(dbMetrics.macd_sig)) ? '#4ade80' : '#f87171', fontWeight: 'bold', marginTop: '2px' }}>
+                                                    {dbMetrics.macd ? Number(dbMetrics.macd).toFixed(3) : '-'}
+                                                </div>
+                                            </div>
+                                            {/* Vol Ratio */}
+                                            <div style={{ background: 'rgba(255,255,255,0.05)', padding: '8px', borderRadius: '4px' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                    <span style={{ color: '#94a3b8', fontSize: '0.7rem' }}>Vol Ratio</span>
+                                                    <span style={{ color: getScoreColor(breakdown.vol), fontWeight: 'bold', fontSize: '0.75rem' }}>
+                                                        {formatScore(breakdown.vol || 0)}
+                                                    </span>
+                                                </div>
+                                                <div style={{ color: '#e2e8f0', fontWeight: 'bold', marginTop: '2px' }}>
+                                                    {dbMetrics.vol_ratio ? Number(dbMetrics.vol_ratio).toFixed(1) + 'x' : '-'}
+                                                </div>
+                                            </div>
+                                            {/* ATR */}
+                                            <div style={{ background: 'rgba(255,255,255,0.05)', padding: '8px', borderRadius: '4px' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                    <span style={{ color: '#94a3b8', fontSize: '0.7rem' }}>ATR</span>
+                                                    <span style={{ color: getScoreColor(breakdown.atr), fontWeight: 'bold', fontSize: '0.75rem' }}>
+                                                        {formatScore(breakdown.atr || 0)}
+                                                    </span>
+                                                </div>
+                                                <div style={{ color: '#e2e8f0', fontWeight: 'bold', marginTop: '2px' }}>
+                                                    {dbMetrics.atr ? Number(dbMetrics.atr).toFixed(2) : '-'}
+                                                </div>
+                                            </div>
                                         </div>
 
-                                        {/* Tech Comment */}
-                                        <div style={{ marginTop: '6px', fontSize: '0.75rem', color: '#94a3b8', lineHeight: '1.3', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '6px' }}>
-                                            "{comment}"
+                                        {/* Evaluation & Comment */}
+                                        <div style={{ marginTop: '10px', padding: '8px', background: 'rgba(255,255,255,0.03)', borderRadius: '6px', borderLeft: `3px solid ${scoreObj.score >= 60 ? '#4ade80' : '#94a3b8'}` }}>
+                                            <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: scoreObj.score >= 90 ? '#22c55e' : scoreObj.score >= 70 ? '#4ade80' : scoreObj.score >= 60 ? '#fbbf24' : '#94a3b8' }}>
+                                                {scoreObj.evaluation || '⏳ 관망'}
+                                            </div>
+                                            <div style={{ marginTop: '4px', fontSize: '0.75rem', color: '#94a3b8', lineHeight: '1.3' }}>
+                                                "{comment}"
+                                            </div>
                                         </div>
                                     </div>
                                 )

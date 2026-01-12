@@ -4,23 +4,83 @@ import FinalSignal from './components/FinalSignal';
 import MarketStats from './components/MarketStats';
 import MarketInsight from './components/MarketInsight';
 import JournalPage from './JournalPage';
+import TradingJournalPage from './TradingJournalPage';
 import SignalPage from './SignalPage';
 import ManagedStocksPage from './ManagedStocksPage';
 import BacktestPage from './BacktestPage';
+import AssetDashboardPage from './AssetDashboardPage';
 import './index.css';
 import packageJson from '../package.json'; // Version Import
+
+// 시장 상태 판단 함수 (EST 기준)
+const getMarketStatus = () => {
+    const now = new Date();
+    const estOptions = { timeZone: 'America/New_York', hour12: false };
+    const estString = now.toLocaleString('en-US', estOptions);
+    const estDate = new Date(estString);
+
+    const day = estDate.getDay(); // 0=Sun, 6=Sat
+    const hours = estDate.getHours();
+    const minutes = estDate.getMinutes();
+    const time = hours * 60 + minutes;
+
+    // 주말은 휴장
+    if (day === 0 || day === 6) return 'closed';
+
+    // 09:30 ~ 16:00 EST = 장중
+    if (time >= 9 * 60 + 30 && time < 16 * 60) return 'open';
+
+    // Pre-market (04:00-09:30) / After-hours (16:00-20:00) = 장외
+    if ((time >= 4 * 60 && time < 9 * 60 + 30) || (time >= 16 * 60 && time < 20 * 60)) return 'pre-after';
+
+    return 'closed';
+};
 
 function Dashboard() {
     const [data, setData] = useState(null);
     const [signalHistory, setSignalHistory] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [lastUpdateTime, setLastUpdateTime] = useState(null);
+
+    // 폴링 모드: 'auto' | 'on' | 'off'
+    const [pollingMode, setPollingMode] = useState(() => {
+        return localStorage.getItem('pollingMode') || 'auto';
+    });
+
+    // 시장 상태
+    const [marketStatus, setMarketStatus] = useState(getMarketStatus());
+
+    // 시장 상태 1분마다 갱신
+    useEffect(() => {
+        const statusInterval = setInterval(() => {
+            setMarketStatus(getMarketStatus());
+        }, 60000);
+        return () => clearInterval(statusInterval);
+    }, []);
+
+    // 폴링 모드 저장
+    useEffect(() => {
+        localStorage.setItem('pollingMode', pollingMode);
+    }, [pollingMode]);
+
+    // 폴링 활성화 여부 결정
+    const shouldPoll = () => {
+        if (pollingMode === 'on') return true;
+        if (pollingMode === 'off') return false;
+        // auto 모드: 장중 또는 장외일 때만 폴링
+        return marketStatus === 'open' || marketStatus === 'pre-after';
+    };
 
     useEffect(() => {
         fetchData();
-        const interval = setInterval(fetchData, 10000); // 10 seconds
+        const interval = setInterval(() => {
+            if (shouldPoll()) {
+                fetchData();
+            }
+        }, 10000); // 10 seconds
         return () => clearInterval(interval);
-    }, []);
+    }, [pollingMode, marketStatus]);
 
     const fetchData = async () => {
         try {
@@ -38,6 +98,8 @@ function Dashboard() {
             } else {
                 setData(jsonData);
                 setSignalHistory(historyData);
+                // 최근 업데이트 시간 설정 (HH:mm 형식)
+                setLastUpdateTime(new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }));
             }
             setLoading(false);
         } catch (err) {
@@ -124,65 +186,9 @@ function Dashboard() {
                             청안 해외주식 종합 분석
                         </h1>
                     </div>
-                    {data?.timestamp?.full_str && (
-                        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                            {/* Sync Button */}
-                            <button
-                                onClick={async () => {
-                                    if (confirm("최근 30일 데이터를 다시 가져와 DB를 갱신하시겠습니까? (약 10초 소요)")) {
-                                        try {
-                                            const res = await fetch('/api/system/backfill', { method: 'POST' });
-                                            const data = await res.json();
-                                            alert(data.message);
-                                        } catch (e) {
-                                            alert("동기화 요청 실패: " + e.message);
-                                        }
-                                    }
-                                }}
-                                style={{
-                                    display: 'flex', alignItems: 'center', gap: '6px',
-                                    padding: '0.4rem 0.8rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.2)',
-                                    borderRadius: '8px', color: '#e2e8f0', cursor: 'pointer', fontSize: '0.8rem'
-                                }}
-                                title="데이터 전체 동기화 (30일)"
-                            >
-                                <span style={{ fontSize: '1rem' }}>🔄</span> 동기화
-                            </button>
-
-                            {/* Market Regime Badge (UPRO Status) */}
-                            {data.market_regime && (
-                                <div style={{
-                                    padding: '0.4rem 0.8rem',
-                                    borderRadius: '8px',
-                                    fontSize: '0.85rem',
-                                    fontWeight: 700,
-                                    background: data.market_regime.regime === 'Bull' ? 'rgba(34, 197, 94, 0.15)' :
-                                        data.market_regime.regime === 'Bear' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(255, 255, 255, 0.1)',
-                                    color: data.market_regime.regime === 'Bull' ? '#4ade80' :
-                                        data.market_regime.regime === 'Bear' ? '#f87171' : '#cbd5e1',
-                                    border: '1px solid rgba(255,255,255,0.1)'
-                                }}>
-                                    {data.market_regime.reason || '시장 분석 중'}
-                                </div>
-                            )}
-
-                            <div style={{
-                                background: 'rgba(255, 255, 255, 0.03)',
-                                padding: '0.5rem 1rem',
-                                borderRadius: '12px',
-                                display: 'flex', alignItems: 'center', gap: '8px',
-                                border: '1px solid rgba(255,255,255,0.05)'
-                            }}>
-                                <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>Last Data:</span>
-                                <span style={{ fontSize: '0.9rem', fontWeight: 500, color: '#e2e8f0' }}>
-                                    {/* Prioritize data_time from SOXL, then timestamp.full_str */}
-                                    {data.market_regime?.soxl?.data_time ? `${data.market_regime.soxl.data_time}` :
-                                        data.market_regime?.SOXL?.data_time ? `${data.market_regime.SOXL.data_time}` :
-                                            data.timestamp.full_str}
-                                </span>
-                            </div>
-                        </div>
-                    )}
+                    <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
+                        {/* 상태 정보는 MarketInsight로 이동됨 */}
+                    </div>
                 </div>
 
 
@@ -191,7 +197,16 @@ function Dashboard() {
             {data?.market && <MarketStats market={data.market} />}
 
 
-            {data && <MarketInsight market={data} stocks={visibleStocks} signalHistory={signalHistory} onRefresh={fetchData} />}
+            {data && <MarketInsight
+                market={data}
+                stocks={visibleStocks}
+                signalHistory={signalHistory}
+                onRefresh={fetchData}
+                pollingMode={pollingMode}
+                setPollingMode={setPollingMode}
+                marketStatus={marketStatus}
+                lastUpdateTime={lastUpdateTime}
+            />}
 
             {data?.stocks && <FinalSignal stocks={visibleStocks} total_assets={data.total_assets} />}
         </div>
@@ -254,6 +269,10 @@ function Layout() {
                     color: location.pathname === '/' ? 'var(--accent-blue)' : 'var(--text-primary)',
                     fontWeight: location.pathname === '/' ? 'bold' : 'normal',
                 }}>대시보드</Link>
+                <Link to="/trading-journal" className="nav-link" style={{
+                    color: location.pathname === '/trading-journal' ? 'var(--accent-blue)' : 'var(--text-primary)',
+                    fontWeight: location.pathname === '/trading-journal' ? 'bold' : 'normal',
+                }}>매매일지</Link>
                 <Link to="/signals" className="nav-link" style={{
                     color: location.pathname === '/signals' ? 'var(--accent-blue)' : 'var(--text-primary)',
                     fontWeight: location.pathname === '/signals' ? 'bold' : 'normal',
@@ -262,6 +281,10 @@ function Layout() {
                     color: location.pathname === '/journal' ? 'var(--accent-blue)' : 'var(--text-primary)',
                     fontWeight: location.pathname === '/journal' ? 'bold' : 'normal',
                 }}>자산 관리</Link>
+                <Link to="/asset-dashboard" className="nav-link" style={{
+                    color: location.pathname === '/asset-dashboard' ? 'var(--accent-blue)' : 'var(--text-primary)',
+                    fontWeight: location.pathname === '/asset-dashboard' ? 'bold' : 'normal',
+                }}>💰 자산현황</Link>
                 <Link to="/managed-stocks" className="nav-link" style={{
                     color: location.pathname === '/managed-stocks' ? 'var(--accent-blue)' : 'var(--text-primary)',
                     fontWeight: location.pathname === '/managed-stocks' ? 'bold' : 'normal',
@@ -308,9 +331,11 @@ function Layout() {
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/signals" element={<SignalPage />} />
                 <Route path="/journal" element={<JournalPage />} />
+                <Route path="/trading-journal" element={<TradingJournalPage />} />
                 <Route path="/managed-stocks" element={<ManagedStocksPage />} />
                 <Route path="/backtest" element={<BacktestPage />} />
                 <Route path="/requests" element={<RequestPage />} />
+                <Route path="/asset-dashboard" element={<AssetDashboardPage />} />
                 <Route path="/login" element={<LoginPage />} />
             </Routes>
 

@@ -1,9 +1,10 @@
 import React from 'react';
 import Swal from 'sweetalert2';
 
-const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = false, onRefresh }) => {
+const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: propMetrics, isBear = false, onRefresh }) => {
     // Info from V1 status (Price, Change)
-    const { current_price, daily_change } = renderInfo || {};
+    const { current_price, daily_change, change_pct } = renderInfo || {};
+    const displayChange = change_pct ?? daily_change; // change_pct 우선 사용
 
     // Determine Current Mode
     const isHolding = buyStatus?.final_buy_yn === 'Y';
@@ -116,9 +117,10 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
     }, [buyStatus, sellStatus, tickerPrefix]);
 
     const handleUpdateTarget = async () => {
-        const manageId = activeData?.manage_id;
         const type = modal.key === 'buy_sig2_yn' ? 'box' : 'stop';
         const price = formData.price;
+        // [FIX] Use ticker instead of manage_id
+        const cleanTicker = title.toUpperCase().includes('SOXL') ? 'SOXL' : (title.toUpperCase().includes('SOXS') ? 'SOXS' : title);
 
         if (!price || price <= 0) return Swal.fire('Error', "유효한 가격을 입력해주세요.", 'error');
 
@@ -127,8 +129,9 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
             const res = await fetch('/api/v2/update-target', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ manage_id: manageId, target_type: type, price: parseFloat(price) })
+                body: JSON.stringify({ ticker: cleanTicker, target_type: type, price: parseFloat(price) })
             });
+
             const data = await res.json();
             if (res.ok && data.status === 'success') {
                 Swal.fire({
@@ -151,12 +154,13 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
         }
     };
 
-    const handleConfirm = async () => {
+    const handleConfirm = async (isEnd = false) => {
         if (!formData.price) return Swal.fire('Error', "가격을 입력해주세요.", 'error');
         setSubmitting(true);
 
         let endpoint = '';
         let payload = {};
+
 
         if (modal.type === 'MANUAL_SIGNAL') {
             endpoint = '/api/v2/manual-signal';
@@ -181,15 +185,26 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
                 status: 'Y'
             };
         } else if (modal.type === 'BUY' || modal.type === 'SELL') {
-            if (!formData.qty) { setSubmitting(false); return Swal.fire('Error', "수량을 입력해주세요.", 'error'); }
+            // BUY requires qty input, SELL uses buy qty automatically
+            if (modal.type === 'BUY' && !formData.qty) {
+                setSubmitting(false);
+                return Swal.fire('Error', "수량을 입력해주세요.", 'error');
+            }
             endpoint = modal.type === 'BUY' ? '/api/v2/confirm-buy' : '/api/v2/confirm-sell';
+            // [FIX] Use ticker instead of manage_id (Backend expects 'ticker')
+            const cleanTicker = title.toUpperCase().includes('SOXL') ? 'SOXL' : (title.toUpperCase().includes('SOXS') ? 'SOXS' : title);
+            // SELL: 자동으로 매수 수량 사용
+            const autoQty = modal.type === 'SELL' ? (buyStatus?.real_buy_qn || formData.qty || 0) : formData.qty;
             payload = {
-                manage_id: activeData?.manage_id,
+                ticker: cleanTicker,
                 price: parseFloat(formData.price),
-                qty: parseFloat(formData.qty),
-                is_end: !!formData.is_end
+                qty: parseFloat(autoQty),
+                is_end: isEnd  // 종결 여부 (true면 레코드 삭제)
             };
+
         }
+
+
 
         try {
             const res = await fetch(endpoint, {
@@ -224,8 +239,11 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
 
         setSubmitting(true);
         try {
+            // Extract ticker from title (e.g., "SOXL (BULL TOWER)" -> "SOXL")
+            const ticker = title.split(' ')[0].toUpperCase();
+
             const payload = {
-                manage_id: activeData?.manage_id || title + 'MANUAL',
+                ticker: ticker,
                 signal_key: modal.key,
                 price: parseFloat(formData.price) || 0,
                 status: 'N' // Cancel Signal
@@ -258,7 +276,9 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
     }
 
     const handleDelete = async () => {
-        if (!activeData?.manage_id) return;
+        // Extract ticker from title
+        const ticker = title.split(' ')[0].toUpperCase();
+        if (!ticker) return;
 
         // SweetAlert with options
         const result = await Swal.fire({
@@ -277,11 +297,11 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
 
         if (result.isDismissed) return;
 
-        let endpoint = `/api/v2/record/${activeData.manage_id}`;
+        let endpoint = `/api/v2/record/${ticker}`;
         let successMsg = "전체 기록이 삭제되었습니다.";
 
         if (result.isDenied) {
-            endpoint = `/api/v2/sell-record/${activeData.manage_id}`;
+            endpoint = `/api/v2/sell-record/${ticker}`;
             successMsg = "매도 기록만 삭제되었습니다.";
         }
 
@@ -320,7 +340,7 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
     ];
 
     // --- Ver 3.0 Market Intelligence Metrics ---
-    const metrics = renderInfo?.new_metrics || {};
+    const metrics = propMetrics || renderInfo?.new_metrics || {};
     const signals = metrics.signals || {};
 
     const renderSteps = (stepType, data, isActiveMode) => {
@@ -456,38 +476,20 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
                             {mode === 'SELL' ? '매도 감시 (HOLDING)' : '매수 대기 (WATCHING)'}
                         </span>
                     </div>
-                    <div style={{ fontSize: '0.75rem', color: '#888', marginTop: '6px' }}>
-                        Manage ID: {activeData?.manage_id || '-'}
-                    </div>
                     {/* Price Display */}
                     {current_price && (
                         <div style={{ marginTop: '8px', display: 'flex', alignItems: 'baseline', gap: '8px' }}>
                             <span style={{ fontSize: '1.2rem', fontWeight: '900', color: '#fff', letterSpacing: '-0.5px' }}>
                                 ${Number(current_price).toFixed(2)}
                             </span>
-                            {daily_change != null && (
+                            {displayChange != null && (
                                 <span style={{
                                     fontSize: '0.75rem', fontWeight: 'bold',
-                                    color: daily_change >= 0 ? '#4ade80' : '#f87171'
+                                    color: displayChange >= 0 ? '#4ade80' : '#f87171'
                                 }}>
-                                    ({daily_change >= 0 ? '+' : ''}{Number(daily_change).toFixed(2)}%)
+                                    ({displayChange >= 0 ? '+' : ''}{Number(displayChange).toFixed(2)}%)
                                 </span>
                             )}
-                        </div>
-                    )}
-
-                    {/* [NEW] Market Metrics Mini-Bar */}
-                    {metrics && (
-                        <div style={{ display: 'flex', gap: '8px', marginTop: '6px', flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: '0.7rem', background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px', color: '#ccc' }}>
-                                RSI <b style={{ color: (metrics.rsi > 70 || metrics.rsi < 30) ? '#facc15' : '#fff' }}>{metrics.rsi ? Number(metrics.rsi).toFixed(0) : '-'}</b>
-                            </span>
-                            <span style={{ fontSize: '0.7rem', background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px', color: '#ccc' }}>
-                                VR <b style={{ color: (metrics.vol_ratio > 1.2) ? '#facc15' : '#fff' }}>{metrics.vol_ratio ? Number(metrics.vol_ratio).toFixed(1) : '-'}</b>
-                            </span>
-                            <span style={{ fontSize: '0.7rem', background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px', color: '#ccc' }}>
-                                P.R1 <b style={{ color: '#f87171' }}>{metrics.pivot_r1 ? Number(metrics.pivot_r1).toFixed(2) : '-'}</b>
-                            </span>
                         </div>
                     )}
                 </div>
@@ -563,14 +565,12 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, isBear = fal
                         [종결/청산]
                     </span>
                 )}
-                {activeData?.manage_id && (
-                    <span
-                        onClick={handleDelete}
-                        style={{ fontSize: '0.75rem', color: '#94a3b8', cursor: 'pointer', textDecoration: 'underline' }}
-                    >
-                        [기록 삭제]
-                    </span>
-                )}
+                <span
+                    onClick={handleDelete}
+                    style={{ fontSize: '0.75rem', color: '#94a3b8', cursor: 'pointer', textDecoration: 'underline' }}
+                >
+                    [기록 삭제]
+                </span>
             </div>
 
             {/* Modal */}

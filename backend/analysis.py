@@ -58,7 +58,9 @@ MARKET_INDICATORS = {
     "S&P500": "^GSPC",
     "NASDAQ": "^IXIC",
     "GOLD": "GC=F",
-    "KRW": "KRW=X"
+    "KRW": "KRW=X",
+    "VIX": "^VIX",
+    "SOX": "^SOX"  # Philadelphia Semiconductor Index (SOXL/SOXS 추종 지수)
 }
 
 def get_current_time_str():
@@ -97,15 +99,74 @@ def is_market_open():
 
 
 def refresh_market_indices():
-    """Fetches live market indices and updates DB"""
+    """
+    Fetches market data and updates DB (market_indices table).
+    - KIS API: SOXL, SOXS, UPRO (실시간)
+    - YFinance: S&P500, NASDAQ, GOLD, KRW, VIX (지수 - KIS 미지원)
+    """
     try:
-        print("🌍 refreshing Market Indices to DB...")
+        print("🌍 Refreshing Market Indices to DB (KIS + YFinance Hybrid)...")
         from db import update_market_indices
+        from kis_api import kis_client, get_exchange_code
+        
         data_list = []
-        for name, tic_sym in MARKET_INDICATORS.items():
+        
+        # 1. KIS API for Stocks (실시간, 지연 없음)
+        kis_tickers = {
+            "SOXL": "Direxion Semi Bull 3X",
+            "SOXS": "Direxion Semi Bear 3X", 
+            "UPRO": "ProShares Ultra S&P500 3X"
+        }
+        
+        for ticker, name in kis_tickers.items():
             try:
-                t = yf.Ticker(tic_sym)
-                # Fetch minimal history to get Last and Change
+                exchange = get_exchange_code(ticker)
+                result = kis_client.get_price(ticker, exchange)
+                
+                if result and result.get('price', 0) > 0:
+                    price = result['price']
+                    rate = result.get('rate', 0.0)  # 변동률
+                    
+                    data_list.append({
+                        'ticker': ticker,
+                        'name': name,
+                        'price': float(price),
+                        'change': float(rate)
+                    })
+                    print(f"  ✅ KIS: {ticker} = ${price:.2f} ({rate:+.2f}%)")
+                else:
+                    # KIS 실패 시 YFinance Fallback
+                    t = yf.Ticker(ticker)
+                    hist = t.history(period="2d")
+                    if not hist.empty:
+                        val = hist['Close'].iloc[-1]
+                        change = 0.0
+                        if len(hist) >= 2:
+                            prev = hist['Close'].iloc[-2]
+                            change = ((val - prev) / prev) * 100
+                        data_list.append({
+                            'ticker': ticker,
+                            'name': name,
+                            'price': float(val),
+                            'change': float(change)
+                        })
+                        print(f"  ⚠️ YF Fallback: {ticker} = ${val:.2f}")
+            except Exception as e:
+                print(f"  ❌ Error {ticker}: {e}")
+        
+        # 2. YFinance for Indices (KIS 미지원)
+        index_symbols = {
+            "S&P500": "^GSPC",
+            "NASDAQ": "^IXIC",
+            "SOX": "^SOX",  # 필라델피아 반도체 지수 (SOXL/SOXS 추종)
+            "GOLD": "GC=F",
+            "KRW": "KRW=X",
+            "VIX": "^VIX"
+        }
+        
+        for name, symbol in index_symbols.items():
+            try:
+                t = yf.Ticker(symbol)
                 hist = t.history(period="5d")
                 if not hist.empty:
                     val = hist['Close'].iloc[-1]
@@ -115,20 +176,22 @@ def refresh_market_indices():
                         change = ((val - prev) / prev) * 100
                     
                     data_list.append({
-                        'ticker': name, # Use Key as Ticker ID in DB
-                        'name': tic_sym,
+                        'ticker': name,
+                        'name': symbol,
                         'price': float(val),
                         'change': float(change)
                     })
             except Exception as e:
-                print(f"Index Fetch Error {name}: {e}")
+                print(f"  ❌ Index Error {name}: {e}")
         
         if data_list:
             update_market_indices(data_list)
-            print(f"✅ Market Indices Updated: {len(data_list)}")
+            print(f"✅ Market Indices Updated: {len(data_list)} items (KIS: {len(kis_tickers)}, YF: {len(index_symbols)})")
             return True
     except Exception as e:
         print(f"Refresh Indices Error: {e}")
+        import traceback
+        traceback.print_exc()
     return False
 
 
@@ -1420,14 +1483,40 @@ def check_triple_filter(ticker, data_30m, data_5m):
     print(f"DEBUG: Checking {ticker}")
     
     try:
-        # 1. Load Persisted State
+        # 1. Load Persisted State & Sync with DB (Hybrid Manual Mode)
         all_states = get_global_config("triple_filter_states", {})
         state = all_states.get(ticker, {
             "final_met": False, "signal_time": None,
             "step1_done_time": None,
             "step2_done_time": None, "step2_done_price": None,
-            "step3_done_time": None, "step3_done_pct": None
+            "step3_done_time": None, "step3_done_pct": None,
+            "manage_id": None
         })
+
+        # [NEW] Sync with DB to respect Manual Mode
+        from db import fetch_signal_status_dict, save_v2_buy_signal
+        db_status = fetch_signal_status_dict(ticker)
+        buy_db = db_status.get('buy')
+        
+        # Sync Manage ID / Manual Flags
+        is_manual_1 = 'N'
+        is_manual_2 = 'N'
+        is_manual_3 = 'N'
+        
+        if buy_db:
+             state['manage_id'] = buy_db.get('manage_id') or buy_db.get('idx') # idx as manage_id fallback
+             
+             # Sync Manual Status (If Manual='Y', Force State='Y')
+             if buy_db.get('is_manual_buy1') == 'Y': 
+                 state['buy_sig1_yn'] = 'Y'
+                 is_manual_1 = 'Y'
+             if buy_db.get('is_manual_buy2') == 'Y': 
+                 state['buy_sig2_yn'] = 'Y'
+                 is_manual_2 = 'Y'
+             if buy_db.get('is_manual_buy3') == 'Y': 
+                 state['buy_sig3_yn'] = 'Y'
+                 is_manual_3 = 'Y'
+
 
         # 2. Get Price & Data
         kis_data = kis_client.get_price(ticker)
@@ -1637,88 +1726,87 @@ def check_triple_filter(ticker, data_30m, data_5m):
 
         manage_id = state.get("manage_id")
 
-        # Step 1: 5m Golden Cross (Timing)
-        result["step1"] = filter3_met # [SWAPPED]
-        if filter3_met:
-            result["step1_color"] = None
-            result["step1_status"] = "현재 골든크로스 (진입적합)"
-            # Only set Y if not already Y
-            if not state.get("buy_sig1_yn") == 'Y':
-                 state["buy_sig1_yn"] = 'Y' 
-                 if manage_id and save_v2_buy_signal:
-                     save_v2_buy_signal(manage_id, 'sig1', current_price)
-            
-            if not state.get("step1_done_time"):
-                state["step1_done_time"] = now_time_str
+        # Step 1: 5m Golden Cross (Timing) - Was Filter 3
+        # Use Manual Flag to Override
+        if is_manual_1 == 'Y':
+            result["step1"] = True
+            result["step1_status"] = "수동 설정 (ON)"
+            state["buy_sig1_yn"] = 'Y' # Force State
         else:
-            result["step1_color"] = "yellow"
-            result["step1_status"] = "현재 데드크로스 (대기)"
+            result["step1"] = filter3_met
+            new_status_1 = 'Y' if filter3_met else 'N'
             
-            # [NEW] Auto-Reset Logic: If condition fails, turn OFF signal (Real-time monitoring)
-            # Only if it was 'Y' and Step 2 hasn't started yet (keep Step 1 if Step 2 is active? No, user wants strict 1st signal check)
-            # But if Step 2 is active, Step 1 condition might fluctuate. 
-            # Usually Step 1 is "Latch". But user requested "If condition released, light off".
-            # Let's Apply Strict Reset for Sign al 1.
-            # However, if Step 2 is already Y, we shouldn't kill the cycle? 
-            # If Step 2 is Y, we are already in breakout. 
-            # If Step 2 is N, we are waiting. If Step 1 fails while waiting, we should Go Back.
-            if state.get("buy_sig1_yn") == 'Y' and state.get("buy_sig2_yn") != 'Y':
-                 state["buy_sig1_yn"] = 'N'
-                 if manage_id and save_v2_buy_signal:
-                     # Use 'N' status (requires save_v2_buy_signal update or manual update)
-                     # save_v2_buy_signal currently hardcodes 'Y'? Let's check db.py again or use manual_update_signal
-                     try:
-                         from db import manual_update_signal
-                         manual_update_signal(manage_id, 'buy1', 0, 'N') # Price 0 or current?
-                         print(f"📉 {ticker} Signal 1 Reset (Condition Lost)")
-                     except:
-                         pass
-        
-        # Step 2: +2% Breakout
+            # Logic Update (Always attempt to save to sync DB, save function handles optimization)
+            if save_v2_buy_signal:
+                 save_v2_buy_signal(ticker, 'sig1', current_price, new_status_1)
+            
+            state["buy_sig1_yn"] = new_status_1
+
+            if filter3_met:
+                result["step1_status"] = "현재 골든크로스 (진입적합)"
+                if not state.get("step1_done_time"): state["step1_done_time"] = now_time_str
+            else:
+                result["step1_color"] = "yellow"
+                result["step1_status"] = "현재 데드크로스 (대기)"
+                state["step1_done_time"] = None # Reset timing info
+
+        # Step 2: +2% Breakout (Box)
         change_pct = result.get("daily_change", 0)
         
-        # DEBUG PRINTS
-        print(f"DEBUG: Ticker={ticker}, Filter2Met={filter2_met}, ManageID={manage_id}, ChangePct={change_pct}")
+        # Determine Step 2 Condition
+        # Merge filter2_met (Price Target) and change_pct check logic
+        cond_step2 = filter2_met or (change_pct >= 2)
         
-        if filter2_met: 
-             if not state.get("buy_sig2_yn") == 'Y':
-                 state["buy_sig2_yn"] = 'Y'
-                 print(f"DEBUG: Attempting to SAVE Sig2 for {manage_id}")
-                 if manage_id and save_v2_buy_signal:
-                     res = save_v2_buy_signal(manage_id, 'sig2', current_price)
-                     print(f"DEBUG: Save Result = {res}")
-
-        if change_pct >= 2:
+        if is_manual_2 == 'Y':
             result["step2"] = True
-            result["step2_color"] = None
-            result["step2_status"] = "박스권 돌파"
-            if not state.get("step2_done_time"):
-                state["step2_done_time"] = now_time_str
-                state["step2_done_price"] = current_price
-        elif change_pct <= -2:
-            result["step2"] = False
-            result["step2_color"] = "red"
-            result["step2_status"] = "손절"
+            result["step2_status"] = "수동 설정 (ON)"
+            state["buy_sig2_yn"] = 'Y'
         else:
-            result["step2"] = False
-            result["step2_color"] = None
-            result["step2_status"] = "보합"
+            result["step2"] = cond_step2
+            new_status_2 = 'Y' if cond_step2 else 'N'
+            
+            if save_v2_buy_signal:
+                 save_v2_buy_signal(ticker, 'sig2', current_price, new_status_2)
+            
+            state["buy_sig2_yn"] = new_status_2
+            
+            if cond_step2:
+                result["step2_status"] = "박스권 돌파"
+                if not state.get("step2_done_time"):
+                    state["step2_done_time"] = now_time_str
+                    state["step2_done_price"] = current_price
+            else:
+                if change_pct <= -2:
+                    result["step2_color"] = "red"
+                    result["step2_status"] = "손절"
+                else:
+                    result["step2_color"] = None
+                    result["step2_status"] = "보합/대기"
+                state["step2_done_time"] = None # Reset
 
-        # Step 3: 30m Golden Cross (Trend)
-        result["step3"] = filter1_met # [SWAPPED]
-        if filter1_met:
-            result["step3_color"] = None
-            result["step3_status"] = "추세 확정"
-            if not state.get("buy_sig3_yn") == 'Y':
-                 state["buy_sig3_yn"] = 'Y'
-                 if manage_id and save_v2_buy_signal:
-                     save_v2_buy_signal(manage_id, 'sig3', current_price)
-
-            if not state.get("step3_done_time"):
-                state["step3_done_time"] = now_time_str
+        # Step 3: 30m Golden Cross (Trend) - Was Filter 1
+        if is_manual_3 == 'Y':
+            result["step3"] = True
+            result["step3_status"] = "수동 설정 (ON)"
+            state["buy_sig3_yn"] = 'Y'
         else:
-            result["step3_color"] = "red"
-            result["step3_status"] = "주의 (데드크로스)"
+            result["step3"] = filter1_met
+            new_status_3 = 'Y' if filter1_met else 'N'
+            
+            if save_v2_buy_signal:
+                 save_v2_buy_signal(ticker, 'sig3', current_price, new_status_3)
+            
+            state["buy_sig3_yn"] = new_status_3
+            
+            if filter1_met:
+                result["step3_status"] = "추세 확정"
+                if not state.get("step3_done_time"):
+                    state["step3_done_time"] = now_time_str
+            else:
+                 result["step3_color"] = "yellow"
+                 result["step3_status"] = "주의 (데드크로스)"
+                 state["step3_done_time"] = None # Reset
+
 
         # FINAL ENTRY SIGNAL
         # [FIX] Use Latched DB Status for Strict "All Done" Check
@@ -1728,14 +1816,15 @@ def check_triple_filter(ticker, data_30m, data_5m):
 
         if all_met:
             result["final"] = True
+            
+            # Auto Update Logic for Final
+            if save_v2_buy_signal:
+                 save_v2_buy_signal(ticker, 'final', current_price, 'Y')
+                 
             if not state.get("final_met"):
                 state["final_met"] = True
                 state["signal_time"] = now_time_str
              
-                # Update Final in DB
-                if manage_id and save_v2_buy_signal:
-                    save_v2_buy_signal(manage_id, 'final', current_price)
-                
                 # ... (rest of notification logic)
                 try:
                     ny_tz = pytz.timezone('America/New_York')
@@ -1773,10 +1862,26 @@ def check_triple_filter(ticker, data_30m, data_5m):
                     print(f"Master Signal Save Error: {e}")
         else:
             result["final"] = False
-            # If any condition breaks, reset final_met
-            if state.get("final_met"):
-                state["final_met"] = False
-                state["signal_time"] = None
+            
+            # Check Real Buy Status (Holding)
+            # If real_buy_qn > 0, we must NOT turn off final_buy_yn in DB, otherwise UI exits 'Selling Mode'
+            real_buy_qn = 0
+            if buy_db:
+                 real_buy_qn = buy_db.get('real_buy_qn') or 0
+                 
+            if real_buy_qn > 0:
+                 # Holding Mode: Keep state True in memory and DB
+                 result["final"] = True # Force UI to show "Holding"
+                 if not state.get("final_met"): state["final_met"] = True
+            else:
+                 # Not Holding: Reset Logic
+                 if save_v2_buy_signal:
+                      save_v2_buy_signal(ticker, 'final', current_price, 'N')
+                 
+                 if state.get("final_met"):
+                     state["final_met"] = False
+                     state["signal_time"] = None
+
 
 
         # --- POST-ENTRY WARNINGS (Only if currently in FINAL state) ---
@@ -1870,7 +1975,7 @@ def check_triple_filter(ticker, data_30m, data_5m):
         try:
              if df30 is not None and not df30.empty:
                  # Convert to str if it's datetime
-                 last_time_str = str(df30.index[-1])
+                 last_time_str = df30.index[-1].strftime('%Y-%m-%d %H:%M:%S')
         except: pass
         result["data_time"] = last_time_str
 
@@ -1890,7 +1995,8 @@ def check_triple_filter(ticker, data_30m, data_5m):
             
             # --- [NEW] Log Market Indicators & Signals to DB ---
             try:
-                from db import log_market_indicators
+                # from db import log_market_indicators
+
                 
                 # Determine Signal Times (Scan recent DF for Cross)
                 # Helper to find latest cross time
@@ -1959,7 +2065,8 @@ def check_triple_filter(ticker, data_30m, data_5m):
                     'dead_5m': dead_5m
                 }
                 
-                log_market_indicators(log_data)
+                # log_market_indicators(log_data) - MOVED to run_analysis
+
                 
                 # [NEW] Add Signal Timings to Result for Frontend
                 result['new_metrics']['signals'] = {
@@ -2206,142 +2313,146 @@ def get_evaluation_label(score):
 
 def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None):
     """
-    V3.5 Comprehensive Holding Score Algorithm
-    Weight: Cheongan Index (60%) + Tech/Risk (40%)
-    [V3.8] Integrated with V2 Signal System
+    V4.0 안티그래비티 스코어 시스템 (Antigravity Score System)
+    
+    [청안 지수] V2 신호 기반 (Max 60점)
+    - 1단계만: 20점, 2단계까지: 30점, 3단계 완료: 60점
+    
+    [안티그래비티 보조지표] 비대칭 가감점 (+40 ~ -80점)
+    - RSI: +10 ~ -20
+    - MACD: +10 ~ -20
+    - Vol Ratio: +10 ~ -20
+    - ATR: +10 ~ -20
+    
+    [총점 범위] -80 ~ +100점
+    [매수 기준] 90+: 강력매수, 70+: 매수, 60+: 매수추천, 60미만: 관망
     """
     if not res: return {"score": 0, "breakdown": {}, "evaluation": "데이터 부족"}
 
-    score = 0
-    breakdown = {"cheongan": 0, "tech": 0, "penalty": 0}
+    # Initialize Breakdown
+    breakdown = {
+        "cheongan": 0,    # 청안 지수 (V2 Signals)
+        "rsi": 0,         # RSI 점수
+        "macd": 0,        # MACD 점수
+        "vol": 0,         # Vol Ratio 점수
+        "atr": 0,         # ATR 점수
+        "total": 0
+    }
     
-    # Check V2 Status
-    is_v2_holding = v2_buy and v2_buy.get('final_buy_yn') == 'Y'
-    is_v2_sell_active = v2_sell and v2_sell.get('final_sell_yn') == 'N' # Selling phase started but not finished
-    
-    # ----------------------------------------
-    # 1. Cheongan Index (Max 60)
-    # ----------------------------------------
+    # ================================================
+    # 1. 청안 지수 (V2 Signal Base) - Max 60점
+    # ================================================
     cheongan_score = 0
-    # A. Trend (30분봉 정배열) - 30점
-    # [V3.8] Trust V2 Signal if Active
-    if res.get('step1') or (v2_buy and v2_buy.get('buy_sig3_yn') == 'Y'): 
-        cheongan_score += 30
+    sig1 = v2_buy and v2_buy.get('buy_sig1_yn') == 'Y'
+    sig2 = v2_buy and v2_buy.get('buy_sig2_yn') == 'Y'
+    sig3 = v2_buy and v2_buy.get('buy_sig3_yn') == 'Y'
     
-    # B. Timing (5분봉 진입) - 20점
-    # [V3.8] Trust V2 Signal if Active
-    if res.get('step3') or (v2_buy and v2_buy.get('buy_sig1_yn') == 'Y'): 
-        cheongan_score += 20
-        
-    # C. Momentum (박스권/수급) - 10점
-    # [V3.8] Trust V2 Signal if Active
-    if res.get('step2') or (v2_buy and v2_buy.get('buy_sig2_yn') == 'Y'): 
-        cheongan_score += 10
-    elif res.get('daily_change', 0) > 2.0:
-        cheongan_score += 5 # 수급 대체 점수
-        
-    score += cheongan_score
+    if sig3:
+        cheongan_score = 60  # 3단계 완료
+    elif sig2:
+        cheongan_score = 30  # 2단계까지
+    elif sig1:
+        cheongan_score = 20  # 1단계만
+    
     breakdown['cheongan'] = cheongan_score
-
-    # ----------------------------------------
-    # 2. Technical & Risk (Max 40)
-    # ----------------------------------------
-    tech_score = 0
+    
+    # ================================================
+    # 2. 안티그래비티 보조지표 (+40 ~ -80점)
+    # ================================================
     rsi = tech.get('rsi', 50)
     macd = tech.get('macd', 0)
     macd_sig = tech.get('macd_sig', 0)
     
-    # A. RSI Stability (15점)
-    if 40 <= rsi <= 65: tech_score += 15     # 안정적 상승 구간
-    elif 30 <= rsi < 40: tech_score += 10    # 반등 초입
-    elif rsi < 30: tech_score += 10          # 과매도 메리트
-    elif 65 < rsi < 75: tech_score += 5      # 과열 진입 (주의)
-    else: tech_score += 0                    # 75 이상 과열 (위험)
-    
-    # B. MACD Trend (15점)
-    if macd > macd_sig: tech_score += 15
-    elif macd > 0: tech_score += 10          # 시그널은 깼지만 0선 위
-    
-    # C. Risk/Position (10점 - 전고점/저항)
-    # 약식: RSI가 70 미만이면 상승 여력 있다고 판단
-    if rsi < 70: tech_score += 10
-    
-    score += tech_score
-    breakdown['tech'] = tech_score
-    
-    # ----------------------------------------
-    # 3. Penalties & Filter
-    # ----------------------------------------
-    penalty = 0
-    if res.get('step3_color') == 'yellow': penalty += 15
-    if res.get('step2_color') == 'orange': penalty += 30
-    
-    # [V3.8] V2 Sell Signal Penalty
-    if v2_sell:
-        if v2_sell.get('sell_sig1_yn') == 'Y': penalty += 15 # 5m DC
-        if v2_sell.get('sell_sig3_yn') == 'Y': penalty += 30 # 30m DC (Major Exit)
-
-    # [Ver 3.9] Market Intelligence - Policy Adjustment
-    # Extract new_metrics from results (res)
     new_metrics = res.get('new_metrics', {})
-    atr = new_metrics.get('atr', 0)
     vol_ratio = new_metrics.get('vol_ratio', 1.0)
-    pivot_r1 = new_metrics.get('pivot_r1', 0)
+    atr = new_metrics.get('atr', 0)
     current_price = res.get('current_price', 0)
+    daily_change = res.get('daily_change', 0)
     
-    # Policy 1: High Volatility Protection
-    # If ATR is very high (>3% of price) AND we are in Sell Signal zone, apply extra penalty
-    if atr > (current_price * 0.03) and v2_sell:
-        if v2_sell.get('sell_sig1_yn') == 'Y': penalty += 5
-        
-    # Policy 2: Volume Spike Boost
-    # If Volume Ratio > 2.0 AND Trend is UP, it's a strong signal -> Reduce Penalty or Boost
-    if vol_ratio > 2.0 and breakdown['cheongan'] > 30:
-        score += 5
-    elif breakdown['cheongan'] > 30 and vol_ratio < 1.0:
-        # User Rule: VR Check (Signal Compression)
-        # If breakout signal but low volume, reduce confidence
-        score -= 5
-        
-    # Policy 3: Resistance Proximity
-    # If Price is very close to Pivot R1 (within 0.5%) AND we are holding -> Warning (No score change but maybe use in commentary)
-    dist_to_r1 = 0
-    if pivot_r1 > 0:
-        dist_to_r1 = (pivot_r1 - current_price) / pivot_r1
-        if 0 < dist_to_r1 < 0.005: # < 0.5% left to R1
-             # Resistance ahead, limit max score?
-             score = min(score, 88) # Cap at 88 (prevent 90+ Strong Buy right at resistance)
-
-    # Policy 4: RSI Overbought Limit (User Request)
-    # If RSI >= 70, restrict Entry (Cap score to 'Hold' or 'Weak Buy')
-    if rsi >= 70:
-        # Even if trend is perfect, do not recommend "Strong Buy"
-        # 60 is threshold for "Buy", so cap at 65 or reduce score significantly?
-        # User said "진입 보류" (Hold entry). Score < 60 means "Neutral/Hold".
-        # Let's cap at 58 to enforce "Neutral" if purely looking for entry.
-        # But if we already hold, we shouldn't force sell.
-        if not is_v2_holding:
-            score = min(score, 58) 
-            breakdown['penalty'] += 10 # Mark as penalty constraint
-
-    score = max(0, min(100, score - penalty))
+    # ---- A. RSI 채점 (+10 ~ -20) ----
+    rsi_score = 0
+    if 55 < rsi < 65:
+        rsi_score = 10   # 상승 추세 안정적 진입
+    elif 45 < rsi <= 55:
+        rsi_score = 5    # 추세 전환 시도
+    elif 30 < rsi <= 45:
+        rsi_score = -10  # 하락 추세 지속
+    elif rsi <= 30 or rsi >= 75:
+        rsi_score = -20  # 과매도/단기 상투 위험
+    breakdown['rsi'] = rsi_score
     
-    # [V3.8] Holding Boost (존버 모드)
-    # If we are officially holding via V2 System, minimum score floor.
-    if is_v2_holding:
-        if penalty == 0:
-            score = max(score, 85) # Holding w/o warning -> Strong Buy state
-        else:
-            score = max(score, 45) # Holding w/ warning -> At least Hold state
-
-    breakdown['penalty'] = penalty
+    # ---- B. MACD 채점 (+10 ~ -20) ----
+    macd_score = 0
+    macd_diff = macd - macd_sig if macd_sig else macd
+    
+    if macd > macd_sig and macd > 0:
+        macd_score = 10   # 골든크로스 + 양수 = 강세
+    elif macd > macd_sig:
+        macd_score = 5    # 골든크로스 (조정 중)
+    elif macd < macd_sig and macd >= 0:
+        macd_score = -10  # 데드크로스 시작
+    elif macd < 0 and macd < macd_sig:
+        macd_score = -20  # 강력한 하락 추세
+    breakdown['macd'] = macd_score
+    
+    # ---- C. Vol Ratio 채점 (+10 ~ -20) ----
+    # [V4.0.1] 상승 + 고VR + 고RSI 조합 시 경계 신호 추가
+    vol_score = 0
+    if vol_ratio > 2.0 and daily_change < 0:
+        vol_score = -20   # 투매 발생 (최우선 판단)
+    elif vol_ratio > 2.0 and daily_change > 0 and rsi > 70:
+        vol_score = 0     # 경계: 폭등이지만 과열 위험 (가점 없음)
+    elif vol_ratio > 1.5 and daily_change > 0:
+        vol_score = 10    # 강력한 매수세 유입
+    elif vol_ratio > 1.0:
+        vol_score = 5     # 평균 이상 관심
+    elif 0.5 < vol_ratio <= 0.8:
+        vol_score = -10   # 매수세 실종
+    breakdown['vol'] = vol_score
+    
+    # ---- D. ATR 채점 (+10 ~ -20) ----
+    atr_score = 0
+    atr_ratio = (atr / current_price) if current_price > 0 else 0
+    
+    if daily_change > 1 and atr_ratio > 0.02:
+        atr_score = 10    # 강한 추세적 돌파
+    elif daily_change > 0:
+        atr_score = 5     # 완만한 우상향
+    elif daily_change < 0 and atr_ratio > 0.02:
+        atr_score = -10   # 공포 섞인 하락
+    elif daily_change < -3 and atr_ratio > 0.03:
+        atr_score = -20   # 패닉셀 구간
+    breakdown['atr'] = atr_score
+    
+    # ================================================
+    # 3. 총점 계산
+    # ================================================
+    indicator_total = breakdown['rsi'] + breakdown['macd'] + breakdown['vol'] + breakdown['atr']
+    total_score = breakdown['cheongan'] + indicator_total
+    
+    # 범위 제한: -80 ~ 100
+    total_score = max(-80, min(100, total_score))
+    breakdown['total'] = total_score
+    
+    # ================================================
+    # 4. 평가 라벨 (매수 기준)
+    # ================================================
+    if total_score >= 90:
+        evaluation = "🚀 강력 매수 (Strong Buy)"
+    elif total_score >= 70:
+        evaluation = "✅ 매수 (Buy)"
+    elif total_score >= 60:
+        evaluation = "💡 매수 추천 (Recommended)"
+    else:
+        evaluation = "⏳ 관망 (Hold/Watch)"
     
     return {
-        "score": int(score),
+        "score": total_score,
         "breakdown": breakdown,
-        "evaluation": get_evaluation_label(score),
-        "new_metrics": new_metrics # [FIX] Pass this through!
+        "evaluation": evaluation,
+        "new_metrics": new_metrics
     }
+
 
 def generate_expert_commentary_v2(ticker, score_data, res, tech, regime, v2_buy=None, v2_sell=None):
     score = score_data['score']
@@ -2361,53 +2472,51 @@ def generate_expert_commentary_v2(ticker, score_data, res, tech, regime, v2_buy=
     vol_ratio = new_metrics.get('vol_ratio', 1.0)
     pivot_r1 = new_metrics.get('pivot_r1', 0)
     current_price = res.get('current_price', 0)
-
-    # Header
-    comment = f"[{score_data['evaluation']}] 현재 점수 {score}점"
-    if is_v2_active:
-        comment += f" (V2 {v2_stage} 보유중)"
-    comment += "\n\n"
     
-    # Analysis
+    # --- Score Breakdown Header ---
+    bd_text = f"[채점표] 추세 +{breakdown.get('trend', 0)} | 지표 "
+    if breakdown.get('macd', 0) != 0: bd_text += f"MACD{breakdown['macd']:+d} "
+    if breakdown.get('rsi', 0) != 0: bd_text += f"RSI{breakdown['rsi']:+d} "
+    if breakdown.get('vol', 0) != 0: bd_text += f"VOL{breakdown['vol']:+d} "
+    
+    # Penalty display
+    if breakdown.get('penalty', 0) != 0: 
+        bd_text += f"| 감점 -{breakdown['penalty']}"
+    
+    comment = f"{bd_text.strip()}\n"
+
+    # Analysis Body
     if score >= 80:
-        comment += f"🚀 [핵심 분석] "
-        if is_v2_active: comment += f"V2 시스템이 강력한 상승 추세를 타고 있습니다({v2_stage}). "
-        comment += f"청안 지수({breakdown['cheongan']}/60)가 견고하며, RSI({rsi:.1f}) 또한 이상적입니다.\n"
+        comment += f"🚀 [Action] 강력 매수/보유 (Strong Buy). "
+        if is_v2_active: comment += f"V2 시스템이 {v2_stage} 상태입니다. "
+        comment += f"추세와 보조지표가 모두 상승을 가리킵니다.\n"
+        comment += "💡 수익을 극대화(Let profits run)하십시오."
         
-        if vol_ratio >= 1.5:
-             comment += f"특히 거래량이 평소의 {vol_ratio:.1f}배로 증가하며 상승 신뢰도를 높이고 있습니다. "
-        
-        comment += "💡 [전략] 수익을 극대화(Let profits run)하십시오. 섣부른 매도보다 추세 끝까지 동행하는 것이 유리합니다."
-        
-        if pivot_r1 > current_price and (pivot_r1 - current_price)/current_price < 0.01:
-            comment += f" 단, 1차 저항선({pivot_r1:.2f})이 머지 않았으니 돌파 여부를 주시하십시오."
-            
     elif score >= 60:
-        comment += f"✅ [핵심 분석] 상승 모멘텀이 살아있습니다. "
-        if breakdown['tech'] > 30: comment += "기술적 지표들이 매수 우위를 가리키고 있습니다. "
-        else: comment += "추세는 긍정적이나 과열권 진입을 경계해야 합니다. "
+        comment += f"✅ [Action] 매수 관점 (Buy). 상승 모멘텀이 유효합니다.\n"
         
-        comment += f"\n💡 [전략] 신규 진입/추가 매수가 가능한 구간입니다. 분할 매수로 접근하십시오."
-        if vol_ratio < 0.8:
-            comment += " 다만 거래량이 다소 부족하므로(평소 대비 감소), 공격적인 베팅보다는 눌림목을 확인하십시오."
+        tech_sum = breakdown.get('macd', 0) + breakdown.get('rsi', 0) + breakdown.get('vol', 0)
+        if tech_sum > 0: comment += "기술적 지표가 긍정적입니다. "
+        comment += f"💡 분할 매수로 접근하십시오."
+        if vol_ratio < 0.8: comment += " (단, 거래량 부족 주의)"
+        
     elif score >= 40:
-        comment += f"⏳ [핵심 분석] "
-        if is_v2_active: 
-            comment += f"현재 보유 중이나 위험 신호가 감지되었습니다(감점 -{breakdown['penalty']}점). "
-        else:
-            comment += f"신규 진입 근거가 약합니다. V2 신호가 켜질 때까지 기다리는 것이 좋습니다. "
-        comment += f"기술적 지표가 중립적입니다.\n"
-        comment += "💡 [전략] 현금 비중을 50% 이상 유지하며 다음 V2 신호를 기다리십시오."
-    else:
-        comment += f"⚠️ [핵심 분석] "
-        if is_v2_active:
-             comment += f"보유 포지션에 대한 청산 신호가 발생했을 수 있습니다! "
-        else:
-             comment += f"하락 추세가 지배적입니다. "
-        comment += f"(패널티 -{breakdown['penalty']}점). 리스크 관리가 최우선입니다.\n"
-        comment += "💡 [전략] 적극적인 비중 축소 또는 전량 청산을 권장합니다."
+        comment += f"⏳ [Action] 관망/중립 (Hold). "
+        if breakdown.get('penalty', 0) > 0: comment += f"패널티 요소(-{breakdown['penalty']})가 있어 진입을 보류합니다.\n"
+        else: comment += "뚜렷한 상승 신호가 부족합니다.\n"
+        comment += "💡 다음 V2 신호를 기다리십시오."
         
+    else: # Score < 40
+        comment += f"⚠️ [Action] 매도/리스크 관리 (Sell). "
+        comment += f"하락 우위 상태입니다.\n"
+        comment += "💡 현금 확보 및 포지션 축소를 권장합니다."
+        
+    # Resistance Check
+    if score >= 60 and pivot_r1 > current_price and (pivot_r1 - current_price)/current_price < 0.01:
+        comment += f"\n🚨 1차 저항선({pivot_r1:.2f}) 접근 중. 돌파 실패 시 단기 대응 필요."
+
     return comment
+
 
 def get_filtered_history_v2():
     # Fetch original history
@@ -2650,7 +2759,7 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
             print(f"Time Sync Error {t}: {e}")
             
     upro_chg = results["UPRO"].get("daily_change", 0)
-    regime = "Bull" if upro_chg >= 1.0 else ("Bear" if upro_chg <= -1.0 else "Neutral")
+    regime = "Bull" if upro_chg >= 1.0 else ("Bear" if upro_chg <= -1.5 else "Neutral")
     
     scores = {}
     guides = {}
@@ -2676,6 +2785,45 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
         # 3. Simple Tech Comment
         score_eval = score_model['evaluation'].split('(')[0].strip()
         tech_comments[t] = score_eval # Use Evaluation as summary
+        
+        # [NEW] Log Strategy & Indicators to DB (Consolidated)
+        try:
+             # Snapshot (Dashboard) + History (Backtest)
+             from db import save_market_snapshot, log_market_history
+             
+             new_metrics = results[t].get('new_metrics', {})
+             signals = new_metrics.get('signals', {})
+             
+             # Calculate V2 State
+             v2_state = 'WAIT'
+             if results[t].get('final'): v2_state = 'FINAL_MET'
+             elif results[t].get('step3'): v2_state = 'STEP3_MET'
+             elif results[t].get('step2'): v2_state = 'STEP2_MET'
+             elif results[t].get('step1'): v2_state = 'STEP1_MET'
+             
+             log_data = {
+                 'ticker': t,
+                 'candle_time': results[t].get('data_time'), 
+                 'rsi': new_metrics.get('rsi', 0),
+                 'vr': new_metrics.get('vol_ratio', 0),
+                 'atr': new_metrics.get('atr', 0),
+                 'pivot_r1': new_metrics.get('pivot_r1', 0),
+                 'macd': techs[t].get('macd', 0),
+                 'macd_sig': techs[t].get('macd_sig', 0),
+                 'gold_30m': signals.get('gold_30m', 'N') if signals else 'N',
+                 'gold_5m': signals.get('gold_5m', 'N') if signals else 'N',
+                 'dead_30m': signals.get('dead_30m', 'N') if signals else 'N',
+                 'dead_5m': signals.get('dead_5m', 'N') if signals else 'N',
+                 'score': score_model.get('score', 0),
+                 'evaluation': score_model.get('evaluation', ''),
+                 'comment': guides[t],
+                 'v2_state': v2_state
+             }
+             if t in ['SOXL', 'SOXS']: # Only log target tickers
+                 save_market_snapshot(log_data) # Update Dashboard immediately
+                 log_market_history(log_data)   # Archive for analysis
+        except Exception as e:
+             print(f"Log Strategy Error {t}: {e}")
         
     # Get Filtered History
     recent_history = get_filtered_history_v2()
@@ -2950,7 +3098,7 @@ def run_v2_signal_analysis():
                          updated_buy['buy_sig3_yn'] == 'Y' and
                          updated_buy['final_buy_yn'] == 'N'):
                          
-                         if save_v2_buy_signal(manage_id, 'final', curr_price):
+                         if save_v2_buy_signal(ticker, 'final', curr_price):
                              print(f"🚀 {ticker} V2 Buy Cycle FINALIZED! All Signals Met.")
                              log_history(manage_id, ticker, "최종진입완료", "Triple Filter Complete", curr_price)
                              send_sms(ticker, "최종매수(V2)", curr_price, get_current_time_str_sms(), "트리플필터완성")
@@ -2966,7 +3114,7 @@ def run_v2_signal_analysis():
                 manage_id = buy_record['manage_id']
                 # Assume entry price is final_buy_price or current price
                 entry_price = buy_record['final_buy_price'] if buy_record['final_buy_price'] else curr_price
-                if create_v2_sell_record(manage_id, ticker, entry_price):
+                if create_v2_sell_record(ticker, entry_price):
                      print(f"  ✨ Creating Sell Record for {ticker} (Buy Completed at {entry_price})")
                      sell_record = get_v2_sell_status(ticker) # Reload
 
@@ -2980,7 +3128,7 @@ def run_v2_signal_analysis():
                 # [FIX] Allow Catch-up for 5m DC
                 if (is_5m_dc or is_5m_trend_down):
                      if sell_record['sell_sig1_yn'] == 'N':
-                         if save_v2_sell_signal(manage_id, 'sig1', curr_price):
+                         if save_v2_sell_signal(ticker, 'sig1', curr_price):
                              msg_type = "5분봉 DC" if is_5m_dc else "5분봉 하락추세(Catch-up)"
                              print(f"📉 {ticker} V2 Sell Signal 1 (5m DC) Detected! ({msg_type})")
                              log_history(manage_id, ticker, "1차청산신호", msg_type, curr_price)
@@ -2993,7 +3141,7 @@ def run_v2_signal_analysis():
                         # So Reset is valid.
                          try:
                              from db import manual_update_signal
-                             manual_update_signal(manage_id, 'sell1', 0, 'N')
+                             manual_update_signal(ticker, 'sell1', 0, 'N')
                              print(f"📈 {ticker} Sell Signal 1 Reset (Condition Lost)")
                          except: pass
 
@@ -3015,7 +3163,7 @@ def run_v2_signal_analysis():
                             base_price = float(buy_record['final_buy_price']) if buy_record and buy_record.get('final_buy_price') else 0
                     
                     if base_price > 0 and curr_price < base_price:
-                         if save_v2_sell_signal(manage_id, 'sig2', curr_price):
+                         if save_v2_sell_signal(ticker, 'sig2', curr_price):
                              print(f"📉 {ticker} V2 Sell Signal 2 ({reason_msg}) Detected!")
                              log_history(manage_id, ticker, "2차청산신호", reason_msg, curr_price)
                              send_sms(ticker, "2차청산(손절/V2)", curr_price, get_current_time_str_sms(), reason_msg)
@@ -3028,7 +3176,7 @@ def run_v2_signal_analysis():
                 # [FIX] Allow Catch-up for 30m DC (Major Exit)
                 if (is_30m_dc or is_30m_trend_down):
                     if sell_record['sell_sig3_yn'] == 'N':
-                         if save_v2_sell_signal(manage_id, 'sig3', curr_price):
+                         if save_v2_sell_signal(ticker, 'sig3', curr_price):
                              msg_type = "30분봉 DC" if is_30m_dc else "30분봉 하락추세(Catch-up)"
                              print(f"📉 {ticker} V2 Sell Signal 3 (30m DC) Detected! ({msg_type})")
                              log_history(manage_id, ticker, "3차청산신호", msg_type, curr_price)
@@ -3038,13 +3186,13 @@ def run_v2_signal_analysis():
                     if sell_record['sell_sig3_yn'] == 'Y':
                          try:
                              from db import manual_update_signal
-                             manual_update_signal(manage_id, 'sell3', 0, 'N')
+                             manual_update_signal(ticker, 'sell3', 0, 'N')
                              print(f"📈 {ticker} Sell Signal 3 Reset (Condition Lost)")
                          except: pass
 
                 # Final Exit Logic (Sig 3 triggers Final)
                 if sell_record['sell_sig3_yn'] == 'Y' and sell_record['final_sell_yn'] == 'N':
-                     if save_v2_sell_signal(manage_id, 'final', curr_price):
+                     if save_v2_sell_signal(ticker, 'final', curr_price):
                          print(f"🏁 {ticker} V2 Sell Cycle FINALIZED (Trend Broken)")
                          log_history(manage_id, ticker, "최종청산완료", "30분봉 추세종료", curr_price)
                          send_sms(ticker, "최종청산(V2)", curr_price, get_current_time_str_sms(), "매매종료(추세끝)")
