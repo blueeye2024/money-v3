@@ -1475,7 +1475,7 @@ def run_analysis(holdings=None, force_update=False):
         "analysis_latency": f"{time.time() - start_total:.2f}s",
         "stocks": final_results,
         "holdings": holdings,
-        "indices": final_indicators,
+        "market": final_indicators, # [Ver 5.3 FIX] Renamed 'indices' to 'market' for Frontend
         "insight": insight_text,
         "strategy_list": clean_nan(strategy_list),
         "total_assets": clean_nan(total_assets),
@@ -1603,99 +1603,71 @@ def check_triple_filter(ticker, data_30m, data_5m):
         elif hasattr(data_5m, 'columns') and ticker in data_5m.columns: df5 = data_5m[ticker]
         elif hasattr(data_5m, 'columns'): df5 = data_5m # Support Single DF input
 
-        # Check for missing OR stale data (휴장일 대응)
-        data_is_stale = False
-        if df30 is not None and not df30.empty:
-            try:
-                latest_candle_time = df30.index[-1]
-                if latest_candle_time.tzinfo is None:
-                    latest_candle_time = latest_candle_time.replace(tzinfo=timezone.utc)
-                time_since_last_candle = datetime.now(timezone.utc) - latest_candle_time
-                # If last candle is older than 12 hours, consider it stale
-                if time_since_last_candle.total_seconds() > 172800:  # 48 hours (Include Weekend)
-                    data_is_stale = True
-            except:
-                pass
+        # [Ver 5.3 FIX] Partial Data Handling
+        # We NO LONGER return early if one DF is missing. We try to calculate what we can.
         
-        if df30 is None or df30.empty or df5 is None or df5.empty or data_is_stale:
-            # Even if stale, update price from DF if available (Better than fallback)
-            if df30 is not None and not df30.empty:
-                 result["current_price"] = float(df30['Close'].iloc[-1])
-            
-            # [FIX] If KIS Price is available, FORCE overwrite current_price (Daytime Trading Support)
-            if kis_price and kis_price > 0:
-                 result["current_price"] = kis_price
-                 print(f"DEBUG: Using KIS Price {kis_price} despite stale/missing DF data")
-                 
-                 # Attempt to patch DF if it exists (for indicator calc if needed later, though we return early)
+        # 1. Ensure Current Price is Valid (Priority: KIS > DF30)
+        price_source_valid = False
+        if kis_price and kis_price > 0:
+             result["current_price"] = kis_price
+             price_source_valid = True
+             if 'rate' in kis_data:
+                  result["daily_change"] = kis_data['rate']
+             
+             # Patch DFs for indicator accuracy if they exist
+             try:
                  if df30 is not None and not df30.empty:
+                      df30 = df30.copy()
                       df30.iloc[-1, df30.columns.get_loc('Close')] = kis_price
-                 
-                 # [FIX] Also update daily_change from KIS data (Rate)
-                 if 'rate' in kis_data:
-                      result["daily_change"] = kis_data['rate']
-                 
-            # Preserve state even if data fetch fails OR is stale (Holiday or Rate Limit)
-            if state.get("final_met"):
-                result["final"] = True
-                result["step1"] = True if state.get("step1_done_time") else False
-                result["step2"] = True if state.get("step2_done_time") else False
-                result["step3"] = True if state.get("step3_done_time") else False
-                result["signal_time"] = state.get("signal_time")
-                result["step2_color"] = state.get("step2_color")
-                result["step3_color"] = state.get("step3_color")
-                
-                # Restore Details
-                if state.get("step1_done_time"): result["step_details"]["step1"] = f"진입: {state['step1_done_time']}"
-                if state.get("step2_done_time"): result["step_details"]["step2"] = f"돌파: {state['step2_done_price']}$"
-                if state.get("step3_done_time"): result["step_details"]["step3"] = f"진입: {state['step3_done_time']}"
-            return result
+                 if df5 is not None and not df5.empty:
+                      df5 = df5.copy()
+                      df5.iloc[-1, df5.columns.get_loc('Close')] = kis_price
+             except: pass
+             
+        elif df30 is not None and not df30.empty:
+             result["current_price"] = float(df30['Close'].iloc[-1])
+             price_source_valid = True
 
+        # If we have NO price source at all, we might be in trouble, but let's try to proceed
+        # implicitly using defaults (False) for signals.
+        
         # Force Numeric and Sync KIS
         try:
-            df30 = df30.copy()
-            df5 = df5.copy()
-            df30['Close'] = pd.to_numeric(df30['Close'], errors='coerce').dropna()
-            df5['Close'] = pd.to_numeric(df5['Close'], errors='coerce').dropna()
-            if kis_price:
-                df30.iloc[-1, df30.columns.get_loc('Close')] = kis_price
-                df5.iloc[-1, df5.columns.get_loc('Close')] = kis_price
-                df5.iloc[-1, df5.columns.get_loc('Close')] = kis_price
+            if df30 is not None and not df30.empty:
+                df30 = df30.copy()
+                df30['Close'] = pd.to_numeric(df30['Close'], errors='coerce').dropna()
+            
+            if df5 is not None and not df5.empty:
+                df5 = df5.copy()
+                df5['Close'] = pd.to_numeric(df5['Close'], errors='coerce').dropna()
         except Exception as e:
-            print(f"TRIPLE FILTER ERROR ({ticker}): {e}")
-            return result
+            print(f"Data Prep Error ({ticker}): {e}")
 
-        current_price = float(df30['Close'].iloc[-1])
+        # [FIX] Ensure current_price is defined for later use
+        current_price = result.get("current_price", 0.0)
+        
+        # If still 0 and we have df data, try again (redundant but safe)
+        if current_price == 0 and df30 is not None and not df30.empty:
+             current_price = float(df30['Close'].iloc[-1])
+             result["current_price"] = current_price
         kst = pytz.timezone('Asia/Seoul')
         us_et = pytz.timezone('America/New_York')
         
-        # Try to get Chart Time (Signal Time) instead of Server Time
+        # Determine Signal Time (Chart Time)
         try:
-            # Prefer 5m candle time for precision, else 30m
+            chart_time = datetime.now(timezone.utc)
             if df5 is not None and not df5.empty:
                 chart_time = df5.index[-1]
             elif df30 is not None and not df30.empty:
                 chart_time = df30.index[-1]
-            else:
-                chart_time = datetime.now(timezone.utc)
             
-            # Ensure it's timezone aware
             if chart_time.tzinfo is None:
                 chart_time = chart_time.replace(tzinfo=timezone.utc)
             
-            # Convert to KST (Korean Time)
             chart_time_kst = chart_time.astimezone(kst)
-            
-            # Display in KST
-            signal_timestamp_str = chart_time_kst.strftime("%Y-%m-%d %H:%M:%S")
-            display_time_str = f"{chart_time_kst.strftime('%Y-%m-%d %H:%M')} (KST)"
-            
-            # Use this for State Update
-            now_time_str = display_time_str
-            now_utc = chart_time # raw datetime for DB
-            
-        except Exception as e:
-             # Fallback
+            now_time_str = f"{chart_time_kst.strftime('%Y-%m-%d %H:%M')} (KST)"
+            now_utc = chart_time
+        except:
              now_time_str = datetime.now(kst).strftime("%Y-%m-%d %H:%M (KST)")
              now_utc = datetime.now(timezone.utc)
 
