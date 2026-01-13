@@ -1878,46 +1878,7 @@ def get_v2_buy_status(ticker):
     finally:
         conn.close()
 
-def save_v2_buy_signal(manage_id, ticker, signal_type, price):
-    """매수 신호 단계별 업데이트 (1차, 2차, 3차)"""
-    # signal_type: 'sig1', 'sig2', 'sig3', 'final'
-    conn = get_connection()
-    try:
-        with conn.cursor() as cursor:
-            # 1. Check if record exists
-            cursor.execute("SELECT idx FROM buy_stock WHERE manage_id=%s", (manage_id,))
-            row = cursor.fetchone()
-            
-            if not row:
-                # Insert New (Manage ID should be created by Caller if new)
-                if signal_type == 'sig1':
-                    sql = """
-                        INSERT INTO buy_stock (manage_id, ticker, buy_sig1_yn, buy_sig1_price, buy_sig1_dt, row_dt)
-                        VALUES (%s, %s, 'Y', %s, NOW(), NOW())
-                    """
-                    cursor.execute(sql, (manage_id, ticker, price))
-                else:
-                    return False # Cannot start with sig2/3 without record (logic dependency)
-            else:
-                # Update Existing
-                if signal_type == 'sig1':
-                     sql = "UPDATE buy_stock SET buy_sig1_yn='Y', buy_sig1_price=%s, buy_sig1_dt=NOW(), row_dt=NOW() WHERE manage_id=%s"
-                elif signal_type == 'sig2':
-                     sql = "UPDATE buy_stock SET buy_sig2_yn='Y', buy_sig2_price=%s, buy_sig2_dt=NOW(), row_dt=NOW() WHERE manage_id=%s"
-                elif signal_type == 'sig3':
-                     sql = "UPDATE buy_stock SET buy_sig3_yn='Y', buy_sig3_price=%s, buy_sig3_dt=NOW(), row_dt=NOW() WHERE manage_id=%s"
-                elif signal_type == 'final':
-                     sql = "UPDATE buy_stock SET final_buy_yn='Y', final_buy_price=%s, final_buy_dt=NOW(), row_dt=NOW() WHERE manage_id=%s"
-                
-                cursor.execute(sql, (price, manage_id))
-                
-        conn.commit()
-        return True
-    except Exception as e:
-        print(f"Save Buy Signal Error: {e}")
-        return False
-    finally:
-        conn.close()
+
 
 def get_v2_sell_status(ticker):
     """현재 보유 중인 종목의 청산 상태 조회"""
@@ -1985,17 +1946,21 @@ def save_v2_buy_signal(ticker, signal_type, price, status='Y'):
                     return False # Cannot update non-existent record for later signals or if status is N
             
             # Row exists, check flags
+            # Row exists, check flags
             is_man_1, is_man_2, is_man_3 = row
+            print(f"DEBUG_PROTECT: Ticker={ticker}, Man1={is_man_1}, Man2={is_man_2}, Man3={is_man_3}")
             
             sql = ""
             if signal_type == 'sig1':
-                if is_man_1 == 'Y': return True # Manual Override (Skip Auto)
+                if str(is_man_1) == 'Y': 
+                    print(f"DEBUG_PROTECT: Skipping Sig1 Update for {ticker} (Manual)")
+                    return True # Manual Override (Skip Auto)
                 sql = "UPDATE buy_stock SET buy_sig1_yn=%s, buy_sig1_price=%s, buy_sig1_dt=NOW() WHERE ticker=%s"
             elif signal_type == 'sig2':
-                if is_man_2 == 'Y': return True
+                if str(is_man_2) == 'Y': return True
                 sql = "UPDATE buy_stock SET buy_sig2_yn=%s, buy_sig2_price=%s, buy_sig2_dt=NOW() WHERE ticker=%s"
             elif signal_type == 'sig3':
-                if is_man_3 == 'Y': return True
+                if str(is_man_3) == 'Y': return True
                 sql = "UPDATE buy_stock SET buy_sig3_yn=%s, buy_sig3_price=%s, buy_sig3_dt=NOW() WHERE ticker=%s"
             elif signal_type == 'final':
                 sql = "UPDATE buy_stock SET final_buy_yn=%s, final_buy_price=%s, final_buy_dt=NOW() WHERE ticker=%s"
@@ -2214,6 +2179,30 @@ def manual_update_signal(ticker, signal_key, price, status='Y'):
             
         table, col_yn, col_price, col_dt, col_manual = mapping[signal_key]
         
+        print(f"DEBUG_MANUAL: Key={signal_key}, Table={table}, Status={status}, Ticker={ticker}")
+
+        if status == 'SET_TARGET' and signal_key.startswith('sell'):
+            step_idx = int(signal_key[-1])
+            target_col = f"manual_target_sell{step_idx}"
+            
+            conn = get_connection()
+            try:
+                with conn.cursor() as cursor:
+                     # Check existence
+                     cursor.execute(f"SELECT 1 FROM {table} WHERE ticker=%s", (ticker,))
+                     if not cursor.fetchone():
+                         init_sql = f"INSERT INTO {table} (ticker, row_dt) VALUES (%s, NOW())"
+                         cursor.execute(init_sql, (ticker,))
+                     
+                     print(f"Updating Target: {target_col} = {price} for {ticker}")
+                     sql = f"UPDATE {table} SET {target_col}=%s WHERE ticker=%s"
+                     cursor.execute(sql, (price, ticker))
+                     conn.commit()
+                return True
+            finally:
+                conn.close()
+
+        
         # Determine Manual Flag: 'Y' if setting signal (status='Y'), 'N' if cancelling (status='N')
         # User wants: Manual Set -> Fixed ON (is_manual='Y')
         #             Manual Cancel -> Auto Mode (is_manual='N')
@@ -2257,14 +2246,21 @@ def manual_update_signal(ticker, signal_key, price, status='Y'):
                 cursor.execute(sql, (status, price, is_manual_val, ticker))
 
             
-            # [FIX] Clear Custom Targets when Resetting Signal 2
+            # [FIX] Clear Custom Targets when Resetting Signal (N)
             if status == 'N':
                 if signal_key == 'buy2':
                     clear_sql = "UPDATE buy_stock SET target_box_price = NULL WHERE ticker=%s"
                     cursor.execute(clear_sql, (ticker,))
                 elif signal_key == 'sell2':
-                    clear_sql = "UPDATE sell_stock SET target_stop_price = NULL WHERE ticker=%s"
+                    # Clear both old target_stop_price and new manual_target_sell2
+                    clear_sql = "UPDATE sell_stock SET target_stop_price = NULL, manual_target_sell2 = NULL WHERE ticker=%s"
                     cursor.execute(clear_sql, (ticker,))
+                
+                # [NEW] Clear Manual Sell Targets for Step 1 & 3
+                if signal_key == 'sell1':
+                    cursor.execute("UPDATE sell_stock SET manual_target_sell1 = NULL WHERE ticker=%s", (ticker,))
+                elif signal_key == 'sell3':
+                    cursor.execute("UPDATE sell_stock SET manual_target_sell3 = NULL WHERE ticker=%s", (ticker,))
 
             # Logic for final_buy only if status is 'Y'
             if status == 'Y' and signal_key == 'buy3':

@@ -3087,7 +3087,8 @@ def run_v2_signal_analysis():
                     kst_now = datetime.now(timezone.utc).astimezone(pytz.timezone('Asia/Seoul'))
                     manage_id = f"{ticker}_{kst_now.strftime('%Y%m%d')}"
                     
-                    if save_v2_buy_signal(manage_id, 'sig1', curr_price):
+                    # [FIX] V5.2 SigMatch: Use ticker only (Logic Unified)
+                    if save_v2_buy_signal(ticker, 'sig1', curr_price):
                         msg_type = "5분봉 GC" if is_5m_gc_cross else "5분봉 상승추세(Catch-up)"
                         print(f"🚀 {ticker} V2 Buy Signal 1 Detect! ({msg_type})")
                         log_history(manage_id, ticker, "1차매수신호", msg_type, curr_price)
@@ -3117,14 +3118,16 @@ def run_v2_signal_analysis():
                          is_sig2_met = is_sig2 
                 
                 if buy_record['buy_sig2_yn'] == 'N' and is_sig2_met:
-                    if save_v2_buy_signal(manage_id, 'sig2', curr_price):
+                    # [FIX] V5.2 SigMatch: Use ticker only
+                    if save_v2_buy_signal(ticker, 'sig2', curr_price):
                         print(f"🚀 {ticker} V2 Buy Signal 2 ({sig2_reason}) Detected!")
                         log_history(manage_id, ticker, "2차매수신호", sig2_reason, curr_price)
                         send_sms(ticker, "2차매수(박스권/V2)", curr_price, get_current_time_str_sms(), sig2_reason)
                         
                 # Check Sig 3
                 if buy_record['buy_sig3_yn'] == 'N' and (is_30m_gc or is_30m_trend_up):
-                     if save_v2_buy_signal(manage_id, 'sig3', curr_price):
+                     # [FIX] V5.2 SigMatch: Use ticker only
+                     if save_v2_buy_signal(ticker, 'sig3', curr_price):
                         msg_type = "30분봉 GC" if is_30m_gc else "30분봉 상승추세(Catch-up)"
                         print(f"🚀 {ticker} V2 Buy Signal 3 (30m GC/Trend) Detected! ({msg_type})")
                         log_history(manage_id, ticker, "3차매수신호", msg_type, curr_price)
@@ -3141,7 +3144,8 @@ def run_v2_signal_analysis():
                          updated_buy['buy_sig3_yn'] == 'Y' and
                          updated_buy['final_buy_yn'] == 'N'):
                          
-                         if save_v2_buy_signal(ticker, 'final', curr_price):
+                          # [FIX] V5.2 SigMatch: Use ticker only
+                          if save_v2_buy_signal(ticker, 'final', curr_price):
                              print(f"🚀 {ticker} V2 Buy Cycle FINALIZED! All Signals Met.")
                              log_history(manage_id, ticker, "최종진입완료", "Triple Filter Complete", curr_price)
                              send_sms(ticker, "최종매수(V2)", curr_price, get_current_time_str_sms(), "트리플필터완성")
@@ -3164,6 +3168,45 @@ def run_v2_signal_analysis():
             if sell_record:
                 manage_id = sell_record['manage_id']
                 
+                # [Ver 5.3 Feature] Check Manual Sell Targets
+                # (sell_record includes manual_target_sellX columns since we use SELECT *)
+                
+                # Check Target 1
+                tgt1 = float(sell_record.get('manual_target_sell1') or 0)
+                if sell_record['sell_sig1_yn'] == 'N' and tgt1 > 0:
+                    if curr_price <= tgt1:
+                        from db import manual_update_signal
+                        # Trigger Manual Signal ON
+                        manual_update_signal(ticker, 'sell1', curr_price, 'Y')
+                        print(f"🎯 {ticker} Sell Target 1 Met (${tgt1}) -> Signal ON")
+                        log_history(manage_id, ticker, "1차청산신호", f"지정가도달(${tgt1})", curr_price)
+                        send_sms(ticker, "1차청산(지정가)", curr_price, get_current_time_str_sms(), "목표가도달")
+                        # Reload record for next steps
+                        sell_record = get_v2_sell_status(ticker)
+
+                # Check Target 2
+                tgt2 = float(sell_record.get('manual_target_sell2') or 0)
+                if sell_record['sell_sig2_yn'] == 'N' and tgt2 > 0:
+                    if curr_price <= tgt2:
+                        from db import manual_update_signal
+                        manual_update_signal(ticker, 'sell2', curr_price, 'Y')
+                        print(f"🎯 {ticker} Sell Target 2 Met (${tgt2}) -> Signal ON")
+                        log_history(manage_id, ticker, "2차청산신호", f"지정가도달(${tgt2})", curr_price)
+                        send_sms(ticker, "2차청산(지정가)", curr_price, get_current_time_str_sms(), "목표가도달")
+                        sell_record = get_v2_sell_status(ticker)
+
+                # Check Target 3
+                tgt3 = float(sell_record.get('manual_target_sell3') or 0)
+                if sell_record['sell_sig3_yn'] == 'N' and tgt3 > 0:
+                    if curr_price <= tgt3:
+                        from db import manual_update_signal
+                        manual_update_signal(ticker, 'sell3', curr_price, 'Y')
+                        print(f"🎯 {ticker} Sell Target 3 Met (${tgt3}) -> Signal ON")
+                        log_history(manage_id, ticker, "3차청산신호", f"지정가도달(${tgt3})", curr_price)
+                        send_sms(ticker, "3차청산(지정가)", curr_price, get_current_time_str_sms(), "목표가도달")
+                        sell_record = get_v2_sell_status(ticker)
+
+                
                 # Sig 1: 5m DC
                 is_5m_dc = (prev_ma10_5 >= prev_ma30_5) and (ma10_5 < ma30_5)
                 is_5m_trend_down = (ma10_5 < ma30_5) # [NEW] Catch-up
@@ -3177,8 +3220,8 @@ def run_v2_signal_analysis():
                              log_history(manage_id, ticker, "1차청산신호", msg_type, curr_price)
                              send_sms(ticker, "1차청산(5분봉/V2)", curr_price, get_current_time_str_sms(), "단기조정/하락추세")
                 else:
-                    # [NEW] Auto-Reset Sell Signal 1
-                    if sell_record['sell_sig1_yn'] == 'Y':
+                    # [NEW] Auto-Reset Sell Signal 1 (Only if NOT Manual)
+                    if sell_record['sell_sig1_yn'] == 'Y' and sell_record.get('is_manual_sell1') != 'Y':
                         # If Signal 2 hasn't triggered yet, we can reset Sig 1?
                         # Even if Sig 2 triggered, if 5m trend recovers (Golden Cross), Signal 1 (Dead Cross) is invalid.
                         # So Reset is valid.
@@ -3225,8 +3268,8 @@ def run_v2_signal_analysis():
                              log_history(manage_id, ticker, "3차청산신호", msg_type, curr_price)
                              send_sms(ticker, "3차청산(30분봉/V2)", curr_price, get_current_time_str_sms(), "추세이탈/전량매도")
                 else:
-                    # [NEW] Auto-Reset Sell Signal 3
-                    if sell_record['sell_sig3_yn'] == 'Y':
+                    # [NEW] Auto-Reset Sell Signal 3 (Only if NOT Manual)
+                    if sell_record['sell_sig3_yn'] == 'Y' and sell_record.get('is_manual_sell3') != 'Y':
                          try:
                              from db import manual_update_signal
                              manual_update_signal(ticker, 'sell3', 0, 'N')

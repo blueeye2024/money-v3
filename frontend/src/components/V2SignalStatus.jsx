@@ -10,7 +10,8 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
     const isHolding = buyStatus?.final_buy_yn === 'Y';
     const isSellFinished = sellStatus?.final_sell_yn === 'Y';
 
-    const mode = (isHolding && !isSellFinished) ? 'SELL' : 'BUY';
+    // [FIX] While Holding, always show SELL mode (even if finished, show result)
+    const mode = isHolding ? 'SELL' : 'BUY';
     const activeData = mode === 'BUY' ? buyStatus : sellStatus;
 
     // Colors
@@ -18,7 +19,7 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
     const modeColor = mode === 'SELL' ? '#ef4444' : themeColor;
 
     // State for Modal
-    const [modal, setModal] = React.useState({ type: null, isOpen: false, key: null });
+    const [modal, setModal] = React.useState({ type: null, isOpen: false, key: null, isActive: false });
     const [formData, setFormData] = React.useState({ price: '', qty: '' });
     const [submitting, setSubmitting] = React.useState(false);
 
@@ -33,43 +34,36 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
         }
     }, [renderInfo]);
 
-    // Initial Load of Real Data if available
+    // Initial Load of Real Data or Manual Target
     React.useEffect(() => {
         if (modal.isOpen) {
-            // Pre-fill if editing existing Real Buy or Selling
-            if (modal.type === 'BUY' && buyStatus?.real_buy_yn === 'Y') {
-                setFormData({
-                    price: buyStatus.real_buy_price || current_price || '',
-                    qty: buyStatus.real_buy_qn || ''
-                });
-            } else if (modal.type === 'SELL') {
-                // Auto-fill quantity for Sell (Simplify UI)
-                setFormData({
-                    price: current_price || '',
-                    qty: buyStatus?.real_buy_qn || ''
-                });
-            } else {
-                setFormData({
-                    price: current_price || '',
-                    qty: ''
-                });
-            }
-        }
-    }, [modal.isOpen, current_price, buyStatus]);
+            let initialPrice = current_price || '';
+            let initialQty = '';
 
-    React.useEffect(() => {
-        if (modal.isOpen && modal.type === 'SET_TARGET') {
-            // Pre-fill target price if exists
-            let initialPrice = '';
-            if (activeData?.target_box_price && modal.key === 'buy_sig2_yn') initialPrice = activeData.target_box_price;
-            if (activeData?.target_stop_price && modal.key === 'sell_sig2_yn') initialPrice = activeData.target_stop_price;
+            // 1. If Manual Signal (Sell/Buy), check for existing Target
+            if (modal.type === 'MANUAL_SIGNAL') {
+                const stepIdx = modal.key?.slice(-1); // 'sell1' -> '1'
+                const targetKey = `manual_target_${modal.key?.startsWith('sell') ? 'sell' : 'buy'}${stepIdx}`;
+
+                // If a manual target is already saved, use it (Pre-fill)
+                if (activeData?.[targetKey] && activeData[targetKey] > 0) {
+                    initialPrice = activeData[targetKey];
+                }
+            }
+            // 2. Real Buy/Sell Logic
+            else if (modal.type === 'BUY' && buyStatus?.real_buy_yn === 'Y') {
+                initialPrice = buyStatus.real_buy_price || current_price || '';
+                initialQty = buyStatus.real_buy_qn || '';
+            } else if (modal.type === 'SELL') {
+                initialQty = buyStatus?.real_buy_qn || '';
+            }
 
             setFormData({
-                price: initialPrice || '',
-                qty: ''
+                price: initialPrice,
+                qty: initialQty
             });
         }
-    }, [modal.isOpen, modal.type, activeData]);
+    }, [modal.isOpen]); // [FIX] Remove current_price dependency to prevent live updates
 
     // --- Audio Alert Logic (Ver 3.9) ---
     const prevBuyRef = React.useRef(null);
@@ -193,7 +187,7 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
                 ticker: cleanTicker, // Send Clean Ticker
                 signal_key: modal.key,
                 price: parseFloat(formData.price),
-                status: 'Y'
+                status: modal.signalType === 'SELL' ? 'SET_TARGET' : 'Y'
             };
         } else if (modal.type === 'BUY' || modal.type === 'SELL') {
             // BUY requires qty input, SELL uses buy qty automatically
@@ -289,6 +283,7 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
     const handleDelete = async () => {
         // Extract ticker from title
         const ticker = title.split(' ')[0].toUpperCase();
+
         if (!ticker) return;
 
         // SweetAlert with options
@@ -396,6 +391,11 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
                     const priceKey = step.key.replace('_yn', '_price');
                     const signalPrice = data?.[priceKey];
 
+                    // [FIX] Define manualTarget for display
+                    const stepIdx = idx + 1;
+                    const targetKey = `manual_target_${stepType === 'SELL' ? 'sell' : 'buy'}${stepIdx}`;
+                    const manualTarget = data?.[targetKey] > 0 ? data[targetKey] : null;
+
                     // Ver 3.0 Signal Time Logic
                     let signalTimeDisplay = null;
                     if (step.key === 'buy_sig1_yn') signalTimeDisplay = signals.gold_5m; // 1차 매수 (5분 골든)
@@ -417,7 +417,9 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
                         <div key={idx} style={{ zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', flex: 1 }}>
                             <div
                                 onClick={() => {
-                                    setModal({ type: 'MANUAL_SIGNAL', isOpen: true, key: step.rawKey });
+                                    if (isActiveMode) {
+                                        setModal({ type: 'MANUAL_SIGNAL', signalType: stepType, isOpen: true, key: step.rawKey, isActive: isActive });
+                                    }
                                 }}
                                 style={{
                                     width: '40px', height: '40px', borderRadius: '50%',
@@ -426,9 +428,10 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                                     boxShadow: isActive ? `0 0 15px ${localModeColor}66` : 'none',
                                     transition: 'all 0.3s ease',
-                                    cursor: 'pointer'
+                                    cursor: isActiveMode ? 'pointer' : 'default', // Disable cursor if not active
+                                    opacity: isActiveMode ? 1 : 0.8
                                 }}
-                                title={isManual ? "사용자 수동 확정" : (signalTimeDisplay ? `신호 발생: ${signals.gold_5m || 'N/A'}` : "수동 신호 발생 (클릭)")}
+                                title={isActiveMode ? (isManual ? "사용자 수동 확정" : (signalTimeDisplay ? `신호 발생: ${signals.gold_5m || 'N/A'}` : "수동 신호 발생 (클릭)")) : "진입 신호 (수정 불가)"}
                             >
                                 <span style={{ fontSize: '1rem', color: isActive ? '#fff' : '#64748b', fontWeight: 'bold' }}>
                                     {isActive ? (isManual ? '🧑‍💻' : '✓') : idx + 1}
@@ -448,8 +451,12 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
                                             {isManual && <span style={{ fontSize: '0.6rem', color: '#38bdf8' }}>USER</span>}
                                         </div>
                                     ) : (
-                                        // Inactive: Show Description
-                                        signalTimeDisplay ? <span style={{ color: '#64748b' }}>({signalTimeDisplay})</span> : step.desc
+                                        // Inactive: Show Description or Manual Target
+                                        manualTarget ? (
+                                            <span style={{ color: '#fbbf24', fontWeight: 'bold', fontSize: '0.8rem' }}>🎯 ${Number(manualTarget).toFixed(2)}</span>
+                                        ) : (
+                                            signalTimeDisplay ? <span style={{ color: '#64748b' }}>({signalTimeDisplay})</span> : step.desc
+                                        )
                                     )}
                                 </div>
                             </div>
@@ -585,7 +592,9 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
                     }}>
                         <div style={{ background: '#1e293b', padding: '20px', borderRadius: '12px', width: '100%', maxWidth: '300px', border: '1px solid #334155' }}>
                             <h5 style={{ margin: '0 0 15px 0', color: '#fff', fontSize: '1.1rem' }}>
-                                {modal.type === 'MANUAL_SIGNAL' ? '수동 신호 발생' : (
+                                {modal.type === 'MANUAL_SIGNAL' ? (
+                                    modal.signalType === 'SELL' ? '매도 설정' : '진입 신호 발생 (매수)'
+                                ) : (
                                     modal.type === 'SET_TARGET' ? '2차 목표가 설정' : (
                                         modal.type === 'BUY' ? '실매수 확정' : '종결처리'
                                     )
@@ -652,13 +661,14 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
                                     </button>
                                 )}
 
-                                {/* Manual Signal Confirm Button (NEW) */}
-                                {modal.type === 'MANUAL_SIGNAL' && (
+                                {/* Manual Signal Confirm Button (Show only if NOT Active) */}
+                                {modal.type === 'MANUAL_SIGNAL' && !modal.isActive && (
                                     <button
+                                        type="button"
                                         onClick={() => handleConfirm(false)}
                                         style={{ padding: '12px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '0.9rem', cursor: 'pointer' }}
                                     >
-                                        신호 발생
+                                        {modal.signalType === 'SELL' ? '저장' : '신호 발생 (ON)'}
                                     </button>
                                 )}
 
@@ -672,13 +682,14 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
                                     </button>
                                 )}
 
-                                {/* Cancel Signal Button (Only Manual) */}
-                                {modal.type === 'MANUAL_SIGNAL' && (
+                                {/* Cancel Signal Button (Show only if Active) */}
+                                {modal.type === 'MANUAL_SIGNAL' && modal.isActive && (
                                     <button
+                                        type="button"
                                         onClick={handleCancelSignal} disabled={submitting}
-                                        style={{ padding: '10px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.8rem' }}
+                                        style={{ padding: '12px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.9rem' }}
                                     >
-                                        신호 취소
+                                        신호 취소 (OFF)
                                     </button>
                                 )}
 

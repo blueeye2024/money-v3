@@ -252,7 +252,7 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
 
         const interval = setInterval(fetchV2Status, delay);
         return () => clearInterval(interval);
-    }, [pollingMode, marketStatus]);
+    }, [pollingMode, marketStatus, lastUpdateTime]);
 
     const activeStocks = stocks && Array.isArray(stocks)
         ? [...stocks].sort((a, b) => (b.current_ratio || 0) - (a.current_ratio || 0))
