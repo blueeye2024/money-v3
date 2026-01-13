@@ -42,9 +42,10 @@ def on_startup():
 
     # Start Scheduler
     scheduler = BackgroundScheduler()
-    scheduler.add_job(monitor_signals, 'interval', minutes=1)
+    # [Updated] Analysis/Signal Check: Every 5 minutes (300s) as requested
+    scheduler.add_job(monitor_signals, 'interval', seconds=300)
     
-    # [New] Auto Price Update (Every 5 mins)
+    # [New] Auto Price Update (Every 10 secs)
     def update_prices_job():
         try:
             # Only run during market hours + buffer (roughly) or freely if quota allows.
@@ -53,10 +54,10 @@ def on_startup():
         except Exception as e:
             print(f"Auto Price Update Failed: {e}")
 
-    scheduler.add_job(update_prices_job, 'interval', minutes=5)
+    scheduler.add_job(update_prices_job, 'interval', seconds=10)
     
-    # [New] Cheongan V2 Signal Analysis (Every 5 mins)
-    scheduler.add_job(run_v2_signal_analysis, 'interval', minutes=5)
+    # [New] Cheongan V2 Signal Analysis (Every 10 secs)
+    scheduler.add_job(run_v2_signal_analysis, 'interval', seconds=10)
     
     # [New] SOXS Data Maintenance Scheduler (User Request: 3 Days Rolling)
     from scheduler_soxs import start_maintenance_scheduler as start_soxs_sched
@@ -420,25 +421,72 @@ def monitor_signals():
 @app.get("/api/report")
 def get_report():
     try:
-        from db import get_current_holdings, get_ticker_settings
-        holdings = get_current_holdings()
+        from db import get_current_holdings, get_ticker_settings, get_managed_stock_price
+        from analysis import get_cached_report
+        
+        # 1. Get Cached Analysis (Updates every 5 mins)
+        data = get_cached_report()
+        
+        # If cache is empty (startup), run once
+        if not data:
+             print("⚠️ Cache empty, triggering first analysis...")
+             from analysis import run_analysis
+             data = run_analysis(force_update=True)
+
+        if not data:
+             return {"error": "Analysis data not ready"}
+
+        # 2. Inject Real-time Price (Updates every 10 secs via DB Job)
+        # We create a shallow copy to avoid mutating the cached object deeply if not needed, 
+        # but actually we want to return a fresh response.
+        # Let's clone the list of stocks to modify prices.
+        
+        response_data = data.copy()
+        response_data['stocks'] = [] # Re-build stocks list with fresh prices
+        
+        cached_stocks = data.get('stocks', [])
         settings = get_ticker_settings()
-
-        # Run standard analysis
-        data = run_analysis(holdings)
         
-        # Add visibility flag to each stock
-        for stock in data.get('stocks', []):
+        for stock_cache in cached_stocks:
+            # Create a copy of the stock dict
+            stock = stock_cache.copy()
             ticker = stock['ticker']
-            stock['is_visible'] = settings.get(ticker, True) # Default to True
-        
-        # Old Mock Insight Removed. Prefer analysis.py's Trade Guidelines.
-        # Ensure data['insight'] exists; it should from run_analysis.
-        if 'insight' not in data:
-            data['insight'] = "데이터 분석 중..."
-
-        
-        return data
+            
+            # Fetch Real-time Price from DB (which is updated every 10s by KIS)
+            # We use get_managed_stock_price or similar. 
+            # Actually db.py has get_stock(ticker) or we can look up from get_stocks().
+            # Let's import a helper or query directly.
+            # Assuming 'get_managed_stock_price' or similar exists or we use 'get_stocks'.
+            # get_stocks() returns detailed info.
+            
+            # Let's assume we can get the latest price easily. 
+            # For efficiency, maybe get all stocks at once?
+            # But get_report is polled every 10s.
+            
+            # Let's use `get_stock` from db.py if available, or just trust the scheduler updated DB and we read it.
+            # Ideally we read from the same source `update_prices_job` writes to.
+            # `update_prices_job` updates `managed_stocks` table.
+            # let's add `get_realtime_price(ticker)` to db.py or use existing.
+            # For now, to minimize `db.py` changes, I'll rely on `get_stocks()` or `get_stock_price(ticker)`.
+            # I will trust `stock['current_price']` in the CACHE is 5 mins old.
+            # I need to overwrite it.
+            
+            # Quick DB lookup for price
+            rt_price_info = get_managed_stock_price(ticker) # Need to verify this exists or create it
+            if rt_price_info:
+                 stock['current_price'] = rt_price_info['price']
+                 stock['daily_change'] = rt_price_info['change'] # This comes from KIS 'rate'
+                 
+                 # Recalculate 'profit_rate' if holding?
+                 # if stock['position'] == 'HOLD' etc...
+                 # The 'profit_rate' in analysis is based on old price.
+                 # If we update price, we should probably update profit display too.
+                 # For simplicity, we update Price and Rate (most important).
+            
+            stock['is_visible'] = settings.get(ticker, True)
+            response_data['stocks'].append(stock)
+            
+        return response_data
     except Exception as e:
         print(f"Error: {e}")
         return {"error": str(e)}

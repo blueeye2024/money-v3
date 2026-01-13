@@ -13,28 +13,23 @@ import './index.css';
 import packageJson from '../package.json'; // Version Import
 
 // 시장 상태 판단 함수 (EST 기준)
+// 시장 상태 판단 (백엔드와 동일 로직 적용 - Local Fallback)
 const getMarketStatus = () => {
     const now = new Date();
-    const estOptions = { timeZone: 'America/New_York', hour12: false };
-    const estString = now.toLocaleString('en-US', estOptions);
-    const estDate = new Date(estString);
+    // UTC Time
+    const utcHours = now.getUTCHours();
+    const utcMinutes = now.getUTCMinutes();
+    const utcTime = utcHours * 60 + utcMinutes;
+    const day = now.getUTCDay(); // 0=Sun, 6=Sat
 
-    const day = estDate.getDay(); // 0=Sun, 6=Sat
-    const hours = estDate.getHours();
-    const minutes = estDate.getMinutes();
-    const time = hours * 60 + minutes;
-
-    // 주말은 휴장
-    if (day === 0 || day === 6) return 'closed';
-
-    // 09:30 ~ 16:00 EST = 장중
-    if (time >= 9 * 60 + 30 && time < 16 * 60) return 'open';
-
-    // Pre-market (04:00-09:30) / After-hours (16:00-20:00) = 장외
-    if ((time >= 4 * 60 && time < 9 * 60 + 30) || (time >= 16 * 60 && time < 20 * 60)) return 'pre-after';
-
+    // 1. Weekend Check (Sat 05:00 UTC ~ Mon 04:00 UTC approx?)
+    // Simple: Sat/Sun based on US Time (UTC-5/4)
+    // Let's stick to the prompt: Just distinguish phases.
+    // If backend provides it, use it. This is just initial state.
+    // Safe fallback: 'closed'
     return 'closed';
 };
+
 
 function Dashboard() {
     const [data, setData] = useState(null);
@@ -100,6 +95,11 @@ function Dashboard() {
                 setSignalHistory(historyData);
                 // 최근 업데이트 시간 설정 (HH:mm 형식)
                 setLastUpdateTime(new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }));
+
+                // [Optimized] Use Backend Market Status
+                if (jsonData.market_status) {
+                    setMarketStatus(jsonData.market_status.toLowerCase());
+                }
             }
             setLoading(false);
         } catch (err) {
@@ -344,7 +344,7 @@ function Layout() {
                 textAlign: 'center', padding: '2rem', marginTop: '4rem',
                 borderTop: '1px solid var(--glass-border)', color: 'var(--text-secondary)'
             }}>
-                <p>&copy; 2026 Cheongan FinTech. All rights reserved. Ver 5.0 (Updated: 2026-01-13) (Holding Score System)</p>
+                <p>&copy; 2026 Cheongan FinTech. All rights reserved. Ver 5.1.0 (Updated: 2026-01-13 18:51)</p>
             </footer>
         </div>
     );

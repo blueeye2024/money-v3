@@ -63,39 +63,55 @@ class KisApi:
         # If exchange is provided, try it first, then others if failed? 
         # Actually user logic in db.py passes exchange. KIS get_price tries specified list.
         # Let's ensure if exchange is passed, we ONLY try that? No, try others as fallback.
-        exchanges = [exchange] if exchange else ["NAS", "NYS", "AMS"]
-        if exchange and exchange in ["NAS", "NYS", "AMS"]:
-             # If specific exchange failed, maybe try others? 
-             # For now, trust the list.
-             # Add fallback to others if single exchange passed?
-             other_exchanges = [e for e in ["NAS", "NYS", "AMS"] if e != exchange]
-             exchanges.extend(other_exchanges)
+        if not exchange:
+            # Standard order + Daytime order
+            search_order = ["NAS", "NYS", "AMS", "BAQ", "BAY", "PAC", "BAA"]
+        else:
+            # If specific exchange requested, also check its daytime counterpart
+            daytime_map = {'NAS': 'BAQ', 'NYS': 'BAY', 'AMS': 'BAA'}
+            search_order = [exchange]
+            if exchange in daytime_map:
+                search_order.append(daytime_map[exchange])
+                
+        best_result = None
         
-        for excd in exchanges:
-            print(f"  KIS API: Checking {excd} for {symbol}...")
+        for excd in search_order:
+            # print(f"  KIS API: Checking {excd} for {symbol}...") # Reduced logging
             res = self._fetch_price_request(excd, symbol)
             
             if res and res.get('rt_cd') == '0':
                 out = res['output']
-                # If 'last' price is empty, it means this exchange has no data for this ticker. Try next.
-                if not out.get('last'):
-                    print(f"  KIS API: No price data in {excd} for {symbol}.")
-                    continue
+                if not out.get('last'): continue
                     
                 try:
-                    price = float(out['last']) if out.get('last') else 0.0
-                    print(f"  KIS API: Found {symbol} in {excd} @ ${price}")
-                    return {
+                    price = float(out['last'])
+                    if price <= 0: continue
+                    
+                    data = {
                         'price': price,
                         'diff': float(out['diff']) if out.get('diff') else 0.0,
                         'rate': float(out['rate']) if out.get('rate') else 0.0,
-                        'exchange': excd
+                        'exchange': excd,
+                        'tvol': float(out['tvol']) if out.get('tvol') else 0.0
                     }
+                    
+                    # [Logic] Prefer data with Volume (Active Market)
+                    # If we have no result, take this one.
+                    # If we have a result with 0 volume, and this one has volume, take this one.
+                    if best_result is None:
+                        best_result = data
+                    elif best_result['tvol'] == 0 and data['tvol'] > 0:
+                        # print(f"  KIS API: Switching to Active Market {excd} (Vol: {data['tvol']})")
+                        best_result = data
+                        
                 except (ValueError, TypeError):
                     continue
-            else:
-                 print(f"  KIS API: Error or No Data in {excd} for {symbol} (Code: {res.get('rt_cd')})")
             
+        if best_result:
+             # print(f"  KIS API: Returning {symbol} from {best_result['exchange']} @ ${best_result['price']}")
+             return best_result
+             
+        print(f"  KIS API: No valid price found for {symbol}")
         return None
 
     def _fetch_price_request(self, exchange, symbol):

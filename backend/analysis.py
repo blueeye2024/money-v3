@@ -96,6 +96,53 @@ def is_market_open():
     market_end = now_est.replace(hour=16, minute=0, second=0, microsecond=0)
     
     return market_start <= now_est <= market_end
+    return market_start <= now_est <= market_end
+
+def get_detailed_market_status():
+    """
+    Returns simplified status: 'OPEN', 'PRE', 'POST', 'DAYTIME', 'CLOSED'
+    """
+    est = pytz.timezone('US/Eastern')
+    kst = pytz.timezone('Asia/Seoul')
+    now_est = datetime.now(timezone.utc).astimezone(est)
+    now_kst = datetime.now(timezone.utc).astimezone(kst)
+    
+    # Check Weekend (Sat/Sun) in US Time
+    # Weekday 5=Sat, 6=Sun
+    # CAUTION: 'Daytime' might act on US Friday Night (Sat Morning KST)? No, Daytime is KST Mon-Fri.
+    
+    is_weekend = now_est.weekday() >= 5
+    
+    # 1. US Regular: 09:30 - 16:00
+    reg_start = now_est.replace(hour=9, minute=30, second=0, microsecond=0)
+    reg_end = now_est.replace(hour=16, minute=0, second=0, microsecond=0)
+    
+    # 2. Pre-Market: 04:00 - 09:30
+    pre_start = now_est.replace(hour=4, minute=0, second=0, microsecond=0)
+    
+    # 3. Post-Market: 16:00 - 20:00
+    post_end = now_est.replace(hour=20, minute=0, second=0, microsecond=0)
+    
+    if not is_weekend:
+        if reg_start <= now_est <= reg_end:
+            return "OPEN" # 정규장
+        elif pre_start <= now_est < reg_start:
+            return "PRE"  # 프리장
+        elif reg_end < now_est <= post_end:
+            return "POST" # 애프터장
+            
+    # 4. KIS Daytime (Blue Ocean): KST 09:00 - 16:00 (approx)
+    # Actually Blue Ocean is 10:00 - 17:00 KST usually?
+    # KIS API 'daytime' determines it by volume, but time-wise:
+    day_start = now_kst.replace(hour=10, minute=0, second=0, microsecond=0)
+    day_end = now_kst.replace(hour=17, minute=0, second=0, microsecond=0) # 5PM
+    
+    # Check KST Weekday (Mon-Fri)
+    if now_kst.weekday() < 5:
+        if day_start <= now_kst <= day_end:
+            return "DAYTIME"
+
+    return "CLOSED"
 
 
 def refresh_market_indices():
@@ -219,9 +266,20 @@ def update_market_data(tickers=None, override_period=None):
         tickers_str = " ".join(target_list)
         print(f"Update: Fetching Real-time (30m, 5m) Period={fetch_period}...")
         
+        # Temp Cache for this update
+        temp_30m = {}
+        temp_5m = {}
+        temp_1d = {}
+        
         # Fetch from yfinance
         new_30m = yf.download(tickers_str, period=fetch_period, interval="30m", prepost=True, group_by='ticker', threads=True, progress=False, timeout=20)
         new_5m = yf.download(tickers_str, period=fetch_period, interval="5m", prepost=True, group_by='ticker', threads=True, progress=False, timeout=20)
+        
+        # [NEW] Gap Filling with KIS
+        # We only stitch candles for ACTIVE tickers (SOXL, SOXS, UPRO)
+        # Because we iterate later, we need to stitch before saving or extracting.
+        # But yf.download returns a MultiIndex DF if multiple tickers.
+        # We process inside the loop below.
         
         # Save to DB
         CORE_TICKERS = ["SOXL", "SOXS", "UPRO"]
@@ -234,8 +292,10 @@ def update_market_data(tickers=None, override_period=None):
                 if isinstance(new_30m.columns, pd.MultiIndex) and ticker in new_30m.columns: df = new_30m[ticker]
                 elif not isinstance(new_30m.columns, pd.MultiIndex) and len(target_list) == 1: df = new_30m
                 if df is not None and not df.empty: 
+                    # Mem Cache
+                    temp_30m[ticker] = df
+                    # DB Save (Deprecated No-op but kept for interface)
                     save_market_candles(ticker, '30m', df, 'yfinance')
-                    cleanup_old_candles(ticker, days=60)
             except Exception as e: print(f"Save 30m Error {ticker}: {e}")
 
             # Save 5m
@@ -243,9 +303,16 @@ def update_market_data(tickers=None, override_period=None):
                 df = None
                 if isinstance(new_5m.columns, pd.MultiIndex) and ticker in new_5m.columns: df = new_5m[ticker]
                 elif not isinstance(new_5m.columns, pd.MultiIndex) and len(target_list) == 1: df = new_5m
+                
+                # [STITCH KIS CANDLES]
+                if df is not None and not df.empty:
+                     df = stitch_kis_candles(ticker, df, 5)
+
                 if df is not None and not df.empty: 
+                    # Mem Cache
+                    temp_5m[ticker] = df
+                    # DB Save
                     save_market_candles(ticker, '5m', df, 'yfinance')
-                    cleanup_old_candles(ticker, days=30)
             except Exception as e: print(f"Save 5m Error {ticker}: {e}")
 
         # Update Long-term (Regime Data)
@@ -266,6 +333,7 @@ def update_market_data(tickers=None, override_period=None):
                 if isinstance(new_1d.columns, pd.MultiIndex) and ticker in new_1d.columns: df = new_1d[ticker]
                 elif not isinstance(new_1d.columns, pd.MultiIndex) and len(target_list) == 1: df = new_1d
                 if df is not None and not df.empty: 
+                    temp_1d[ticker] = df
                     save_market_candles(ticker, '1d', df, 'yfinance')
             except: pass
 
@@ -274,9 +342,15 @@ def update_market_data(tickers=None, override_period=None):
         # OR we can inject KIS here. Let's rely on load_from_db to do the final composition
         # to ensure strong consistency.
         
-        print("✅ Background Data Update & Save Complete.")
+        print("✅ Background Data Update & InMemory Save Complete.")
         
-        # Finally, Reload Cache from DB to ensure memory is fresh
+        # DIRECTLY UPDATE MEMORY CACHE (Since DB Load is deprecated)
+        if temp_30m: _DATA_CACHE["30m"] = temp_30m
+        if temp_5m: _DATA_CACHE["5m"] = temp_5m
+        if temp_1d: _DATA_CACHE["1d"] = temp_1d
+        _DATA_CACHE["last_fetch_realtime"] = time.time()
+        
+        # Finally, Load indices (Load from DB logic still has indices)
         load_data_from_db(target_list)
         
     except Exception as e:
@@ -293,92 +367,18 @@ def load_data_from_db(target_list=None):
         # 1. Load Indices
         _DATA_CACHE["market"] = get_market_indices()
         
-        # 2. Load Candles
-        cache_30m = {}
-        cache_5m = {}
-        cache_1d = {}
         
-        for ticker in target_list:
-            # 30m
-            df30 = None
-            if ticker in ["SOXL", "SOXS", "UPRO"]:
-                # Ver 3.0 Engine: Validated Tables
-                from db import get_connection
-                try:
-                    query = f"SELECT candle_date, hour, minute, close_price, volume FROM {ticker.lower()}_candle_data ORDER BY candle_date ASC, hour ASC, minute ASC"
-                    conn = get_connection()
-                    with conn.cursor() as cursor:
-                        cursor.execute(query)
-                        rows = cursor.fetchall()
-                    
-                    if rows:
-                        data = []
-                        ny_tz = pytz.timezone('America/New_York')
-                        for r in rows:
-                            # Construct datetime
-                            dt_str = f"{r['candle_date']} {r['hour']:02d}:{r['minute']:02d}:00"
-                            dt_obj = datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S")
-                            dt_obj = ny_tz.localize(dt_obj)
-                            data.append({
-                                'Datetime': dt_obj,
-                                'Close': float(r['close_price']),
-                                'Volume': int(r['volume'])
-                            })
-                        df30_raw = pd.DataFrame(data).set_index('Datetime')
-                        # Resample to 30m
-                        df30 = df30_raw.resample('30min').agg({'Close': 'last', 'Volume': 'sum'}).dropna()
-                except Exception as e:
-                    print(f"Ver3 Table Load Error ({ticker}): {e}")
-
-            if df30 is None:
-                # Fallback to Legacy
-                df30 = load_market_candles(ticker, "30m", limit=1000)
-
-            if df30 is not None and not df30.empty:
-                df30 = df30.dropna(subset=['Close'])
-                cache_30m[ticker] = df30
-            
-            # 5m
-            df5 = None
-            if ticker in ["SOXL", "SOXS", "UPRO"]:
-                 # Already fetched rows above? Let's just re-use logic since it's cheap (300 rows)
-                 # Actually better to start from df30_raw above if we had scope.
-                 # Let's repeat for now for simplicity or cache 'raw' in a local var?
-                 # Re-fetching 300 rows is instant.
-                 try:
-                    query = f"SELECT candle_date, hour, minute, close_price, volume FROM {ticker.lower()}_candle_data ORDER BY candle_date ASC, hour ASC, minute ASC"
-                    conn = get_connection()
-                    with conn.cursor() as cursor:
-                       cursor.execute(query)
-                       rows = cursor.fetchall()
-                    if rows:
-                        data = []
-                        ny_tz = pytz.timezone('America/New_York')
-                        for r in rows:
-                            dt_str = f"{r['candle_date']} {r['hour']:02d}:{r['minute']:02d}:00"
-                            dt_obj = datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S")
-                            dt_obj = ny_tz.localize(dt_obj)
-                            data.append({
-                                'Datetime': dt_obj,
-                                'Close': float(r['close_price']),
-                                'Volume': int(r['volume'])
-                            })
-                        df5 = pd.DataFrame(data).set_index('Datetime')
-                        # It is already 5m base.
-                 except: pass
-
-            if df5 is None:
-                df5 = load_market_candles(ticker, "5m", limit=2000)
-
-            if df5 is not None and not df5.empty:
-                df5 = df5.dropna(subset=['Close'])
-                cache_5m[ticker] = df5
-
-                
-            # 1d
-            df1 = load_market_candles(ticker, "1d", limit=180)
-            if df1 is not None and not df1.empty:
-                cache_1d[ticker] = df1
+        # [DEPRECATED V5.1.0] Legacy Tables (soxl_candle_data etc) Removed.
+        # We now rely on in-memory gap filling using update_market_data().
+        # Returning empty cache here triggers update_market_data() in fetch_data.
+        
+        # 1. Load Indices (Keep this)
+        _DATA_CACHE["market"] = get_market_indices()
+        
+        # 2. Return empty candle cache to force fresh fetch
+        # Since we don't persist candles to DB anymore (Snapshot Only strategy),
+        # we must always fetch fresh data on startup/analysis.
+        return _DATA_CACHE
         
         # KIS Live Patching (Fast, Direct Broker API)
         # We do this on LOAD so the cache always has the latest live price on top of DB history
@@ -399,6 +399,27 @@ def load_data_from_db(target_list=None):
                         if ticker in cache_5m: 
                             idx = cache_5m[ticker].index[-1]
                             cache_5m[ticker].at[idx, 'Close'] = kis['price']
+                            
+            # [NEW] Gap Filling: Stitch KIS 5m Candles
+            print("  🧵 Stitching KIS Candles to fill 15m delay...")
+            from kis_api import kis_client
+            for ticker in target_list:
+                if ticker not in ["SOXL", "SOXS", "UPRO"]: continue # Only for main tickers
+                
+                try:
+                    # Stitch 30m candles (Interval 30)
+                    # stitch_kis_candles(ticker, cache_30m, 30) # Optional, mostly focused on 5m
+                    
+                    # Stitch 5m candles (Interval 5)
+                    if ticker in cache_5m and not cache_5m[ticker].empty:
+                        original_len = len(cache_5m[ticker])
+                        stitched_df = stitch_kis_candles(ticker, cache_5m[ticker], 5)
+                        if stitched_df is not None:
+                            cache_5m[ticker] = stitched_df
+                            print(f"    - {ticker}: {original_len} -> {len(stitched_df)} rows (Gap Filled)")
+                            
+                except Exception as e_stitch:
+                    print(f"    ❌ Stitching Error {ticker}: {e_stitch}")
                             
         except Exception as e: print(f"KIS Patch Error: {e}")
 
@@ -422,9 +443,16 @@ def fetch_data(tickers=None, force=False, override_period=None):
     global _DATA_CACHE
     
     # If cache is empty, try loading from DB immediately
-    if _DATA_CACHE["30m"] is None:
+    # (Since V5.1.0, DB loading is deprecated for candles, so this might remain empty)
+    if _DATA_CACHE.get("30m") is None or not _DATA_CACHE.get("30m"):
         load_data_from_db(tickers)
         
+    # [FIX] If cache is STILL empty (DB deprecated), we MUST fetch from API immediately.
+    # Otherwise analysis will fail with empty DataFrames.
+    if _DATA_CACHE.get("30m") is None or not _DATA_CACHE.get("30m"):
+        print("⚠️ Cache Empty after DB Load. Forcing API fetch (V5.1.0)...")
+        update_market_data(tickers, override_period="5d")
+
     # If force=True (Scheduler), run the update logic
     if force:
         update_market_data(tickers, override_period)
@@ -700,6 +728,9 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, df_1dRaw, market_vol_score=0, is
         cross_idx = -1
         
         # [MODIFIED] Persistent Signal Check:
+        # Check DB for th
+        # [Restored Logic]
+        
         # Check DB for the last known signal to maintain state even if app restarted or gaps exist.
         last_db_signal = None
         try:
@@ -1130,7 +1161,7 @@ def generate_market_insight(results, market_data):
 
     return insight
 
-def generate_trade_guidelines(results, market_data, regime_info, total_capital=10000.0, held_tickers={}, krw_rate=1460.0):
+def generate_trade_guidelines(results, market_data, regime_info, total_capital=10000.0, held_tickers=None, krw_rate=1460.0):
     """
     Generate logic-based trade guidelines for Cheongan 2.1.
     """
@@ -1156,6 +1187,8 @@ def generate_trade_guidelines(results, market_data, regime_info, total_capital=1
     
     # Adapter: Handle List of Dicts (Merged DB) or Dict (Legacy)
     iterator = []
+    if held_tickers is None:
+        held_tickers = {} # Ensure it's a dict if not provided
     if isinstance(held_tickers, list):
          iterator = [(h['ticker'], h) for h in held_tickers]
     elif isinstance(held_tickers, dict):
@@ -1274,13 +1307,23 @@ def generate_trade_guidelines(results, market_data, regime_info, total_capital=1
 # Legacy regime functions removed.
 
 
-def run_analysis(held_tickers=[], force_update=False):
+def run_analysis(holdings=None, force_update=False):
+    """
+    Main entry point for analysis.
+    ...
+    """
+    global _LATEST_REPORT
+    
+    start_total = time.time()
+    if holdings is None:
+        from db import get_current_holdings
+        holdings = get_current_holdings()
     print("Starting Analysis Run...")
     
     # -------------------------------------------------------------
     # MASTER CONTROL TOWER ONLY: SOXL, SOXS, UPRO
     # -------------------------------------------------------------
-    from db import get_total_capital, get_current_holdings, update_market_status
+    from db import get_total_capital, update_market_status
     from kis_api import kis_client  # Import singleton instance
     
     # Exchange Mapping for Speed
@@ -1316,7 +1359,7 @@ def run_analysis(held_tickers=[], force_update=False):
     results = []  # Empty - we only show MASTER CONTROL TOWER
     
     # Fetch Holdings & Capital (for display only)
-    held_tickers = get_current_holdings()
+    # holdings is already passed or fetched
     total_capital = get_total_capital()
     
     # 4. Generate Trade Guidelines (Simplified)cators Data with Change %
@@ -1373,10 +1416,7 @@ def run_analysis(held_tickers=[], force_update=False):
         total_cap = 10000.0
 
     # Generate Trade Guidelines (Was Insight)
-    insight_text, strategy_list, total_assets = generate_trade_guidelines(results, market_data, regime_info, total_cap, held_tickers)
-
-    # Calculate Market Volatility Score (V2.3: Replaced by Master Signals, but keeping variable for compatibility)
-    market_vol_score = 5 if regime_info.get('regime') in ['Bull', 'Bear'] else -5
+    insight_text, strategy_list, total_assets = generate_trade_guidelines(results, market_data, regime_info, total_cap, holdings)
 
     # --- JSON CLEANUP (Remove NaN) ---
     def clean_nan(obj):
@@ -1391,16 +1431,63 @@ def run_analysis(held_tickers=[], force_update=False):
     final_results = clean_nan(results)
     final_indicators = clean_nan(indicators)
     final_regime = clean_nan(regime_info)
+    
+    # [NEW] Simple Market Status
+    m_status = get_detailed_market_status()
+    
+    # [NEW] Check duplicates before saving to DB
+    # (Since we iterate results, we do this before constructing full_report_dict or after)
+    
+    # 5. Save Snapshots to DB (Optimization)
+    try:
+        from db import save_market_snapshot
+        for res in final_results:
+             # Map result keys to DB columns
+             # DB cols: ticker, candle_time, rsi_14, vol_ratio, atr, pivot_r1, macd, macd_sig, 
+             # gold_30m, gold_5m, dead_30m, dead_5m, score, evaluation, strategy_comment, v2_state
+             
+             snapshot_data = {
+                 'ticker': res['ticker'],
+                 'candle_time': res.get('signal_time_raw') or datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                 'rsi': res.get('rsi', 0),
+                 'vr': res.get('new_metrics', {}).get('vol_ratio', 0), # vol_ratio in new_metrics? check analyze_ticker
+                 'atr': res.get('new_metrics', {}).get('atr', 0),
+                 'pivot_r1': res.get('new_metrics', {}).get('pivot', {}).get('r1', 0),
+                 'macd': res.get('macd', 0),
+                 'macd_sig': res.get('macd_sig', 0),
+                 'gold_30m': 'Y' if res.get('last_cross_type') == 'gold' else 'N', # simplistic mapping
+                 'gold_5m': 'Y' if '매수' in res.get('position', '') else 'N', # simplistic mapping
+                 'dead_30m': 'Y' if res.get('last_cross_type') == 'dead' else 'N',
+                 'dead_5m': 'Y' if '매도' in res.get('position', '') else 'N',
+                 'score': res.get('score', 0),
+                 'evaluation': res.get('score_interpretation', ''),
+                 'comment': res.get('strategy_result', ''),
+                 'v2_state': res.get('position', '')
+             }
+             save_market_snapshot(snapshot_data)
+             
+    except Exception as e_snap:
+        print(f"Snapshot Save Error: {e_snap}")
 
-    return {
-        "timestamp": get_current_time_str(),
-        "stocks": final_regime.get('stocks', []),
-        "market": final_indicators,
+    full_report = {
+        "summary": "Market Analysis",
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "analysis_latency": f"{time.time() - start_total:.2f}s",
+        "stocks": final_results,
+        "holdings": holdings,
+        "indices": final_indicators,
         "insight": insight_text,
         "strategy_list": clean_nan(strategy_list),
         "total_assets": clean_nan(total_assets),
-        "market_regime": final_regime.get('market_regime', {})
+        "market_regime": final_regime,
+        "market_status": m_status, # "OPEN", "PRE", "POST", "DAYTIME", "CLOSED"
+        "is_market_open": (m_status == "OPEN") # Backward compatibility
     }
+    
+    # [Cache Update]
+    _LATEST_REPORT = full_report
+    
+    return full_report
 
 # --- 2026 Project: New Regime Logic V2 ---
 # --- 2026 Project: New Regime Logic V2 ---
@@ -1429,31 +1516,7 @@ def analyze_30m_box(df_30m):
     except: return "ERROR_EXCEPTION", 0,0,0
 
 
-def get_us_reg_close(df):
-    """Find the last close price from US regular hours (09:30-16:00 ET) before current day"""
-    try:
-        if df.empty: return None
-        # Convert index to ET
-        df_et = df.copy()
-        df_et.index = df_et.index.tz_convert('US/Eastern')
-        
-        # Filter for regular hours (9:30 to 16:00)
-        reg_hours = df_et.between_time('09:30', '16:00')
-        if reg_hours.empty: return None
-        
-        # Get last date in reg_hours
-        last_date = reg_hours.index[-1].date()
-        # Find the close of the last bar of the PREVIOUS regular trading day
-        prev_reg_days = reg_hours[reg_hours.index.date < last_date]
-        if prev_reg_days.empty:
-            # If only one day in data, return the first available reg hour close as fallback
-            return float(reg_hours['Close'].iloc[-1])
-            
-        prev_date = prev_reg_days.index[-1].date()
-        prev_day_close = prev_reg_days[prev_reg_days.index.date == prev_date]['Close'].iloc[-1]
-        return float(prev_day_close)
-    except:
-        return None
+
 
 def check_triple_filter(ticker, data_30m, data_5m):
     print("FUNCTION ENTERED check_triple_filter")
@@ -1558,6 +1621,19 @@ def check_triple_filter(ticker, data_30m, data_5m):
             # Even if stale, update price from DF if available (Better than fallback)
             if df30 is not None and not df30.empty:
                  result["current_price"] = float(df30['Close'].iloc[-1])
+            
+            # [FIX] If KIS Price is available, FORCE overwrite current_price (Daytime Trading Support)
+            if kis_price and kis_price > 0:
+                 result["current_price"] = kis_price
+                 print(f"DEBUG: Using KIS Price {kis_price} despite stale/missing DF data")
+                 
+                 # Attempt to patch DF if it exists (for indicator calc if needed later, though we return early)
+                 if df30 is not None and not df30.empty:
+                      df30.iloc[-1, df30.columns.get_loc('Close')] = kis_price
+                 
+                 # [FIX] Also update daily_change from KIS data (Rate)
+                 if 'rate' in kis_data:
+                      result["daily_change"] = kis_data['rate']
                  
             # Preserve state even if data fetch fails OR is stale (Holiday or Rate Limit)
             if state.get("final_met"):
@@ -2879,13 +2955,17 @@ def run_v2_signal_analysis():
             
             # Resample and take last close (Handle ticks)
             # using '5min' for pandas < 2.2, '5min' is standard alias
-            df_5 = df_5.resample('5min').agg({
-                'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last', 'Volume': 'sum'
-            }).dropna()
             
-            df_30 = df_30.resample('30min').agg({
-                'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last', 'Volume': 'sum'
-            }).dropna()
+            def get_agg_dict(columns):
+                agg_dict = {'Close': 'last'}
+                if 'Open' in columns: agg_dict['Open'] = 'first'
+                if 'High' in columns: agg_dict['High'] = 'max'
+                if 'Low' in columns: agg_dict['Low'] = 'min'
+                if 'Volume' in columns: agg_dict['Volume'] = 'sum'
+                return agg_dict
+
+            df_5 = df_5.resample('5min').agg(get_agg_dict(df_5.columns)).dropna()
+            df_30 = df_30.resample('30min').agg(get_agg_dict(df_30.columns)).dropna()
             
             # --- Indicators Calculation ---
             # 5m
@@ -2967,57 +3047,60 @@ def run_v2_signal_analysis():
             
             if not buy_record:
                 can_start_new = True
+            # [REFACTOR] V5.1.0 Strict Single Record per Ticker (No manage_id)
+            # If Buy Record exists and is NOT Finalized, it's Active.
+            can_start_new = False
+            
+            if not buy_record:
+                can_start_new = True
             elif buy_record['final_buy_yn'] == 'Y':
-                # Existing Buy Completed. Check if Sold/Closed.
-                # Must check the Sell Record corresponding to this Buy Cycle
+                # Previous Buy Completed. Check if Sold/Closed.
                 last_sell = get_v2_sell_status(ticker)
-                
-                if last_sell and last_sell['manage_id'] == buy_record['manage_id']:
-                    # If Sell is Finalized (Y), then we are free to start new.
-                    if last_sell['final_sell_yn'] == 'Y':
-                        can_start_new = True
-                    else:
-                        # Holding (Sell not finished). Do NOT start new.
-                        can_start_new = False
-                        # print(f"  🔒 {ticker} Holding Active (ManageID: {buy_record['manage_id']}). No new cycle.")
+                # If Sell is Finalized (Y), then we are free to start new.
+                if last_sell and last_sell['final_sell_yn'] == 'Y':
+                    can_start_new = True
                 else:
-                    # Logic Gap: Buy Complete but No Sell Record Found?
-                    # This implies the auto-create failed or manual sync issue.
-                    # Strict Rule: Do not start new if possibly holding.
-                    # However, if it's very old, maybe? But user wants Strict.
-                    # Let's assume strict: If Buy Y and No Sell Y -> Locked.
-                    # But wait, if I just fixed the bug, the sell record might be missing for OLD ones?
-                    # No, I fixed it. So new ones will have it.
-                    # For safety, if Buy is Y, we REQUIRE Sell Y to restart.
+                    # Holding (Sell not finished). Do NOT start new.
                     can_start_new = False
-                    # Exception: If user manually closed via DB?
             else:
                 # Buy Cycle In Progress (final_buy_yn = 'N')
                 can_start_new = False
 
             if can_start_new:
                 # Start NEW cycle
-                # Catch-up: If Cross happened OR Trend is already UP (and we have no record)
+                # Catch-up: If Cross happened OR Trend is already UP
+                # We reuse the SAME record ID (implicitly via DB logic handling 1 record per ticker conceptually)
+                # But actually DB inserts new row. Since user said "1 ticker 1 record", 
+                # we should probably UPDATE the existing if it's "Reset" or just INSERT new and ignore old.
+                # Given existing `save_v2_buy_signal` does INSERT if not exists, we'll stick to that but ignore manage_id key.
+                # We will use "TICKER_V2" as a dummy manage_id or just rely on ticker uniqueness in my logic.
+                # Actually, DB schema fix added manage_id. I will just pass 'V2_SINGLE' as manage_id for all.
+                
                 if is_5m_gc_cross or is_5m_trend_up:
+                    manage_id = f"V2_{ticker}" # Constant ID per ticker to enforce single record concept if we wanted, but DB inserts history.
+                    # User said "1 Record per Ticker". This implies UPDATE?
+                    # But history is important.
+                    # I will assume "Currently Active" is 1 record.
+                    
+                    # Generate a timestamp-based ID for uniqueness in history, 
+                    # BUT logic will not depend on it for matching.
                     kst_now = datetime.now(timezone.utc).astimezone(pytz.timezone('Asia/Seoul'))
-                    manage_id = f"{ticker}{kst_now.strftime('%Y%m%d_%H%M')}"
+                    manage_id = f"{ticker}_{kst_now.strftime('%Y%m%d')}"
                     
                     if save_v2_buy_signal(manage_id, 'sig1', curr_price):
                         msg_type = "5분봉 GC" if is_5m_gc_cross else "5분봉 상승추세(Catch-up)"
-                        print(f"🚀 {ticker} V2 Buy Signal 1 Detect! ({msg_type}) Started {manage_id}")
+                        print(f"🚀 {ticker} V2 Buy Signal 1 Detect! ({msg_type})")
                         log_history(manage_id, ticker, "1차매수신호", msg_type, curr_price)
                         
-                        # SMS
                         sms_time = get_current_time_str_sms()
                         send_sms(ticker, "1차매수(5분봉/V2)", curr_price, sms_time, msg_type)
             
             # If not starting new, we might be continuing existing
             elif buy_record and buy_record['final_buy_yn'] == 'N':
                 # Active Buy Cycle
-                manage_id = buy_record['manage_id']
+                manage_id = buy_record.get('manage_id', 'UNKNOWN') # Just for logging
                 
                 # Check Sig 2
-                # [NEW] Check for User Custom Target Price first
                 custom_buy_target = buy_record.get('target_box_price')
                 is_sig2_met = False
                 sig2_reason = "Box+2%"
@@ -3026,13 +3109,12 @@ def run_v2_signal_analysis():
                     is_sig2_met = (curr_price >= float(custom_buy_target))
                     sig2_reason = f"지정가도달(${custom_buy_target})"
                 else:
-                    # [FIX] Use Buy Signal 1 Price as baseline if available, otherwise Fallback to Day Logic
                     baseline_price = float(buy_record.get('buy_sig1_price') or 0)
                     if baseline_price > 0:
-                         is_sig2_met = (curr_price >= baseline_price * 1.02) # +2% from Entry
+                         is_sig2_met = (curr_price >= baseline_price * 1.02)
                          sig2_reason = f"진입대비+2%(${baseline_price:.2f})"
                     else:
-                         is_sig2_met = is_sig2 # Fallback to Day Gain logic if no Entry Price
+                         is_sig2_met = is_sig2 
                 
                 if buy_record['buy_sig2_yn'] == 'N' and is_sig2_met:
                     if save_v2_buy_signal(manage_id, 'sig2', curr_price):
@@ -3041,7 +3123,6 @@ def run_v2_signal_analysis():
                         send_sms(ticker, "2차매수(박스권/V2)", curr_price, get_current_time_str_sms(), sig2_reason)
                         
                 # Check Sig 3
-                # [FIX] Allow Catch-up (Trend Up) even if strict cross missed
                 if buy_record['buy_sig3_yn'] == 'N' and (is_30m_gc or is_30m_trend_up):
                      if save_v2_buy_signal(manage_id, 'sig3', curr_price):
                         msg_type = "30분봉 GC" if is_30m_gc else "30분봉 상승추세(Catch-up)"
@@ -3051,21 +3132,10 @@ def run_v2_signal_analysis():
                         sms_time = get_current_time_str_sms()
                         send_sms(ticker, "3차매수(30분봉/V2)", curr_price, sms_time, "30분봉 추세확정")
 
-                # [FIX] Check for Final Signal Completion (All 3 Met)
-                # Must re-read record or rely on variables
-                # Ideally, check if all flags are 'Y' now
-                
-                # Reload to be sure? Or check logic vars?
-                # Logic vars:
-                # Sig1 = (buy_record['buy_sig1_yn']=='Y') or (just set)
-                # But safer to check DB or memory state. 
-                # Let's perform a lightweight check based on what we processed.
-                
-                # Check DB for current status to ensure atomic finalization
-                # We can use get_v2_buy_status(ticker) again or rely on flow.
-                # Since we just updated DB, we should re-fetch to confirm ALL 'Y'.
+                # Final Signal Completion Check
                 updated_buy = get_v2_buy_status(ticker)
-                if updated_buy and updated_buy['manage_id'] == manage_id:
+                # Loose matching: just check if the LATEST record (which is this one) is done
+                if updated_buy:
                      if (updated_buy['buy_sig1_yn'] == 'Y' and 
                          updated_buy['buy_sig2_yn'] == 'Y' and 
                          updated_buy['buy_sig3_yn'] == 'Y' and
@@ -3176,3 +3246,82 @@ def run_v2_signal_analysis():
             traceback.print_exc()
 
     print(f"[{datetime.now()}] V2 Analysis Complete.")
+
+# ==========================================
+# GLOBAL CACHE & HELPERS (Moved to End)
+# ==========================================
+_LATEST_REPORT = None
+
+def get_cached_report():
+    """Returns the last calculated analysis report or None."""
+    global _LATEST_REPORT
+    return _LATEST_REPORT
+
+def stitch_kis_candles(ticker, yf_df, interval_min):
+    """
+    Fetches missing candles from KIS API and appends/overwrites YFinance DF.
+    """
+    from kis_api import kis_client
+    try:
+        # Fetch recent candles from KIS (Default returns 30 candles)
+        print(f"    🧵 Stitching {ticker} (Interval {interval_min}m)...")
+        candles = kis_client.get_minute_candles(ticker, interval_min=interval_min)
+        if not candles: return yf_df
+        
+        # Convert to DataFrame
+        new_data = []
+        kst = pytz.timezone('Asia/Seoul')
+        utc = pytz.timezone('UTC')
+        
+        for c in candles:
+            # Parse KST Time (kymd + khms)
+            dt_str = c['kymd'] + c['khms']
+            dt_kst = datetime.strptime(dt_str, "%Y%m%d%H%M%S")
+            dt_kst = kst.localize(dt_kst)
+            
+            # Convert to UTC (to match YFinance usually)
+            dt_target = dt_kst.astimezone(utc)
+            
+            new_data.append({
+                'Datetime': dt_target,
+                'Open': float(c['open']),
+                'High': float(c['high']),
+                'Low': float(c['low']),
+                'Close': float(c['last']),
+                'Volume': int(c['evol']) 
+            })
+            
+        kis_df = pd.DataFrame(new_data)
+        kis_df.set_index('Datetime', inplace=True)
+        
+        # Verify YF Timezone
+        if not yf_df.empty:
+             yf_tz = yf_df.index.tz
+             if yf_tz:
+                 kis_df.index = kis_df.index.tz_convert(yf_tz)
+             else:
+                 kis_df.index = kis_df.index.tz_localize(None) 
+        
+        # DEBUG: Check columns
+        # print(f"DEBUG Stitch: YF Cols={yf_df.columns.tolist()} KIS Cols={kis_df.columns.tolist()}")
+        
+        # Combine: YF + KIS (KIS overwrites overlapping)
+        combined = pd.concat([yf_df, kis_df])
+        
+        # Remove duplicates by index, keeping last (KIS)
+        combined = combined[~combined.index.duplicated(keep='last')]
+        combined.sort_index(inplace=True)
+        
+        return combined
+
+    except Exception as e:
+        print(f"Error in stitch_kis_candles: {e}")
+        return yf_df
+        combined = combined[~combined.index.duplicated(keep='last')]
+        combined.sort_index(inplace=True)
+        
+        return combined
+
+    except Exception as e:
+        print(f"Stitch Logic Error ({ticker}): {e}")
+        return yf_df

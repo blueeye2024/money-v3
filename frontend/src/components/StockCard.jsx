@@ -55,10 +55,10 @@ const StockCard = ({ data }) => {
                 <div style={{ textAlign: 'right' }}>
                     <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>${current_price ? current_price.toFixed(2) : '0.00'}</div>
                     <div style={{
-                        color: change_pct >= 0 ? 'var(--accent-green)' : 'var(--accent-red)',
+                        color: change_pct > 0 ? 'var(--accent-red)' : change_pct < 0 ? 'var(--accent-blue)' : 'var(--text-secondary)',
                         fontSize: '0.9rem'
                     }}>
-                        {change_pct >= 0 ? '+' : ''}{change_pct ? change_pct.toFixed(2) : '0.00'}%
+                        {change_pct > 0 ? '+' : ''}{change_pct ? change_pct.toFixed(2) : '0.00'}%
                     </div>
                 </div>
             </div>

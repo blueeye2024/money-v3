@@ -1410,64 +1410,16 @@ def save_candle_data(ticker, timeframe, candles_df):
     if candles_df is None or candles_df.empty:
         return
     
-    try:
-        with get_connection() as conn:
-            with conn.cursor() as cursor:
-                # Take last 100 candles to limit DB size
-                recent = candles_df.tail(100)
-                
-                for idx, row in recent.iterrows():
-                    sql = """
-                    INSERT INTO candle_data (ticker, timeframe, candle_time, open, high, low, close, volume)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                    ON DUPLICATE KEY UPDATE
-                        open = VALUES(open),
-                        high = VALUES(high),
-                        low = VALUES(low),
-                        close = VALUES(close),
-                        volume = VALUES(volume),
-                        updated_at = CURRENT_TIMESTAMP
-                    """
-                    cursor.execute(sql, (
-                        ticker, timeframe,
-                        idx.to_pydatetime().replace(microsecond=0),
-                        float(row['Open']),
-                        float(row['High']),
-                        float(row['Low']),
-                        float(row['Close']),
-                        int(row['Volume']) if 'Volume' in row else 0
-                    ))
-            conn.commit()
-    except Exception as e:
-        print(f"Save Candle Data Error ({ticker}/{timeframe}): {e}")
+    # [DEPRECATED] No longer saving raw candle data to DB (Ver 5.1.0+)
+    # Gap Filling + Memory Analysis is now used.
+    return
 
 def get_candle_data(ticker, timeframe, limit=100):
     """
     Retrieve cached candle data from DB
     Returns pandas DataFrame with DatetimeIndex
     """
-    import pandas as pd
-    try:
-        with get_connection() as conn:
-            with conn.cursor() as cursor:
-                sql = """
-                SELECT candle_time, open, high, low, close, volume
-                FROM candle_data
-                WHERE ticker=%s AND timeframe=%s
-                ORDER BY candle_time DESC
-                LIMIT %s
-                """
-                cursor.execute(sql, (ticker, timeframe, limit))
-                rows = cursor.fetchall()
-                
-                if rows:
-                    df = pd.DataFrame(rows)
-                    df['candle_time'] = pd.to_datetime(df['candle_time'])
-                    df = df.set_index('candle_time').sort_index()
-                    df.columns = ['Open', 'High', 'Low', 'Close', 'Volume']
-                    return df
-    except Exception as e:
-        print(f"Get Candle Data Error ({ticker}/{timeframe}): {e}")
+    # [DEPRECATED] Ver 5.1.0
     return None
 
 # --- New DB-Centric Data Management (market_candles) ---
@@ -1482,118 +1434,27 @@ def get_last_candle_time(ticker, timeframe):
                 row = cursor.fetchone()
                 return row['last_time'] if row and row['last_time'] else None
     except Exception as e:
-        print(f"Error getting last candle time: {e}")
+        # print(f"Error getting last candle time: {e}")
         return None
 
 def save_market_candles(ticker, timeframe, df, source='yfinance'):
     """Save DataFrame to market_candles table (Upsert)"""
     import pandas as pd
+    import pandas as pd
     if df is None or df.empty: return False
     
-    try:
-        with get_connection() as conn:
-            data = []
-            for idx, row in df.iterrows():
-                if 'Open' not in row: continue
-                # Handle potential timezone aware index
-                ts = idx.to_pydatetime() if hasattr(idx, 'to_pydatetime') else idx
-                if hasattr(ts, 'tzinfo') and ts.tzinfo:
-                   # Convert to naive or UTC? DB is usually naive datetime.
-                   # Assuming KST or UTC consistent. Let's strip tz or ensure it's correct.
-                   ts = ts.replace(tzinfo=None)
-                
-                # CRITICAL: Normalize 1d candles to 00:00:00 for date-only comparison
-                if timeframe == '1d':
-                    ts = ts.replace(hour=0, minute=0, second=0, microsecond=0)
-
-                vol = row.get('Volume', 0)
-                if pd.isna(vol): vol = 0
-                
-                # Helper to handle NaN for MySQL
-                def clean_val(v):
-                    return None if pd.isna(v) else float(v)
-
-                data.append((
-                    ticker, timeframe, ts,
-                    clean_val(row['Open']), clean_val(row['High']), 
-                    clean_val(row['Low']), clean_val(row['Close']),
-                    int(vol), source
-                ))
-                
-            if not data: return False
-            
-            with conn.cursor() as cursor:
-                sql = """
-                    INSERT INTO market_candles (ticker, timeframe, candle_time, open_price, high_price, low_price, close_price, volume, source)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    ON DUPLICATE KEY UPDATE
-                        open_price=VALUES(open_price), high_price=VALUES(high_price),
-                        low_price=VALUES(low_price), close_price=VALUES(close_price),
-                        volume=VALUES(volume), source=VALUES(source)
-                """
-                cursor.executemany(sql, data)
-            conn.commit()
-            return True
-    except Exception as e:
-        print(f"Error saving market candles ({ticker}): {e}")
-        return False
+    # [DEPRECATED] Ver 5.1.0
+    return True
 
 def load_market_candles(ticker, timeframe, limit=300):
     """Load candles from DB as DataFrame"""
-    import pandas as pd
-    try:
-        with get_connection() as conn:
-            with conn.cursor() as cursor:
-                # Fetch limited DESC then sort ASC for latest N candles
-                sql = f"""
-                    SELECT * FROM (
-                        SELECT candle_time, open_price as Open, high_price as High, 
-                               low_price as Low, close_price as Close, volume as Volume
-                        FROM market_candles 
-                        WHERE ticker=%s AND timeframe=%s 
-                        ORDER BY candle_time DESC LIMIT {limit}
-                    ) sub ORDER BY candle_time ASC
-                """
-                
-                cursor.execute(sql, (ticker, timeframe))
-                rows = cursor.fetchall()
-                
-                if not rows: return None
-                
-                df = pd.DataFrame(rows)
-                df['candle_time'] = pd.to_datetime(df['candle_time'])
-                df.set_index('candle_time', inplace=True)
-                
-                # IMPORTANT: Data Integrity Fix
-                # Fill missing values (None from DB) with interpolation
-                # This prevents analysis logic from failing due to empty cells
-                cols = ['Open', 'High', 'Low', 'Close', 'Volume']
-                for c in cols:
-                    if c in df.columns:
-                        df[c] = pd.to_numeric(df[c], errors='coerce')
-                
-                df = df.interpolate(method='time', limit_direction='both')
-                if df.isnull().values.any():
-                    df = df.ffill().bfill() # Fallback for edge cases
-                
-                return df
-            
-    except Exception as e:
-        print(f"Error loading market candles: {e}")
-        return None
+    # [DEPRECATED] Ver 5.1.0
+    return None
 
 def cleanup_old_candles(ticker, days=30):
     """Delete candles older than N days (Default 30)"""
-    try:
-        with get_connection() as conn:
-            with conn.cursor() as cursor:
-                sql = "DELETE FROM market_candles WHERE ticker=%s AND candle_time < DATE_SUB(NOW(), INTERVAL %s DAY)"
-                cursor.execute(sql, (ticker, days))
-            conn.commit()
-            return True
-    except Exception as e:
-        print(f"Error cleaning up old candles ({ticker}): {e}")
-        return False
+    # [DEPRECATED] Ver 5.1.0
+    return True
 
 # --- System Auto-Trading Log (Simulation) ---
 def init_system_trade_table():
@@ -1798,14 +1659,14 @@ def update_stock_prices():
                                     source = "YF(Ext)"
                                 else:
                                     source = "YF(Fast)" # Fallback to last close
-                                
-                                if last_price > 0:
+                                    
+                                if last_price and last_price > 0:
                                     current_price = last_price
-                                    is_market_open = True # Assume open if we got data? Or derived path.
-                            except Exception as ey:
-                                print(f"  ❌ YF Fallback Failed: {ey}")
+                            except Exception as e:
+                                # print(f"  ❌ YF Failed: {e}")
+                                pass
                         
-                        if current_price > 0:
+                        if current_price and current_price > 0:
                             # 현재가 업데이트
                             update_sql = """
                                 UPDATE managed_stocks 
@@ -1933,6 +1794,29 @@ def check_open_trade(ticker):
             sql = "SELECT * FROM trade_history WHERE ticker=%s AND status='OPEN' LIMIT 1"
             cursor.execute(sql, (ticker,))
             return cursor.fetchone()
+    finally:
+        conn.close()
+
+def get_managed_stock_price(ticker):
+    """
+    Get current price and change from managed_stocks table.
+    Returns: {'price': float, 'change': float} or None
+    """
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            sql = "SELECT current_price, daily_change FROM managed_stocks WHERE ticker=%s"
+            cursor.execute(sql, (ticker,))
+            row = cursor.fetchone()
+            if row:
+                return {
+                    'price': float(row['current_price']) if row['current_price'] else 0.0,
+                    'change': float(row['daily_change']) if row['daily_change'] else 0.0
+                }
+            return None
+    except Exception as e:
+        print(f"Error getting managed stock price ({ticker}): {e}")
+        return None
     finally:
         conn.close()
 

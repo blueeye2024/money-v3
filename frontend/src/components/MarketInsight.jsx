@@ -110,7 +110,7 @@ const ManualTestPanel = ({ onRefresh, marketData, v2Status }) => {
     // 현재 값 가져오기 Helper
     const getCurrent = (ticker, type) => {
         if (type === 'price' || type === 'change') {
-            if (!marketData) return '';
+            if (!marketData || !Array.isArray(marketData)) return '';
             const item = marketData.find(m => m.ticker === ticker);
             if (!item) return '';
             return type === 'price' ? item.current_price : item.change_pct;
@@ -237,9 +237,22 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
         };
 
         fetchV2Status();
-        const interval = setInterval(fetchV2Status, 5000); // 5초마다 (DB에서 가져오므로 부하 최소)
+        fetchV2Status();
+
+        // Polling Logic
+        let delay = 10000; // Default 10s
+        if (pollingMode === 'off') {
+            delay = null;
+        } else if (pollingMode === 'auto' && marketStatus === 'closed') {
+            delay = 60000; // Slow down to 60s when closed
+        }
+        // 'on' mode or 'auto' + open/pre-after/day-market uses default 10s
+
+        if (!delay) return;
+
+        const interval = setInterval(fetchV2Status, delay);
         return () => clearInterval(interval);
-    }, []);
+    }, [pollingMode, marketStatus]);
 
     const activeStocks = stocks && Array.isArray(stocks)
         ? [...stocks].sort((a, b) => (b.current_ratio || 0) - (a.current_ratio || 0))
@@ -310,10 +323,15 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
 
                         {/* 2. 시장 상태 (장중/휴장) */}
                         <span style={{
-                            color: marketStatus === 'open' ? '#4ade80' : marketStatus === 'pre-after' ? '#facc15' : '#f87171',
+                            color: marketStatus === 'open' ? '#4ade80' :
+                                (marketStatus === 'pre' || marketStatus === 'post' || marketStatus === 'pre-after') ? '#facc15' :
+                                    (marketStatus === 'daytime' || marketStatus === 'day-market') ? '#38bdf8' : '#f87171',
                             fontWeight: 'bold', fontSize: '0.9rem'
                         }}>
-                            {marketStatus === 'open' ? '장중' : marketStatus === 'pre-after' ? '장외' : '휴장'}
+                            {marketStatus === 'open' ? '🇺🇸 정규장 (Regular)' :
+                                (marketStatus === 'pre' || marketStatus === 'pre-after') ? '🌅 프리마켓 (Pre)' :
+                                    marketStatus === 'post' ? '🌙 애프터마켓 (Post)' :
+                                        (marketStatus === 'daytime' || marketStatus === 'day-market') ? '☀️ 주간거래 (Daytime)' : '🌑 휴장 (Closed)'}
                         </span>
 
                         {/* 3. 폴링 모드 (자동/수동ON/수동OFF) - Orange/Blue Colors */}
@@ -342,7 +360,8 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                 {/* Insight Comment Box with VIX Alert */}
                 {(() => {
                     // Get VIX from market indices
-                    const vixData = market?.indices?.find(m => m.ticker === 'VIX');
+                    const indices = Array.isArray(market?.indices) ? market.indices : [];
+                    const vixData = indices.find(m => m.ticker === 'VIX');
                     const vixValue = vixData ? Number(vixData.current_price || vixData.price) : null;
 
                     // VIX Level Classification

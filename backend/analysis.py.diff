@@ -1,0 +1,44 @@
+--- backend/analysis.py	(original)
++++ backend/analysis.py	(modified)
+@@ -1628,47 +1628,29 @@
+         # Filter 1: 30m Trend (SMA 10 > 30) - 골든크로스
+         sma10_30 = 0.0
+         sma30_30 = 0.0
++        filter1_met = False
++        
+         if df30 is not None and len(df30) > 0:
+             try:
+-                # Calculate SMA
+-                s10 = calculate_sma(df30['Close'], 10)
+-                s30 = calculate_sma(df30['Close'], 30)
++                # [CRITICAL FIX] Ensure column is numeric Float64 for Numba/Pandas-TA
++                # Mixed types (Decimal/Object) cause calculate_sma failure
++                if df30['Close'].dtype == 'object':
++                     df30['Close'] = pd.to_numeric(df30['Close'], errors='coerce')
+                 
+-                # Get last valid value
++                # Calculate SMA (Using internal wrapper or direct TA)
++                # Assuming calculate_sma is robust, but explicit TA is safer
++                import pandas_ta as ta
++                s10 = ta.sma(df30['Close'], length=10)
++                s30 = ta.sma(df30['Close'], length=30)
++                
+                 if not s10.empty and not s30.empty:
+                     sma10_30 = float(s10.iloc[-1])
+                     sma30_30 = float(s30.iloc[-1])
++                    
++                    # Logic
++                    filter1_met = (sma10_30 > sma30_30)
+             except Exception as e_sma:
+-                print(f"SMA Calc Error: {e_sma}")
+-
+-        # Strict Comparison
+-        filter1_met = (sma10_30 > sma30_30) and (sma10_30 > 0)
+-        
+-        # [DEBUG LOG]
+-        print(f"DEBUG STEP 1 ({ticker}): MA10={sma10_30:.4f}, MA30={sma30_30:.4f} -> Met? {filter1_met}")
++                print(f"SMA Calc Error ({ticker}): {e_sma}")
++        
+         # Filter 2: Daily Change (Breakout) - +2% 이상 상승
+         filter2_met = False
+         prev_close = None

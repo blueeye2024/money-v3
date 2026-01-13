@@ -22,6 +22,17 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
     const [formData, setFormData] = React.useState({ price: '', qty: '' });
     const [submitting, setSubmitting] = React.useState(false);
 
+    // [Ver 5.0] Transient Icon Update State
+    const [isUpdating, setIsUpdating] = React.useState(false);
+
+    React.useEffect(() => {
+        if (renderInfo) {
+            setIsUpdating(true);
+            const timer = setTimeout(() => setIsUpdating(false), 2000);
+            return () => clearTimeout(timer);
+        }
+    }, [renderInfo]);
+
     // Initial Load of Real Data if available
     React.useEffect(() => {
         if (modal.isOpen) {
@@ -468,7 +479,6 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
                     {current_price && (
                         <div style={{ marginTop: '8px', display: 'flex', alignItems: 'baseline', gap: '8px' }}>
                             <span style={{ fontSize: '1.2rem', fontWeight: '900', color: '#fff', letterSpacing: '-0.5px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                <span style={{ color: '#fbbf24', fontSize: '1rem', animation: 'pulse 1s infinite' }}>⚡</span>
                                 ${Number(current_price).toFixed(2)}
                             </span>
                             {displayChange != null && (
@@ -478,6 +488,9 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
                                 }}>
                                     ({displayChange >= 0 ? '+' : ''}{Number(displayChange).toFixed(2)}%)
                                 </span>
+                            )}
+                            {isUpdating && (
+                                <span style={{ color: '#fbbf24', fontSize: '1rem', animation: 'pulse 0.5s infinite' }}>⚡</span>
                             )}
                         </div>
                     )}
