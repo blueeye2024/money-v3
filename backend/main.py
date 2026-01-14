@@ -63,8 +63,20 @@ def on_startup():
     from scheduler_soxs import start_maintenance_scheduler as start_soxs_sched
     start_soxs_sched()
 
+    # [Ver 5.3.1] Pre-emptive Token Refresh (Every 10 mins)
+    # Prevent Rate Limit Loops by refreshing token 30 mins before expiry
+    def token_maintenance_job():
+        from kis_api import kis_client
+        try:
+             kis_client.ensure_fresh_token(buffer_minutes=30)
+        except Exception as e:
+             print(f"Token Maintenance Error: {e}")
+             
+    scheduler.add_job(token_maintenance_job, 'interval', minutes=10)
+
     scheduler.start()
-    print("✅ Scheduler Started: Monitor(1m), PriceUpdate(5m), SOXS_Maintenance(5m)")
+    print("✅ Scheduler Started: Monitor(1m), PriceUpdate(5m), Token(10m)")
+
 
 
 # ... (API endpoints)

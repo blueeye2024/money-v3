@@ -2,7 +2,8 @@ import requests
 import json
 import time
 import os
-from datetime import datetime
+import fcntl
+from datetime import datetime, timedelta
 
 class KisApi:
     def __init__(self):
@@ -10,44 +11,99 @@ class KisApi:
         self.APP_SECRET = "KSgC+E/xD+fvGhquv0DLXXKXf9jD4c4jOLZLWuLCp004H+vx9RSQbcPR3CGO0Ox3SHhCykiaDgmjYM0grzH2/j9rnVUGa9GqylNLEFxBq9dYtGhCe01pZ4hGqn4j/U5raqWkQBYWwtzT3Hy/VOZ8eKWooJgbyH5gGygZuUifV7uVnYfMPec="
         self.URL_BASE = "https://openapi.koreainvestment.com:9443"
         self.token_file = "kis_token.json"
+        
+        # Initial Load
         self.access_token = self._load_token()
 
     def _load_token(self):
         """Load token from file or request new one"""
+        token = self._read_token_from_file()
+        if token:
+            return token
+        return self._issue_token()
+
+    def _read_token_from_file(self, buffer_sec=60):
+        """Pure file read with expiry check"""
         if os.path.exists(self.token_file):
             try:
                 with open(self.token_file, 'r') as f:
                     data = json.load(f)
-                    # Check expiry (giving 1 min buffer)
-                    if datetime.strptime(data['expiry'], "%Y-%m-%d %H:%M:%S").timestamp() > time.time() + 60:
+                    # Check expiry
+                    expiry_dt = datetime.strptime(data['expiry'], "%Y-%m-%d %H:%M:%S")
+                    if expiry_dt.timestamp() > time.time() + buffer_sec:
                         return data['access_token']
             except:
                 pass
-        return self._issue_token()
+        return None
+
+    def ensure_fresh_token(self, buffer_minutes=30):
+        """Called by Scheduler: Refresh if expiring soon (< 30 min)"""
+        token = self._read_token_from_file(buffer_sec=buffer_minutes * 60)
+        if not token:
+            print(f"🔄 Token expiring soon or missing. Pre-emptive refresh...")
+            self.access_token = self._issue_token()
 
     def _issue_token(self):
-        headers = {"content-type": "application/json"}
-        body = {
-            "grant_type": "client_credentials",
-            "appkey": self.APP_KEY,
-            "appsecret": self.APP_SECRET
-        }
-        try:
-            res = requests.post(f"{self.URL_BASE}/oauth2/tokenP", headers=headers, data=json.dumps(body), timeout=5)
-            if res.status_code == 200:
-                data = res.json()
-                token = data['access_token']
-                expiry = data['access_token_token_expired'] # Format: 2022-08-30 18:00:00
+        lock_path = self.token_file + ".lock"
+        
+        with open(lock_path, 'w') as lock_file:
+            try:
+                # 1. Acquire Exclusive Lock (Blocking)
+                # This queues up other processes/threads so only ONE does the API call
+                fcntl.flock(lock_file, fcntl.LOCK_EX)
                 
-                with open(self.token_file, 'w') as f:
-                    json.dump({'access_token': token, 'expiry': expiry}, f)
-                return token
-            else:
-                print(f"Token Issue Failed: {res.text}")
-                return None
-        except Exception as e:
-            print(f"Token Issue Exception: {e}")
-            return None
+                # 2. Double-Check Strategy
+                # Someone else might have refreshed it while we were waiting for lock
+                existing = self._read_token_from_file(buffer_sec=60)
+                if existing:
+                    # print("  Token already refreshed by another process. Skipping.")
+                    return existing
+
+                # 3. Request New Token
+                headers = {"content-type": "application/json"}
+                body = {
+                    "grant_type": "client_credentials",
+                    "appkey": self.APP_KEY,
+                    "appsecret": self.APP_SECRET
+                }
+                
+                # Retry logic for Rate Limit
+                max_retries = 2
+                for attempt in range(max_retries):
+                    try:
+                        res = requests.post(f"{self.URL_BASE}/oauth2/tokenP", headers=headers, data=json.dumps(body), timeout=5)
+                        
+                        if res.status_code == 200:
+                            data = res.json()
+                            token = data['access_token']
+                            expiry = data['access_token_token_expired']
+                            
+                            with open(self.token_file, 'w') as f:
+                                json.dump({'access_token': token, 'expiry': expiry}, f)
+                            
+                            print(f"✅ Token Issued Successfully (Expires: {expiry})")
+                            return token
+                            
+                        elif "EGW00133" in res.text: # Rate Limit Error
+                            if attempt < max_retries - 1:
+                                print(f"⚠️ Rate Limit Hit (EGW00133). Sleeping 65s before retry... ({attempt+1}/{max_retries})")
+                                time.sleep(65) # Force clear 1-minute limit
+                                continue
+                            else:
+                                print(f"❌ Token Issue Failed after retries: {res.text}")
+                                return None
+                        else:
+                            print(f"❌ Token Issue Failed: {res.text}")
+                            return None
+                            
+                    except Exception as e:
+                        print(f"Token Issue Exception: {e}")
+                        return None
+                        
+            finally:
+                # Release Lock
+                fcntl.flock(lock_file, fcntl.LOCK_UN)
+        return None
 
     def get_price(self, symbol, exchange=None):
         """
