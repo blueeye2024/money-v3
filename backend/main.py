@@ -40,42 +40,54 @@ def on_startup():
     SMS_ENABLED = get_global_config("sms_enabled", True)
     print(f"Startup: SMS Enabled = {SMS_ENABLED}")
 
-    # Start Scheduler
-    scheduler = BackgroundScheduler()
-    # [Updated] Analysis/Signal Check: Every 5 minutes (300s) as requested
-    scheduler.add_job(monitor_signals, 'interval', seconds=300)
+    # Start Scheduler (Singleton Lock)
+    import fcntl
+    import os
     
-    # [New] Auto Price Update (Every 10 secs)
-    def update_prices_job():
-        try:
-            # Only run during market hours + buffer (roughly) or freely if quota allows.
-            # For now, run unconditionally as requested.
-            update_stock_prices()
-        except Exception as e:
-            print(f"Auto Price Update Failed: {e}")
+    lock_file = open("scheduler.lock", "w")
+    try:
+        # Try to lock. If fails, another worker has it.
+        fcntl.lockf(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        
+        print("🔒 Acquired Scheduler Lock. Starting Background Jobs...")
+        scheduler = BackgroundScheduler()
+        # [Updated] Analysis/Signal Check: Every 1 minute (60s) for faster feedback
+        scheduler.add_job(monitor_signals, 'interval', seconds=60)
+        
+        # [New] Auto Price Update (Every 10 secs)
+        def update_prices_job():
+            try:
+                # Only run during market hours + buffer (roughly) or freely if quota allows.
+                # For now, run unconditionally as requested.
+                update_stock_prices()
+            except Exception as e:
+                print(f"Auto Price Update Failed: {e}")
 
-    scheduler.add_job(update_prices_job, 'interval', seconds=10)
-    
-    # [New] Cheongan V2 Signal Analysis (Every 10 secs)
-    scheduler.add_job(run_v2_signal_analysis, 'interval', seconds=10)
-    
-    # [New] SOXS Data Maintenance Scheduler (User Request: 3 Days Rolling)
-    from scheduler_soxs import start_maintenance_scheduler as start_soxs_sched
-    start_soxs_sched()
+        scheduler.add_job(update_prices_job, 'interval', seconds=10)
+        
+        # [New] Cheongan V2 Signal Analysis (Every 10 secs)
+        scheduler.add_job(run_v2_signal_analysis, 'interval', seconds=10)
+        
+        # [New] SOXS Data Maintenance Scheduler (User Request: 3 Days Rolling)
+        from scheduler_soxs import start_maintenance_scheduler as start_soxs_sched
+        start_soxs_sched()
 
-    # [Ver 5.3.1] Pre-emptive Token Refresh (Every 10 mins)
-    # Prevent Rate Limit Loops by refreshing token 30 mins before expiry
-    def token_maintenance_job():
-        from kis_api import kis_client
-        try:
-             kis_client.ensure_fresh_token(buffer_minutes=30)
-        except Exception as e:
-             print(f"Token Maintenance Error: {e}")
-             
-    scheduler.add_job(token_maintenance_job, 'interval', minutes=10)
+        # [Ver 5.3.1] Pre-emptive Token Refresh (Every 10 mins)
+        # Prevent Rate Limit Loops by refreshing token 30 mins before expiry
+        def token_maintenance_job():
+            from kis_api import kis_client
+            try:
+                 kis_client.ensure_fresh_token(buffer_minutes=30)
+            except Exception as e:
+                 print(f"Token Maintenance Error: {e}")
+                 
+        scheduler.add_job(token_maintenance_job, 'interval', minutes=10)
 
-    scheduler.start()
-    print("✅ Scheduler Started: Monitor(1m), PriceUpdate(5m), Token(10m)")
+        scheduler.start()
+        print("✅ Scheduler Started: Monitor(1m), PriceUpdate(5m), Token(10m)")
+        
+    except IOError:
+        print("⚠️ Scheduler Lock Failed (Already running in another worker). Skipping Scheduler.")
 
 
 
@@ -150,21 +162,19 @@ def update_prices_job():
     try:
         print(f"[{datetime.now()}] 종목 현재가 업데이트 시작...")
         update_stock_prices()
-        
+    except Exception as e:
+        print(f"현재가 업데이트 작업 오류: {e}")
+
+    try:
         # [MODIFIED] Periodic Deep Fetch (Backfill)
         # Every hour, ensure we have full month history in DB to prevent gaps
         if datetime.now().minute == 0:
              print("🕒 Hourly Deep Fetch Triggered (Backfill Data)")
              from analysis import fetch_data
-             fetch_data(force=True) # force=True inside fetch_data treats as realtime, but we need deeper?
-             # Actually, let's create a separate scheduled job for deep fetch or modify fetch_data logic.
-             # Ideally fetch_data(force=True) updates "5d". 
-             # Let's trust "Incremental Data Fetch" in fetch_data covers gaps if we call it frequently.
-             # But user wants "DB에 모든 데이터". Let's run a dedicated backfill occasionally.
-             pass
-
+             fetch_data(force=True)
+             # pass was previously here doing nothing useful
     except Exception as e:
-        print(f"현재가 업데이트 작업 오류: {e}")
+        print(f"Hourly Backfill Error: {e}")
 
 def data_backfill_job():
     """주기적으로 과거 데이터(1개월)를 다시 가져와 DB 구멍을 메꾸는 작업"""
@@ -631,6 +641,36 @@ def api_delete_sms_log(id: int):
     if delete_sms_log(id):
         return {"status": "success"}
     return {"status": "error"}
+
+# [Ver 5.4] Manual Price Level Alerts API
+class AlertLevelUpdate(BaseModel):
+    ticker: str
+    level_type: str
+    stage: int
+    price: float
+    is_active: str
+
+@app.get("/api/v2/alerts/{ticker}")
+async def get_alerts(ticker: str):
+    from db import get_price_levels
+    levels = get_price_levels(ticker)
+    return {"status": "success", "data": levels}
+
+@app.post("/api/v2/alerts/update")
+async def update_alert(item: AlertLevelUpdate):
+    from db import update_price_level
+    res = update_price_level(item.ticker, item.level_type, item.stage, item.price, item.is_active)
+    if res:
+        return {"status": "success"}
+    return {"status": "error", "message": "Update failed"}
+
+@app.post("/api/v2/alerts/reset")
+async def reset_alert(item: AlertLevelUpdate):
+    from db import reset_price_level_trigger
+    res = reset_price_level_trigger(item.ticker, item.level_type, item.stage)
+    if res:
+        return {"status": "success"}
+    return {"status": "error", "message": "Reset failed"}
 
 # --- Stock APIs ---
 class StockModel(BaseModel):
@@ -1419,5 +1459,5 @@ def get_strategy_perf(strategy_id: int):
     return perf
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8080, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=9100, reload=True)
 

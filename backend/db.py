@@ -1805,13 +1805,13 @@ def get_managed_stock_price(ticker):
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
-            sql = "SELECT current_price, daily_change FROM managed_stocks WHERE ticker=%s"
+            sql = "SELECT current_price FROM managed_stocks WHERE ticker=%s"
             cursor.execute(sql, (ticker,))
             row = cursor.fetchone()
             if row:
                 return {
                     'price': float(row['current_price']) if row['current_price'] else 0.0,
-                    'change': float(row['daily_change']) if row['daily_change'] else 0.0
+                    'change': 0.0
                 }
             return None
     except Exception as e:
@@ -2079,7 +2079,15 @@ def confirm_v2_buy(ticker, price, qty):
                 SET real_buy_yn = 'Y', 
                     real_buy_price = %s, 
                     real_buy_qn = %s,
-                    real_buy_dt = NOW()
+                    real_buy_dt = NOW(),
+                    /* [Ver 5.3 Force Entry] Force all signals to Y if manually confirmed */
+                    final_buy_yn = 'Y',
+                    buy_sig1_yn = 'Y',
+                    buy_sig2_yn = 'Y',
+                    buy_sig3_yn = 'Y',
+                    is_manual_buy1 = 'Y',
+                    is_manual_buy2 = 'Y',
+                    is_manual_buy3 = 'Y'
                 WHERE ticker = %s
             """
             cursor.execute(sql, (price, qty, ticker))
@@ -2605,3 +2613,93 @@ from db_asset_strategy import (
 )
 
 
+# [Ver 5.4] Manual Price Level Alerts
+def get_price_levels(ticker):
+    """Fetch all manual price levels for a ticker"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            sql = "SELECT * FROM manual_price_levels WHERE ticker=%s ORDER BY level_type, stage"
+            cursor.execute(sql, (ticker,))
+            return cursor.fetchall()  # List of dicts
+    except Exception as e:
+        print(f"Get Price Levels Error: {e}")
+        return []
+    finally:
+        conn.close()
+
+def update_price_level(ticker, level_type, stage, price, is_active):
+    """Update a specific price level"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            sql = """
+                INSERT INTO manual_price_levels (ticker, level_type, stage, price, is_active, triggered, updated_at)
+                VALUES (%s, %s, %s, %s, %s, 'N', NOW())
+                ON DUPLICATE KEY UPDATE
+                    price=VALUES(price),
+                    is_active=VALUES(is_active),
+                    triggered='N',
+                    updated_at=NOW()
+            """
+            cursor.execute(sql, (ticker, level_type, stage, price, is_active))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Update Price Level Error: {e}")
+        return False
+    finally:
+        conn.close()
+
+def set_price_level_triggered(ticker, level_type, stage):
+    """Mark a level as triggered"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            sql = """
+                UPDATE manual_price_levels 
+                SET triggered='Y', triggered_at=NOW()
+                WHERE ticker=%s AND level_type=%s AND stage=%s
+            """
+            cursor.execute(sql, (ticker, level_type, stage))
+        conn.commit()
+    except Exception as e:
+        print(f"Set Triggered Error: {e}")
+    finally:
+        conn.close()
+
+def reset_price_level_trigger(ticker, level_type, stage):
+    """Reset trigger status (Re-arm)"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            sql = """
+                UPDATE manual_price_levels 
+                SET triggered='N', updated_at=NOW()
+                WHERE ticker=%s AND level_type=%s AND stage=%s
+            """
+            cursor.execute(sql, (ticker, level_type, stage))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Reset Trigger Error: {e}")
+        return False
+    finally:
+        conn.close()
+
+# [Ver 5.5] Manual Target Update Helper
+def update_manual_target(ticker, target_type, price):
+    """Update manual sell target (e.g. sell2) for a ticker"""
+    conn = get_connection()
+    try:
+        col_name = f"manual_target_{target_type}" # manual_target_sell2
+        with conn.cursor() as cursor:
+            sql = f"UPDATE sell_stock SET {col_name}=%s, updated_at=NOW() WHERE ticker=%s"
+            cursor.execute(sql, (price, ticker))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Update Manual Target Error: {e}")
+        return False
+    finally:
+        conn.close()

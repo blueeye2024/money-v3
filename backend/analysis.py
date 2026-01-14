@@ -1349,14 +1349,17 @@ def run_analysis(holdings=None, force_update=False):
     data_30m, data_5m, data_1d, market_data, regime_daily_data = fetch_data(active_tickers, force=force_update)
     
     # 2. Determine Market Regime (V2.3 Master Signal)
-    regime_info = determine_market_regime_v2(regime_daily_data, data_30m, data_5m)
-    
+    regime_output = determine_market_regime_v2(regime_daily_data, data_30m, data_5m)
+    regime_info = regime_output.get('market_regime', {})
     
     # Calculate Market Volatility Score (V2.3: Replaced by Master Signals, but keeping variable for compatibility)
     market_vol_score = 5 if regime_info.get('regime') in ['Bull', 'Bear'] else -5
     
     # 3. No individual stock analysis - MASTER CONTROL TOWER only
-    results = []  # Empty - we only show MASTER CONTROL TOWER
+    results = regime_output.get('stocks', [])
+    print(f"DEBUG: run_analysis results count: {len(results)}")
+    if len(results) > 0:
+         print(f"DEBUG: result tickers: {[r.get('ticker') for r in results]}")
     
     # Fetch Holdings & Capital (for display only)
     # holdings is already passed or fetched
@@ -1519,595 +1522,141 @@ def analyze_30m_box(df_30m):
 
 
 def check_triple_filter(ticker, data_30m, data_5m):
-    print("FUNCTION ENTERED check_triple_filter")
     """
-    Cheongan V2.5 Master Filter Logic
-    Order: Step 1 (5m Timing), Step 2 (30m Trend), Step 3 (2% Strength)
-    - Step 2 (30m) is "Sticky": Once met, stays True until Dead Cross.
-    - Tracks completion time/price for each step.
+    [Refactored V5.6] Single Source of Truth
+    - READ-ONLY from DB (populated by run_v2_signal_analysis)
+    - No Calculation of MA/Signals here.
+    - No DB Updates here.
     """
-    from db import get_global_config, set_global_config
+    from db import fetch_signal_status_dict, get_global_config
+    import datetime
     
+    # 1. Initialize Result Dict (Frontend Contract)
     result = {
         "step1": False, "step2": False, "step3": False, "final": False, 
         "step1_color": None, "step2_color": None, "step3_color": None,
         "target": 0, "signal_time": None, "is_sell_signal": False,
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "step_details": {
             "step1": "대기 중", "step2": "대기 중", "step3": "대기 중"
         },
         "current_price": 0.0,
         "daily_change": 0.0,
-        "entry_price": 0.0
+        "entry_price": 0.0,
+        "sounds": [],
+        "price_alerts": []
     }
-    
-    # Fallback Data (Safe UI Rendering when API fails)
-    if ticker == "SOXL":
-        result["current_price"] = 42.50
-        result["daily_change"] = 2.15
-        result["entry_price"] = 42.00
-    elif ticker == "SOXS":
-        result["current_price"] = 4.20
-        result["daily_change"] = -1.5
-    
-    # Debug print
-    print(f"DEBUG: Checking {ticker}")
-    
-    try:
-        # 1. Load Persisted State & Sync with DB (Hybrid Manual Mode)
-        all_states = get_global_config("triple_filter_states", {})
-        state = all_states.get(ticker, {
-            "final_met": False, "signal_time": None,
-            "step1_done_time": None,
-            "step2_done_time": None, "step2_done_price": None,
-            "step3_done_time": None, "step3_done_pct": None,
-            "manage_id": None
-        })
 
-        # [NEW] Sync with DB to respect Manual Mode
-        from db import fetch_signal_status_dict, save_v2_buy_signal
+    print(f"DEBUG: Checking {ticker} (Read-Only Mode)")
+
+    try:
+        # 2. Fetch Truth from DB
         db_status = fetch_signal_status_dict(ticker)
         buy_db = db_status.get('buy')
+        sell_db = db_status.get('sell')
         
-        # Sync Manage ID / Manual Flags
-        is_manual_1 = 'N'
-        is_manual_2 = 'N'
-        is_manual_3 = 'N'
+        # 3. Get Current Price (for Display only)
+        # Try KIS first, then DF
+        current_price = 0.0
+        daily_change = 0.0
         
-        if buy_db:
-             state['manage_id'] = buy_db.get('manage_id') or buy_db.get('idx') # idx as manage_id fallback
-             
-             # Sync Manual Status (If Manual='Y', Force State='Y')
-             if buy_db.get('is_manual_buy1') == 'Y': 
-                 state['buy_sig1_yn'] = 'Y'
-                 is_manual_1 = 'Y'
-             if buy_db.get('is_manual_buy2') == 'Y': 
-                 state['buy_sig2_yn'] = 'Y'
-                 is_manual_2 = 'Y'
-             if buy_db.get('is_manual_buy3') == 'Y': 
-                 state['buy_sig3_yn'] = 'Y'
-                 is_manual_3 = 'Y'
-
-
-        # 2. Get Price & Data
+        # Try KIS Cache or Live
+        from kis_api import kis_client
         kis_data = kis_client.get_price(ticker)
-        kis_price = kis_data['price'] if kis_data else None
+        if kis_data and kis_data.get('price', 0) > 0:
+             current_price = float(kis_data['price'])
+             daily_change = float(kis_data.get('rate', 0))
+        
+        # Fallback to DF if KIS failed
+        if current_price == 0:
+             df30 = None
+             if isinstance(data_30m, dict): df30 = data_30m.get(ticker)
+             elif hasattr(data_30m, 'columns'): df30 = data_30m
+             
+             if df30 is not None and not df30.empty:
+                 current_price = float(df30['Close'].iloc[-1])
 
+        result['current_price'] = current_price
+        result['daily_change'] = daily_change
+
+        # 4. Map DB Status to Result
+        if buy_db:
+            # Step 1
+            result['step1'] = (buy_db.get('buy_sig1_yn') == 'Y')
+            result['step1_status'] = "진입 타점 (5m Gold)" if result['step1'] else "진입 대기"
+            if not result['step1']: result['step1_color'] = "yellow"
+            
+            # Step 2
+            result['step2'] = (buy_db.get('buy_sig2_yn') == 'Y')
+            result['step2_status'] = "박스권 돌파" if result['step2'] else "보합/대기"
+            
+            # Step 3
+            result['step3'] = (buy_db.get('buy_sig3_yn') == 'Y')
+            result['step3_status'] = "추세 확정 (30m Gold)" if result['step3'] else "추세 미확보"
+            if not result['step3']: result['step3_color'] = "yellow"
+
+            # Final
+            result['final'] = (buy_db.get('real_buy_yn') == 'Y') or (result['step1'] and result['step2'] and result['step3'])
+            
+            # Details (Timestamps)
+            result['step_details']['step1'] = f"시간: {buy_db.get('buy_sig1_dt') or '-'}"
+            result['step_details']['step2'] = f"시간: {buy_db.get('buy_sig2_dt') or '-'}"
+            result['step_details']['step3'] = f"시간: {buy_db.get('buy_sig3_dt') or '-'}"
+            
+            # Target / Entry
+            result['entry_price'] = float(buy_db.get('real_buy_price') or buy_db.get('final_buy_price') or 0)
+            
+            # Manual Overrides Status
+            if buy_db.get('is_manual_buy1') == 'Y': result['step1_status'] = "수동 설정 (ON)"
+            if buy_db.get('is_manual_buy2') == 'Y': result['step2_status'] = "수동 설정 (ON)"
+            if buy_db.get('is_manual_buy3') == 'Y': result['step3_status'] = "수동 설정 (ON)"
+
+        # 5. Map Sell Status (for Alert)
+        if sell_db:
+            # Check if ANY sell signal is active
+            is_sell = False
+            if sell_db.get('sell_sig1_yn') == 'Y': is_sell = True
+            if sell_db.get('sell_sig2_yn') == 'Y': is_sell = True
+            if sell_db.get('sell_sig3_yn') == 'Y': is_sell = True
+            
+            result['is_sell_signal'] = is_sell
+            
+        # 6. Keep Market Intelligence (Metrics Display)
+        # This is stateless, so safe to calculate for UI
         df30 = None
         if isinstance(data_30m, dict): df30 = data_30m.get(ticker)
-        elif hasattr(data_30m, 'columns') and ticker in data_30m.columns: df30 = data_30m[ticker]
-        elif hasattr(data_30m, 'columns'): df30 = data_30m # Support Single DF input
-        
-        df5 = None
-        if isinstance(data_5m, dict): df5 = data_5m.get(ticker)
-        elif hasattr(data_5m, 'columns') and ticker in data_5m.columns: df5 = data_5m[ticker]
-        elif hasattr(data_5m, 'columns'): df5 = data_5m # Support Single DF input
-
-        # [Ver 5.3 FIX] Partial Data Handling
-        # We NO LONGER return early if one DF is missing. We try to calculate what we can.
-        
-        # 1. Ensure Current Price is Valid (Priority: KIS > DF30)
-        price_source_valid = False
-        if kis_price and kis_price > 0:
-             result["current_price"] = kis_price
-             price_source_valid = True
-             if 'rate' in kis_data:
-                  result["daily_change"] = kis_data['rate']
-             
-             # Patch DFs for indicator accuracy if they exist
-             try:
-                 if df30 is not None and not df30.empty:
-                      df30 = df30.copy()
-                      df30.iloc[-1, df30.columns.get_loc('Close')] = kis_price
-                 if df5 is not None and not df5.empty:
-                      df5 = df5.copy()
-                      df5.iloc[-1, df5.columns.get_loc('Close')] = kis_price
-             except: pass
-             
-        elif df30 is not None and not df30.empty:
-             result["current_price"] = float(df30['Close'].iloc[-1])
-             price_source_valid = True
-
-        # If we have NO price source at all, we might be in trouble, but let's try to proceed
-        # implicitly using defaults (False) for signals.
-        
-        # Force Numeric and Sync KIS
-        try:
-            if df30 is not None and not df30.empty:
-                df30 = df30.copy()
-                df30['Close'] = pd.to_numeric(df30['Close'], errors='coerce').dropna()
-            
-            if df5 is not None and not df5.empty:
-                df5 = df5.copy()
-                df5['Close'] = pd.to_numeric(df5['Close'], errors='coerce').dropna()
-        except Exception as e:
-            print(f"Data Prep Error ({ticker}): {e}")
-
-        # [FIX] Ensure current_price is defined for later use
-        current_price = result.get("current_price", 0.0)
-        
-        # If still 0 and we have df data, try again (redundant but safe)
-        if current_price == 0 and df30 is not None and not df30.empty:
-             current_price = float(df30['Close'].iloc[-1])
-             result["current_price"] = current_price
-        kst = pytz.timezone('Asia/Seoul')
-        us_et = pytz.timezone('America/New_York')
-        
-        # Determine Signal Time (Chart Time)
-        try:
-            chart_time = datetime.now(timezone.utc)
-            if df5 is not None and not df5.empty:
-                chart_time = df5.index[-1]
-            elif df30 is not None and not df30.empty:
-                chart_time = df30.index[-1]
-            
-            if chart_time.tzinfo is None:
-                chart_time = chart_time.replace(tzinfo=timezone.utc)
-            
-            chart_time_kst = chart_time.astimezone(kst)
-            now_time_str = f"{chart_time_kst.strftime('%Y-%m-%d %H:%M')} (KST)"
-            now_utc = chart_time
-        except:
-             now_time_str = datetime.now(kst).strftime("%Y-%m-%d %H:%M (KST)")
-             now_utc = datetime.now(timezone.utc)
-
-    # --- CALCULATIONS ---
-        
-        # 1. 30m Trend (Golden Cross) - Ver 5.0 Step 3
-        is_gold_30m = False
-        sma10_30 = 0.0
-        sma30_30 = 0.0
+        elif hasattr(data_30m, 'columns'): df30 = data_30m
         
         if df30 is not None and not df30.empty:
-            try:
-                closes_30 = pd.to_numeric(df30['Close'], errors='coerce')
-                # Check valid data count (Lenient, rely on rolling)
-                if closes_30.notna().sum() >= 10:
-                    sma10_30 = closes_30.rolling(window=10).mean().iloc[-1]
-                    sma30_30 = closes_30.rolling(window=30).mean().iloc[-1]
-                    
-                    if pd.notnull(sma10_30) and pd.notnull(sma30_30):
-                        is_gold_30m = (float(sma10_30) > float(sma30_30))
-            except Exception as e30:
-                print(f"Calc 30m Error ({ticker}): {e30}")
+            result['new_metrics'] = calculate_market_intelligence(df30)
 
-        # 2. 5m Timing (Golden Cross) - Ver 5.0 Step 1
-        is_gold_5m = False
-        sma10_5 = 0.0
-        sma30_5 = 0.0
-        
-        if df5 is not None and not df5.empty:
-            try:
-                 closes_5 = pd.to_numeric(df5['Close'], errors='coerce')
-                 if closes_5.notna().sum() >= 10:
-                      sma10_5 = closes_5.rolling(window=10).mean().iloc[-1]
-                      sma30_5 = closes_5.rolling(window=30).mean().iloc[-1]
-                      if pd.notnull(sma10_5) and pd.notnull(sma30_5):
-                           is_gold_5m = (float(sma10_5) > float(sma30_5))
-            except Exception as e5:
-                 print(f"Calc 5m Error ({ticker}): {e5}")
-
-        # 3. Momentum (Step 2 Breakout) logic - RESTORED
-        filter2_met = False
-        prev_close = None
-        target_v = 0
-        try:
-            # Priority 1: KIS Daily Data
-            try:
-                k_daily = kis_client.get_daily_price(ticker)
-                if k_daily and len(k_daily) > 1:
-                     prev_close = float(k_daily[1]['clos']) 
-            except: pass
-
-            # Priority 2: 1D DF
-            if not prev_close:
-                import yfinance as yf
-                ticker_obj = yf.Ticker(ticker)
-                df_1d = ticker_obj.history(period="5d", interval="1d")
-                
-                if df_1d is not None and not df_1d.empty:
-                     est_tz = pytz.timezone('US/Eastern')
-                     today_est = datetime.now(est_tz).date()
-                     last_lbl = df_1d.index[-1]
-                     last_date = last_lbl.date() if hasattr(last_lbl, 'date') else last_lbl
-                     
-                     if last_date >= today_est:
-                         if len(df_1d) >= 2:
-                             prev_close = float(df_1d['Close'].iloc[-2])
-                     else:
-                         prev_close = float(df_1d['Close'].iloc[-1])
-
-            is_breakout = False
-            if prev_close and prev_close > 0:
-                target_v = round(prev_close * 1.02, 2)
-                if current_price >= target_v:
-                    is_breakout = True
-            
-            if is_breakout:
-                 filter2_met = True
-                 if not state.get("step2_done_time"):
-                     state["step2_done_time"] = now_time_str
-                     state["step2_done_price"] = current_price
-                     
-            change_pct = 0
-            if prev_close and prev_close > 0:
-                 change_pct = ((current_price - prev_close) / prev_close) * 100
-            
-            result["target"] = target_v
-            result["daily_change"] = round(change_pct, 2)
-
-        except Exception as e2:
-            print(f"Filter 2 Error ({ticker}): {e2}")
-
-        # --- REAL-TIME FILTER CHECKS & DB UPDATE ---
-        # [MAPPING CONFIRMED via Ver 5.0 Spec]
-        # Step 1: 5m GC (Timing)
-        # Step 2: 2% (Momentum)
-        # Step 3: 30m GC (Trend)
-
-        # Import save function
-        try:
-            from db import save_v2_buy_signal
-        except:
-            save_v2_buy_signal = None
-
-        manage_id = state.get("manage_id")
-
-        # =========================================================
-        # Step 1: 5m Golden Cross (Timing)
-        # =========================================================
-        if is_manual_1 == 'Y':
-            result["step1"] = True
-            result["step1_status"] = "수동 설정 (ON)"
-            state["buy_sig1_yn"] = 'Y'
-        else:
-            result["step1"] = is_gold_5m
-            new_status_1 = 'Y' if is_gold_5m else 'N'
-            
-            if save_v2_buy_signal:
-                 save_v2_buy_signal(ticker, 'sig1', current_price, new_status_1)
-            
-            state["buy_sig1_yn"] = new_status_1
-
-            if is_gold_5m:
-                result["step1_status"] = "진입 타점 (5m Gold)"
-                if not state.get("step1_done_time"): state["step1_done_time"] = now_time_str
-            else:
-                result["step1_color"] = "yellow"
-                result["step1_status"] = "진입 대기 (5m Dead)"
-                state["step1_done_time"] = None 
-
-        # =========================================================
-        # Step 2: +2% Breakout (Box)
-        # =========================================================
-        change_pct = result.get("daily_change", 0)
-        cond_step2 = filter2_met or (change_pct >= 2)
-        
-        if is_manual_2 == 'Y':
-            result["step2"] = True
-            result["step2_status"] = "수동 설정 (ON)"
-            state["buy_sig2_yn"] = 'Y'
-        else:
-            result["step2"] = cond_step2
-            new_status_2 = 'Y' if cond_step2 else 'N'
-            
-            if save_v2_buy_signal:
-                 save_v2_buy_signal(ticker, 'sig2', current_price, new_status_2)
-            
-            state["buy_sig2_yn"] = new_status_2
-            
-            if cond_step2:
-                result["step2_status"] = "박스권 돌파"
-                if not state.get("step2_done_time"):
-                    state["step2_done_time"] = now_time_str
-                    state["step2_done_price"] = current_price
-            else:
-                if change_pct <= -2:
-                    result["step2_color"] = "red"
-                    result["step2_status"] = "손절"
-                else:
-                    result["step2_color"] = None
-                    result["step2_status"] = "보합/대기"
-                state["step2_done_time"] = None 
-
-        # =========================================================
-        # Step 3: 30m Golden Cross (Trend)
-        # =========================================================
-        if is_manual_3 == 'Y':
-            result["step3"] = True
-            result["step3_status"] = "수동 설정 (ON)"
-            state["buy_sig3_yn"] = 'Y'
-        else:
-            result["step3"] = is_gold_30m
-            new_status_3 = 'Y' if is_gold_30m else 'N'
-            
-            if save_v2_buy_signal:
-                 save_v2_buy_signal(ticker, 'sig3', current_price, new_status_3)
-            
-            state["buy_sig3_yn"] = new_status_3
-            
-            if is_gold_30m:
-                result["step3_status"] = "추세 확정 (30m Gold)"
-                if not state.get("step3_done_time"):
-                    state["step3_done_time"] = now_time_str
-            else:
-                 result["step3_color"] = "yellow"
-                 result["step3_status"] = "추세 미확보 (30m Dead)"
-                 state["step3_done_time"] = None 
-
-        # FINAL ENTRY SIGNAL
-        all_met = (state.get("buy_sig1_yn") == 'Y' and 
-                   state.get("buy_sig2_yn") == 'Y' and 
-                   state.get("buy_sig3_yn") == 'Y')
-
-        if all_met:
-            result["final"] = True
-            # ... (omitted redundant final logic to keep diff small, wait, I need to include it to match EndLine)
-            
-            # Auto Update Logic for Final
-            if save_v2_buy_signal:
-                 save_v2_buy_signal(ticker, 'final', current_price, 'Y')
-                 
-            if not state.get("final_met"):
-                state["final_met"] = True
-                state["signal_time"] = now_time_str
-                
-                # Make Save Master Signal
-                try:
-                    from db import save_signal, get_connection
-                    with get_connection() as conn:
-                        with conn.cursor() as cursor:
-                            cursor.execute("SELECT id FROM signal_history WHERE ticker=%s AND signal_type='BUY (MASTER)' AND created_at >= NOW() - INTERVAL 30 MINUTE LIMIT 1", (ticker,))
-                            if not cursor.fetchone(): 
-                                save_signal({
-                                    'ticker': ticker, 'name': f"Master Signal ({ticker})",
-                                    'signal_type': "BUY (MASTER)", 
-                                    'signal_reason': "3단계 조건 충족 (5m+Box+30m)",
-                                    'position': f"매수 진입: \n1.5분타이밍\n2.박스돌파\n3.30분추세\n가격: ${current_price}",
-                                    'current_price': current_price, 'signal_time_raw': now_utc,
-                                    'is_sent': True, 'score': 100, 'interpretation': "Strong Buy"
-                                })
-                except Exception as e: print(e)
-
-        else:
-            result["final"] = False
-            # Check Holding
-            real_buy_qn = 0
-            if buy_db: real_buy_qn = buy_db.get('real_buy_qn') or 0
-                 
-            if real_buy_qn > 0:
-                 result["final"] = True
-                 if not state.get("final_met"): state["final_met"] = True
-            else:
-                 if save_v2_buy_signal: save_v2_buy_signal(ticker, 'final', current_price, 'N')
-                 if state.get("final_met"):
-                     state["final_met"] = False
-                     state["signal_time"] = None
-
-        # --- POST-ENTRY WARNINGS ---
-        if result.get("final"):
-            result["signal_time"] = state.get("signal_time", now_time_str)
-            
-            # Warning 1: 5m Dead Cross (Step 1 OFF)
-            if not is_gold_5m:
-                result["step1_color"] = "yellow"  # Highlight Step 1
-                result["step3_color"] = "yellow"  # Legacy compat or decide which one
-                state["step3_color"] = "yellow"
-                
-                # Send Warning
-                # Send Warning
-                try:
-                    from db import save_signal, get_connection
-                    with get_connection() as conn:
-                        with conn.cursor() as cursor:
-                            cursor.execute("SELECT id FROM signal_history WHERE ticker=%s AND signal_type='WARNING (5M)' AND created_at >= NOW() - INTERVAL 30 MINUTE LIMIT 1", (ticker,))
-                            if not cursor.fetchone():
-                                save_signal({
-                                    'ticker': ticker, 'name': f"Warning ({ticker})",
-                                    'signal_type': "WARNING (5M)", 
-                                    'position': f"🟡 5분봉 데드크로스 발생 (단기청산고려)\n현재: ${current_price}",
-                                    'current_price': current_price, 'signal_time_raw': now_utc,
-                                    'is_sent': True, 'score': -50, 'interpretation': "Short Term Weakness"
-                                })
-                except Exception as e: print(f"Warning 1 Error: {e}")
-            else:
-                 result["step1_color"] = None
-                 state["step3_color"] = None 
-
-            # Warning 2: Price Drop below Entry (Step 2 Breakout Price)
-            entry_p = state.get("step2_done_price")
-            if entry_p and current_price < float(entry_p):
-                 result["step2_color"] = "orange"
-                 try:
-                    from db import save_signal, get_connection
-                    with get_connection() as conn:
-                        with conn.cursor() as cursor:
-                            cursor.execute("SELECT id FROM signal_history WHERE ticker=%s AND signal_type='WARNING (BOX)' AND created_at >= NOW() - INTERVAL 30 MINUTE LIMIT 1", (ticker,))
-                            if not cursor.fetchone():
-                                drop_pct = ((current_price - float(entry_p))/float(entry_p))*100
-                                save_signal({
-                                    'ticker': ticker, 'name': f"Warning ({ticker})",
-                                    'signal_type': "WARNING (BOX)", 
-                                    'position': f"🟠 진입가 이탈 발생 (손실 관리)\n진입: {entry_p}, 현재: {current_price} ({drop_pct:.2f}%)",
-                                    'current_price': current_price, 'signal_time_raw': now_utc,
-                                    'is_sent': True, 'score': -50, 'interpretation': "Loss Warning"
-                                })
-                 except Exception as e: print(f"Warning 2 Error: {e}")
-            else:
-                 result["step2_color"] = None
-
-
-
-        # --- PREPARE DETAILED LOGS ---
-        if state.get("step1_done_time"): 
-            result["step_details"]["step1"] = f"진입: {state['step1_done_time']}"
-        else:
-             result["step_details"]["step1"] = f"대기 중 (SMA10: {sma10_30:.2f} / 30: {sma30_30:.2f})"
-             
-        if state.get("step2_done_time"): 
-            result["step_details"]["step2"] = f"진입: {state['step2_done_time']}"
-        else:
-            diff_pct = 0
-            if target_v > 0:
-                diff_pct = ((current_price / target_v) - 1) * 100
-            result["step_details"]["step2"] = f"대기 중 (목표: ${target_v}, 현재: {diff_pct:.1f}%)"
-            
-        if state.get("step3_done_time"): 
-            result["step_details"]["step3"] = f"진입: {state['step3_done_time']}"
-        else:
-            result["step_details"]["step3"] = f"대기 중 (5분 추세 확인 필요)"
-
-        # Save & Clean
-        all_states[ticker] = state
-        set_global_config("triple_filter_states", all_states)
-
-        # Note: No "SAFETY NET" - we trust real-time filter checks
-        # State is only used to record FIRST occurrence time, not to override current status
-
-        # JSON Safe
-        result["step1"] = bool(result["step1"])
-        result["step2"] = bool(result["step2"])
-        result["step3"] = bool(result["step3"])
-        result["final"] = bool(result["final"])
-        result["target"] = float(result["target"])
-        
-        # Add Data Time for UI
-        last_time_str = "N/A"
+        # 7. Add Data Time for UI (Safe Fallback)
+        last_time_str = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         try:
              if df30 is not None and not df30.empty:
-                 # Convert to str if it's datetime
                  last_time_str = df30.index[-1].strftime('%Y-%m-%d %H:%M:%S')
         except: pass
         result["data_time"] = last_time_str
 
-        result["is_sell_signal"] = bool(result.get("is_sell_signal", False))
-        
-        # Add entry price and current price for Frontend display
-        result["entry_price"] = float(state.get("step2_done_price") or 0)
-        result["current_price"] = float(current_price)
-
-        print(f"DEBUG: {ticker} current_price={result.get('current_price')}, daily_change={result.get('daily_change')}")
-
-
-
-        # [Ver 3.9] Market Intelligence - Advanced Metrics (Optimization)
-        if df30 is not None and not df30.empty:
-            result['new_metrics'] = calculate_market_intelligence(df30)
-            
-            # --- [NEW] Log Market Indicators & Signals to DB ---
-            try:
-                # from db import log_market_indicators
-
-                
-                # Determine Signal Times (Scan recent DF for Cross)
-                # Helper to find latest cross time
-                def find_cross_time(df, fast_col='MA5', slow_col='MA20', type='gold'):
-                    try:
-                        if len(df) < 5: return 'N'
-                        # Create boolean series for crossover
-                        if type == 'gold':
-                            # Current > Slow and Prev <= PrevSlow
-                            cross = (df[fast_col] > df[slow_col]) & (df[fast_col].shift(1) <= df[slow_col].shift(1))
-                        else: # dead
-                            cross = (df[fast_col] < df[slow_col]) & (df[fast_col].shift(1) >= df[slow_col].shift(1))
-                        
-                        # Get True indices
-                        locs = df.index[cross]
-                        if len(locs) > 0:
-                            # Return latest one (localized string)
-                            latest = locs[-1] # Timestamp
-                            # Convert to KST string for user request
-                            # Assuming index is NY time (from earlier fetching logic)
-                            # Convert NY -> KST
-                            latest_kst = latest.astimezone(pytz.timezone('Asia/Seoul'))
-                            return latest_kst.strftime("%Y-%m-%d %H:%M:%S")
-                    except:
-                        pass
-                    return 'N'
-
-                # Calculate MA if not present (df30 has them from run_analysis logic? 
-                # run_analysis calls analyze_ticker which calculates MAs but returns boolean.
-                # data_cache usually has raw data. We need MAs.
-                # calculate_market_intelligence gets 'df', but df30 passed to it might be raw?
-                # Actually run_analysis gets 'df' from fetch_data. 
-                # fetch_data returns raw.
-                # We need to compute MAs on df30 and df5 here if we want to find cross times.
-                
-                # Re-compute MAs for signal timing (lightweight)
-                df30_ma = df30.copy()
-                df30_ma.ta.sma(length=5, append=True)
-                df30_ma.ta.sma(length=20, append=True)
-                
-                df5_ma = df5.copy() if df5 is not None else None
-                if df5_ma is not None:
-                    df5_ma.ta.sma(length=5, append=True)
-                    df5_ma.ta.sma(length=20, append=True)
-                
-                gold_30m = find_cross_time(df30_ma, 'SMA_5', 'SMA_20', 'gold')
-                dead_30m = find_cross_time(df30_ma, 'SMA_5', 'SMA_20', 'dead')
-                
-                gold_5m = 'N'
-                dead_5m = 'N'
-                if df5_ma is not None:
-                    gold_5m = find_cross_time(df5_ma, 'SMA_5', 'SMA_20', 'gold')
-                    dead_5m = find_cross_time(df5_ma, 'SMA_5', 'SMA_20', 'dead')
-
-                # Log Data Construction
-                log_data = {
-                    'ticker': ticker,
-                    'candle_time': result.get('data_time'), # NY time str or obj? analysis.py uses last_time_str
-                    'rsi': result['new_metrics'].get('rsi'),
-                    'vr': result['new_metrics'].get('vol_ratio'),
-                    'atr': result['new_metrics'].get('atr'),
-                    'pivot_r1': result['new_metrics'].get('pivot_r1'),
-                    'gold_30m': gold_30m,
-                    'gold_5m': gold_5m,
-                    'dead_30m': dead_30m,
-                    'dead_5m': dead_5m
-                }
-                
-                # log_market_indicators(log_data) - MOVED to run_analysis
-
-                
-                # [NEW] Add Signal Timings to Result for Frontend
-                result['new_metrics']['signals'] = {
-                    'gold_30m': gold_30m,
-                    'gold_5m': gold_5m,
-                    'dead_30m': dead_30m,
-                    'dead_5m': dead_5m
-                }
-                
-            except Exception as e:
-                print(f"Logging Market Indicators Failed ({ticker}): {e}")
-
-            print(f"DEBUG: {ticker} New Metrics: {result.get('new_metrics')}")
+        # 8. Price Alerts (Read-Only Check)
+        try:
+             from db import get_price_levels
+             levels = get_price_levels(ticker)
+             # Logic to just display alerts not triggering them? 
+             # Actually, run_v2 triggers them. We just display.
+             for lvl in levels:
+                 if lvl['is_active'] == 'Y': 
+                      # Add to alerts list for frontend display logic
+                      pass
+        except: pass
 
     except Exception as e:
-        print(f"Triple Filter Error ({ticker}): {e}")
+        print(f"Refactored Check Error ({ticker}): {e}")
         import traceback
         traceback.print_exc()
-    
+
     return result
+
 
 # --- Antigravity V2.1 Helper Functions ---
 
@@ -2231,7 +1780,10 @@ def get_tech_comment(rsi, macd):
 
 
 def calculate_tech_indicators(df):
-    if df is None or len(df) < 26: return {}
+    if df is None: return {}
+    if not hasattr(df, 'columns'): return {} # Not a DataFrame
+    if 'Close' not in df.columns: return {}
+    if len(df) < 26: return {}
     try:
         # RSI (14)
         delta = df['Close'].diff()
@@ -2739,12 +2291,7 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
 
         # --- Auto Trading Simulation ---
         try:
-            # Get current price
-            cur_price = 0
-            df_5m_target = data_5m.get(t) if data_5m else None
-            if df_5m_target is not None and not df_5m_target.empty:
-                cur_price = float(df_5m_target['Close'].iloc[-1])
-            
+            cur_price = results[t]['current_price'] if 'current_price' in results[t] else 0
             # Use signal time or current NY time
             # Ideally use the timestamp of the latest candle
             process_auto_trading(t, results[t], cur_price, datetime.now(timezone.utc))
@@ -2829,8 +2376,8 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
                  'vr': new_metrics.get('vol_ratio', 0),
                  'atr': new_metrics.get('atr', 0),
                  'pivot_r1': new_metrics.get('pivot_r1', 0),
-                 'macd': techs[t].get('macd', 0),
-                 'macd_sig': techs[t].get('macd_sig', 0),
+                 'macd': techs[t].get('macd', 0) if techs.get(t) else 0,
+                 'macd_sig': techs[t].get('macd_sig', 0) if techs.get(t) else 0,
                  'gold_30m': signals.get('gold_30m', 'N') if signals else 'N',
                  'gold_5m': signals.get('gold_5m', 'N') if signals else 'N',
                  'dead_30m': signals.get('dead_30m', 'N') if signals else 'N',
@@ -2851,7 +2398,7 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
     # recent_news = get_market_news_v2()
     
     details = {
-        "version": "3.9.0 (Market Intelligence)",
+        "version": "Ver 5.6.2 (Updated: 2026-01-15 05:20)",
         "prime_guide": {
             "scores": scores,
             "guides": guides,
@@ -2892,20 +2439,37 @@ if __name__ == "__main__":
 
 # --- Cheongan V2 Signal Analysis ---
 def run_v2_signal_analysis():
+    print(f"🚀 Backend Starting V5.6 Signal Analysis... [{datetime.now()}]")
     """
     Cheongan V2 3-Step Buy/Sell Logic Implementation
     Run via Scheduler (Every 5 mins)
     """
+    global _LAST_ANALYSIS_TIME
     print(f"[{datetime.now()}] 🔄 V2 Signal Analysis Started...")
     
     # 1. Target Tickers
     targets = ['SOXL', 'SOXS']
+
+    # [Ver 5.6] Fetch Market Indices Map (for Patching)
+    market_map = {}
+    try:
+        from db import get_market_indices
+        indices = get_market_indices()
+        for item in indices:
+            market_map[item['ticker']] = item
+        print(f"✅ Loaded Market Map: {len(market_map)} items")
+    except Exception as e:
+        print(f"⚠️ Failed to load Market Map: {e}")
     
     # 2. Fetch Data (Force Update for Real-time accuracy)
     try:
         data_30m, data_5m, data_1d, _, _ = fetch_data(targets, force=True)
     except Exception as e:
         print(f"❌ V2 Data Fetch Error: {e}")
+        return
+        
+    if data_30m is None or data_5m is None:
+        print("⚠️ V2 Data Fetch returned None (skipping analysis)")
         return
         
     for ticker in targets:
@@ -2936,8 +2500,13 @@ def run_v2_signal_analysis():
                 if 'Volume' in columns: agg_dict['Volume'] = 'sum'
                 return agg_dict
 
-            df_5 = df_5.resample('5min').agg(get_agg_dict(df_5.columns)).dropna()
-            df_30 = df_30.resample('30min').agg(get_agg_dict(df_30.columns)).dropna()
+            try:
+                df_5 = df_5.resample('5min').agg(get_agg_dict(df_5.columns)).dropna()
+                df_30 = df_30.resample('30min').agg(get_agg_dict(df_30.columns)).dropna()
+            except Exception as e:
+                print(f"⚠️ Resample Failed for {ticker} (Using Raw Data): {e}")
+                # Fallback: Use raw data if resampling crashes (e.g. missing columns)
+                pass
             
             # --- Indicators Calculation ---
             # 5m
@@ -2945,43 +2514,57 @@ def run_v2_signal_analysis():
             df_5['ma30'] = df_5['Close'].rolling(window=30).mean()
             
             # 30m
-            df_30['ma10'] = df_30['Close'].rolling(window=10).mean()
-            df_30['ma30'] = df_30['Close'].rolling(window=30).mean()
-            df_30['box_high'] = df_30['High'].rolling(window=20).max().shift(1) # Past 20 bars high (excluding current)
-            df_30['vol_ma5'] = df_30['Volume'].rolling(window=5).mean()
-            
-            # 1D (Prev Close)
-            prev_close = 0
-            if data_1d is not None and ticker in data_1d:
-                d1 = data_1d[ticker]
-                if not d1.empty:
-                    if len(d1) >= 2:
-                        prev_close = float(d1['Close'].iloc[-2])
-                    else:
-                        prev_close = float(d1['Close'].iloc[-1])
-            
-            # Current Values
-            curr_price = float(df_5['Close'].iloc[-1])
-            curr_vol_30 = float(df_30['Volume'].iloc[-1])
-            curr_vol_ma_30 = float(df_30['vol_ma5'].iloc[-1]) if not pd.isna(df_30['vol_ma5'].iloc[-1]) else 0
-            box_high = float(df_30['box_high'].iloc[-1]) if not pd.isna(df_30['box_high'].iloc[-1]) else 0
-            
-            # [NEW] Patch Price/PrevClose from KIS (Authoritative Source)
             try:
-                from kis_api import kis_client
-                kis_p = kis_client.get_price(ticker)
-                if kis_p:
-                    # diff is signed (e.g., 0.06 or -0.10)
-                    # prev_close = current - diff
-                    # But wait, diff is (current - prev). So prev = current - diff.
-                    # e.g. 2.44 (+0.06) -> Prev = 2.38. Correct.
-                    curr_price = float(kis_p['price'])
-                    k_diff = float(kis_p['diff'])
-                    prev_close = curr_price - k_diff
-                    print(f"  🎯 KIS Patch {ticker}: Price={curr_price}, Prev={prev_close:.2f}")
+                df_30['ma10'] = df_30['Close'].rolling(window=10).mean()
+                df_30['ma30'] = df_30['Close'].rolling(window=30).mean()
+                # Check High column exists
+                if 'High' in df_30.columns:
+                    df_30['box_high'] = df_30['High'].rolling(window=20).max().shift(1)
+                else:
+                    df_30['box_high'] = 0
+                
+                df_30['vol_ma5'] = df_30['Volume'].rolling(window=5).mean()
+                
+                # 1D (Prev Close)
+                prev_close = 0
+                if data_1d is not None and ticker in data_1d:
+                    d1 = data_1d[ticker]
+                    if not d1.empty:
+                        if len(d1) >= 2:
+                            prev_close = float(d1['Close'].iloc[-2])
+                        else:
+                            # Cannot determine prev close from just today's bar
+                            prev_close = 0 # Safe fallback to avoid false triggering 0% rule
+                
+                # Current Values
+                curr_price = float(df_5['Close'].iloc[-1])
+                curr_vol_30 = float(df_30['Volume'].iloc[-1])
+                curr_vol_ma_30 = float(df_30['vol_ma5'].iloc[-1]) if not pd.isna(df_30['vol_ma5'].iloc[-1]) else 0
+                box_high = float(df_30['box_high'].iloc[-1]) if 'box_high' in df_30.columns and not pd.isna(df_30['box_high'].iloc[-1]) else 0
             except Exception as e:
-                print(f"  ⚠️ KIS Price Patch Failed: {e}")
+                print(f"Skipping Indicators for {ticker} due to data error: {e}")
+                continue
             
+            # [Ver 5.6] Patch Price/PrevClose from DB (market_indices) - Source: KIS/YFinance
+            # User Request: "market_indices 테이블에서 가져오면 됨"
+            patch_data = market_map.get(ticker)
+            if patch_data:
+                try:
+                    p_price = float(patch_data['current_price'])
+                    p_change = float(patch_data['change_pct'])
+                    
+                    if p_price > 0:
+                        curr_price = p_price
+                        # Calculate Prev Close inversely from Change % and Current Price
+                        # Prev = Current / (1 + rate/100)
+                        if p_change > -99.9: # Safety check
+                            prev_close = curr_price / (1 + (p_change / 100.0))
+                            print(f"  🎯 DB Patch {ticker}: Price={curr_price}, Change={p_change}%, Prev={prev_close:.2f}")
+                        else:
+                            print(f"  ⚠️ DB Patch Suspicious Rate: {p_change}%")
+                except Exception as e:
+                    print(f"  ⚠️ DB Patch Error {ticker}: {e}")
+
             # 5m Indicators
             ma10_5 = df_5['ma10'].iloc[-1]
             ma30_5 = df_5['ma30'].iloc[-1]
@@ -3156,15 +2739,38 @@ def run_v2_signal_analysis():
                         # Reload record for next steps
                         sell_record = get_v2_sell_status(ticker)
 
-                # Check Target 2
+                # Check Target 2 (Manual OR Auto 0% Rule)
                 tgt2 = float(sell_record.get('manual_target_sell2') or 0)
-                if sell_record['sell_sig2_yn'] == 'N' and tgt2 > 0:
-                    if curr_price <= tgt2:
+                is_manual_tgt2_met = (tgt2 > 0 and curr_price <= tgt2)
+                
+                # [Ver 5.6] Auto Sell if Daily Change <= 0% (Breakeven Defense)
+                # User Request: "등락률이 0% 이하로 떨어지면 2차 자동 매도 신호"
+                is_zero_pct_drop = (prev_close > 0 and curr_price <= prev_close)
+                
+                # DEBUG Log for Verification
+                if ticker in ['SOXL', 'SOXS']:
+                    print(f"🧐 [DEBUG {ticker}] Price: {curr_price}, Prev: {prev_close}, Drop? {is_zero_pct_drop} (Target: {tgt2})")
+                    print(f"    -> Manual Tgt Met? {is_manual_tgt2_met}")
+                
+                if sell_record['sell_sig2_yn'] == 'N':
+                    triggered = False
+                    trigger_reason = ""
+                    
+                    if is_manual_tgt2_met:
+                        triggered = True
+                        trigger_reason = f"지정가도달(${tgt2})"
+                    elif is_zero_pct_drop:
+                        triggered = True
+                        trigger_reason = f"당일하락전환(${prev_close})"
+                        
+                    if triggered:
                         from db import manual_update_signal
                         manual_update_signal(ticker, 'sell2', curr_price, 'Y')
-                        print(f"🎯 {ticker} Sell Target 2 Met (${tgt2}) -> Signal ON")
-                        log_history(manage_id, ticker, "2차청산신호", f"지정가도달(${tgt2})", curr_price)
-                        send_sms(ticker, "2차청산(지정가)", curr_price, get_current_time_str_sms(), "목표가도달")
+                        print(f"🎯 {ticker} Sell Signal 2 Met (Reason: {trigger_reason}) -> Signal ON")
+                        print(f"    -> Debug: Price={curr_price}, Prev={prev_close}, Tgt2={tgt2}")
+                        print(f"🎯 {ticker} Sell Signal 2 Met ({trigger_reason}) -> Signal ON")
+                        log_history(manage_id, ticker, "2차청산신호", trigger_reason, curr_price)
+                        send_sms(ticker, "2차청산(손절)", curr_price, get_current_time_str_sms(), "수익반납/보합이탈")
                         sell_record = get_v2_sell_status(ticker)
 
                 # Check Target 3
@@ -3204,7 +2810,12 @@ def run_v2_signal_analysis():
                          except: pass
 
                 # Sig 2: Stop Loss / Profit Taking (Real Price Support)
+                if ticker in ['SOXL', 'SOXS']:
+                    print(f"👉 [TRACE {ticker}] Checking Sig 2 (Status: {sell_record['sell_sig2_yn']})")
+
                 if sell_record['sell_sig2_yn'] == 'N':
+                    if ticker in ['SOXL', 'SOXS']:
+                        print(f"👉 [TRACE {ticker}] Entered Sig 2 Block")
                     # Determine Entry / Base Price
                     base_price = 0
                     custom_stop_price = sell_record.get('target_stop_price')
@@ -3215,16 +2826,60 @@ def run_v2_signal_analysis():
                         reason_msg = f"지정가이탈(${base_price})"
                         # print(f"  🔍 {ticker} Custom Stop Check: ${base_price}")
                     else:
-                        if buy_record and buy_record.get('real_buy_yn') == 'Y' and buy_record.get('real_buy_price'):
-                            base_price = float(buy_record['real_buy_price'])
+                        # [MODIFIED] Disable Default Entry-based Stop Loss for SOXS/SOXL
+                        # User requests Sig 2 to be purely based on 0% Daily Change (or Manual Stop).
+                        # We skip auto-calculating base_price from buy record for these tickers.
+                        if ticker in ['SOXL', 'SOXS']:
+                             base_price = 0 
                         else:
-                            base_price = float(buy_record['final_buy_price']) if buy_record and buy_record.get('final_buy_price') else 0
+                            if buy_record and buy_record.get('real_buy_yn') == 'Y' and buy_record.get('real_buy_price'):
+                                base_price = float(buy_record['real_buy_price'])
+                            else:
+                                base_price = float(buy_record['final_buy_price']) if buy_record and buy_record.get('final_buy_price') else 0
                     
+                    if ticker in ['SOXL', 'SOXS']:
+                         print(f"🧐 [DEBUG {ticker}] Sig2 StopLoss Check: Price={curr_price}, Base={base_price}")
+
                     if base_price > 0 and curr_price < base_price:
                          if save_v2_sell_signal(ticker, 'sig2', curr_price):
                              print(f"📉 {ticker} V2 Sell Signal 2 ({reason_msg}) Detected!")
                              log_history(manage_id, ticker, "2차청산신호", reason_msg, curr_price)
                              send_sms(ticker, "2차청산(손절/V2)", curr_price, get_current_time_str_sms(), reason_msg)
+                else:
+                    # [NEW] Auto-Reset Sell Signal 2 (Stop Loss / 0% Drop Recovery)
+                    # If trigger conditions are GONE, we should reset.
+                    if sell_record.get('is_manual_sell2') != 'Y':
+                         # Re-calculate Base Price to verify safety
+                         base_price = 0
+                         custom_stop_price = sell_record.get('target_stop_price')
+                         if custom_stop_price and float(custom_stop_price) > 0:
+                             base_price = float(custom_stop_price)
+                         else:
+                             if buy_record and buy_record.get('real_buy_yn') == 'Y' and buy_record.get('real_buy_price'):
+                                 base_price = float(buy_record['real_buy_price'])
+                             else:
+                                 base_price = float(buy_record['final_buy_price']) if buy_record and buy_record.get('final_buy_price') else 0
+                         
+                         # Check 1: Stop Loss Condition Safe? (Current > Base)
+                         is_stop_safe = (curr_price >= base_price)
+                         
+                         # Check 2: 0% Drop Safe? (Current > PrevClose)
+                         # Recalculate is_zero_pct_drop here or use variable if scope allows. 
+                         # Variable `is_zero_pct_drop` is defined above.
+                         is_drop_safe = not is_zero_pct_drop
+                         
+                         # Check 3: Manual Target 2 Safe? (Current > Target2)
+                         # Variable `is_manual_tgt2_met` defined above.
+                         is_manual_safe = not is_manual_tgt2_met
+                         
+                         if is_stop_safe and is_drop_safe and is_manual_safe:
+                             try:
+                                 from db import manual_update_signal
+                                 manual_update_signal(ticker, 'sell2', 0, 'N')
+                                 if ticker in ['SOXL', 'SOXS']:
+                                     print(f"📈 {ticker} Sell Signal 2 Reset (Price Recovered: {curr_price})")
+                             except Exception as e:
+                                 print(f"Error resetting Sig2: {e}")
 
                          
                 # Sig 3: 30m DC
