@@ -1753,7 +1753,7 @@ def create_trade(ticker, price, entry_time):
         with conn.cursor() as cursor:
             sql = """
                 INSERT INTO trade_history (ticker, entry_time, entry_price, status, strategy_ver)
-                VALUES (%s, %s, %s, 'OPEN', '3.5.0')
+                VALUES (%s, %s, %s, 'OPEN', '5.7')
             """
             cursor.execute(sql, (ticker, entry_time, price))
         conn.commit()

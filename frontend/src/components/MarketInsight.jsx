@@ -1,5 +1,6 @@
 import React from 'react';
 import V2SignalStatus from './V2SignalStatus';
+import PriceLevelAlerts from './PriceLevelAlerts';
 
 
 
@@ -473,6 +474,12 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                     />
                 </div>
 
+                {/* [Ver 5.4] Independent Price Level Alert Panel */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '2rem' }}>
+                    <PriceLevelAlerts ticker="SOXL" />
+                    <PriceLevelAlerts ticker="SOXS" />
+                </div>
+
                 {/* 수동 테스트 패널 (Params 전달) */}
                 <ManualTestPanel onRefresh={onRefresh} marketData={market?.indices} v2Status={v2Status} />
 
@@ -483,7 +490,7 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                             <div style={{ width: '12px', height: '12px', background: '#38bdf8', borderRadius: '50%', boxShadow: '0 0 15px #38bdf8', flexShrink: 0 }} />
                             <h3 style={{ margin: 0, fontSize: '1.4rem', color: '#38bdf8', fontWeight: '900', letterSpacing: '-0.5px', whiteSpace: 'nowrap' }}>청안 Prime Guide : Action Plan</h3>
                         </div>
-                        <div style={{ fontSize: '0.8rem', color: '#64748b', background: '#0f172a', padding: '4px 10px', borderRadius: '20px' }}>Ver 3.6.1 Market Intelligence</div>
+                        <div style={{ fontSize: '0.8rem', color: '#64748b', background: '#0f172a', padding: '4px 10px', borderRadius: '20px' }}>Ver 5.7 Market Intelligence</div>
                     </div>
 
                     {/* Dual Guide Layout */}
