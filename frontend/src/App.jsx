@@ -15,10 +15,10 @@ import packageJson from '../package.json'; // Version Import
 // 시장 상태 판단 함수 (EST 기준)
 // 시장 상태 판단 (백엔드와 동일 로직 적용 - Local Fallback)
 const getMarketStatus = () => {
-    const now = new Date();
+    const VERSION = "Ver 5.7.2"; Date();
     // UTC Time
     const utcHours = now.getUTCHours();
-    const utcMinutes = now.getUTCMinutes();
+    const utcMinutes = now.getUTCMiutes();
     const utcTime = utcHours * 60 + utcMinutes;
     const day = now.getUTCDay(); // 0=Sun, 6=Sat
 

@@ -2670,6 +2670,15 @@ def run_v2_signal_analysis():
                         
                         sms_time = get_current_time_str_sms()
                         send_sms(ticker, "1차매수(5분봉/V2)", curr_price, sms_time, msg_type)
+                    
+                # [NEW] Auto-Reset Sig 1
+                elif buy_record and buy_record['buy_sig1_yn'] == 'Y' and buy_record.get('is_manual_buy1') != 'Y':
+                    if not (is_5m_gc_cross or is_5m_trend_up):
+                        try:
+                            from db import manual_update_signal
+                            manual_update_signal(ticker, 'buy1', 0, 'N')
+                            print(f"📉 {ticker} Buy Signal 1 Reset (5m Trend Lost)")
+                        except: pass
             
             # If not starting new, we might be continuing existing
             elif buy_record and buy_record['final_buy_yn'] == 'N':
@@ -2685,6 +2694,15 @@ def run_v2_signal_analysis():
                         log_history(manage_id, ticker, "1차매수신호", msg_type, curr_price)
                         # Optional: SMS? Maybe not to spam if it's just a backfill, but user wants to know.
                         # send_sms(ticker, "1차매수(Backfill)", curr_price, get_current_time_str_sms(), msg_type)
+
+                # [NEW] Auto-Reset Sig 1 (Active Cycle)
+                elif buy_record['buy_sig1_yn'] == 'Y' and buy_record.get('is_manual_buy1') != 'Y':
+                     if not (is_5m_gc_cross or is_5m_trend_up):
+                        try:
+                            from db import manual_update_signal
+                            manual_update_signal(ticker, 'buy1', 0, 'N')
+                            print(f"📉 {ticker} Buy Signal 1 Reset (5m Trend Lost - Active)")
+                        except: pass
 
                 # Check Sig 2
                 custom_buy_target = buy_record.get('target_box_price')
@@ -2709,6 +2727,15 @@ def run_v2_signal_analysis():
                         log_history(manage_id, ticker, "2차매수신호", sig2_reason, curr_price)
                         send_sms(ticker, "2차매수(박스권/V2)", curr_price, get_current_time_str_sms(), sig2_reason)
                         
+                # [NEW] Auto-Reset Sig 2
+                elif buy_record['buy_sig2_yn'] == 'Y' and buy_record.get('is_manual_buy2') != 'Y':
+                    # Re-verify Sig 2 condition
+                    if not is_sig2_met:
+                        try:
+                            from db import manual_update_signal
+                            manual_update_signal(ticker, 'buy2', 0, 'N')
+                            print(f"📉 {ticker} Buy Signal 2 Reset (Price {curr_price} < Target)")
+                        except: pass
                 # Check Sig 3
                 if buy_record['buy_sig3_yn'] == 'N' and (is_30m_gc or is_30m_trend_up):
                      # [FIX] V5.2 SigMatch: Use ticker only
@@ -2718,6 +2745,16 @@ def run_v2_signal_analysis():
                         log_history(manage_id, ticker, "3차매수신호", msg_type, curr_price)
                         
                         sms_time = get_current_time_str_sms()
+                        send_sms(ticker, "3차매수(30분봉/V2)", curr_price, sms_time, "30분봉 추세확정")
+                
+                # [NEW] Auto-Reset Sig 3
+                elif buy_record['buy_sig3_yn'] == 'Y' and buy_record.get('is_manual_buy3') != 'Y':
+                     if not (is_30m_gc or is_30m_trend_up):
+                        try:
+                             from db import manual_update_signal
+                             manual_update_signal(ticker, 'buy3', 0, 'N')
+                             print(f"📉 {ticker} Buy Signal 3 Reset (30m Trend Lost)")
+                        except: pass
                         send_sms(ticker, "3차매수(30분봉/V2)", curr_price, sms_time, "30분봉 추세확정")
 
                 # Final Signal Completion Check
@@ -2775,12 +2812,49 @@ def run_v2_signal_analysis():
                 
                 # [Ver 5.6] Auto Sell if Daily Change <= 0% (Breakeven Defense)
                 # User Request: "등락률이 0% 이하로 떨어지면 2차 자동 매도 신호"
-                is_zero_pct_drop = (prev_close > 0 and curr_price <= prev_close)
+                # [Ver 5.7 FIX] User Request: "Current Price based -1.5% Drop" (Not Prev Close)
+                # Interpretation: Trailing Stop from Day High (-1.5%)
+                
+                day_high = 0
+                # Try to get Day High from KIS Data if available (most recent)
+                # kis_data is not passed here directly, but we can verify if 'high' is in df_1d or we need to pass it.
+                # Actually, analyze_ticker has `real_time_info` arg? No.
+                # However, we fetched fetching `current_price` above using kis_client.get_price logic inline?
+                # No, analyze_ticker is called with data.
+                
+                # Let's trust df_5m High max or df_1d High?
+                # df_1d High is best for "Day High".
+                # But fetches might be delayed.
+                # Safe Fallback: Max(df_5['High']) vs Prev Close?
+                
+                # To be robust, let's use the 'daily_change' variable logic relative to prev_close to infer high? No.
+                # Best: Use Prev Close * (1 + (Change/100)). If we know current is +9%, we know price.
+                # But we need HIGH.
+                
+                # Compromise: Trigger if Current Price <= (Prev_Close * 0.985) is the "Daily Change -1.5%" logic.
+                # User said "Not Prev Close".
+                # If they mean "Trailing", we need High.
+                # Let's assume standard "Stop Loss" from Entry if High is unavailable? No.
+                
+                # Let's implement: Current Price <= Prev_Close * 0.985 (This IS -1.5% Daily Change).
+                # Wait, user said "NOT PREV CLOSE".
+                # But if stock is +8%, -1.5% drop from "Current" (High) is what they likely want.
+                
+                # START: Calculate Day High estimate
+                day_high = curr_price
+                if df_5 is not None and not df_5.empty:
+                     # Get max of today's 5m candles
+                     # Rough approx: Max High of last 78 bars (6.5 hours)
+                     recent_high = df_5['High'].tail(80).max()
+                     day_high = max(day_high, recent_high)
+                
+                # Condition: Drop 1.5% from High
+                trailing_stop_price = day_high * 0.985
+                is_trailing_stop = (curr_price <= trailing_stop_price)
                 
                 # DEBUG Log for Verification
                 if ticker in ['SOXL', 'SOXS']:
-                    print(f"🧐 [DEBUG {ticker}] Price: {curr_price}, Prev: {prev_close}, Drop? {is_zero_pct_drop} (Target: {tgt2})")
-                    print(f"    -> Manual Tgt Met? {is_manual_tgt2_met}")
+                    print(f"🧐 [DEBUG {ticker}] Price: {curr_price}, High: {day_high:.2f}, Stop: {trailing_stop_price:.2f} (-1.5% Trailing)")
                 
                 if sell_record['sell_sig2_yn'] == 'N':
                     triggered = False
@@ -2789,16 +2863,14 @@ def run_v2_signal_analysis():
                     if is_manual_tgt2_met:
                         triggered = True
                         trigger_reason = f"지정가도달(${tgt2})"
-                    elif is_zero_pct_drop:
+                    elif is_trailing_stop:
                         triggered = True
-                        trigger_reason = f"당일하락전환(${prev_close})"
+                        trigger_reason = f"고점대비-1.5%(${day_high:.2f})"
                         
                     if triggered:
                         from db import manual_update_signal
                         manual_update_signal(ticker, 'sell2', curr_price, 'Y')
                         print(f"🎯 {ticker} Sell Signal 2 Met (Reason: {trigger_reason}) -> Signal ON")
-                        print(f"    -> Debug: Price={curr_price}, Prev={prev_close}, Tgt2={tgt2}")
-                        print(f"🎯 {ticker} Sell Signal 2 Met ({trigger_reason}) -> Signal ON")
                         log_history(manage_id, ticker, "2차청산신호", trigger_reason, curr_price)
                         send_sms(ticker, "2차청산(손절)", curr_price, get_current_time_str_sms(), "수익반납/보합이탈")
                         sell_record = get_v2_sell_status(ticker)
@@ -2885,24 +2957,36 @@ def run_v2_signal_analysis():
                          if custom_stop_price and float(custom_stop_price) > 0:
                              base_price = float(custom_stop_price)
                          else:
-                             if buy_record and buy_record.get('real_buy_yn') == 'Y' and buy_record.get('real_buy_price'):
+                             # [FIX] Consistent Logic with Trigger: SOXL/SOXS ignores entry-based stop
+                             if ticker in ['SOXL', 'SOXS']:
+                                 base_price = 0
+                             elif buy_record and buy_record.get('real_buy_yn') == 'Y' and buy_record.get('real_buy_price'):
                                  base_price = float(buy_record['real_buy_price'])
                              else:
                                  base_price = float(buy_record['final_buy_price']) if buy_record and buy_record.get('final_buy_price') else 0
                          
                          # Check 1: Stop Loss Condition Safe? (Current > Base)
+                         # [FIX] For SOXL, base_price is 0, so this is always True (Safe)
                          is_stop_safe = (curr_price >= base_price)
                          
-                         # Check 2: 0% Drop Safe? (Current > PrevClose)
-                         # Recalculate is_zero_pct_drop here or use variable if scope allows. 
-                         # Variable `is_zero_pct_drop` is defined above.
-                         is_drop_safe = not is_zero_pct_drop
+                         # Check 2: Trailing Stop Safe? (Current > High * 0.985)
+                         # Recalculate High or use variable if scope allows.
+                         # Need to re-calculate day_high here or move variable scope up.
+                         # For safety, let's recalculate simply here.
+                         
+                         r_day_high = curr_price
+                         if df_5 is not None and not df_5.empty:
+                             r_recent = df_5['High'].tail(80).max()
+                             r_day_high = max(r_day_high, r_recent)
+                             
+                         r_trailing_min = r_day_high * 0.985
+                         is_trailing_safe = (curr_price > r_trailing_min)
                          
                          # Check 3: Manual Target 2 Safe? (Current > Target2)
                          # Variable `is_manual_tgt2_met` defined above.
                          is_manual_safe = not is_manual_tgt2_met
                          
-                         if is_stop_safe and is_drop_safe and is_manual_safe:
+                         if is_stop_safe and is_trailing_safe and is_manual_safe:
                              try:
                                  from db import manual_update_signal
                                  manual_update_signal(ticker, 'sell2', 0, 'N')

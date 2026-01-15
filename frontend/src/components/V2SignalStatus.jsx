@@ -468,7 +468,7 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
     };
 
     return (
-        <div style={{ width: '100%', flex: 1, minWidth: '280px', background: 'rgba(0,0,0,0.4)', padding: '1.5rem', borderRadius: '16px', border: `1px solid ${mode === 'SELL' ? '#ef4444' : themeColor}33`, position: 'relative', overflow: 'hidden' }}>
+        <div style={{ width: '100%', flex: 1, minWidth: '280px', background: 'rgba(0,0,0,0.4)', padding: '1.5rem', borderRadius: '16px', border: `1px solid ${mode === 'SELL' ? '#ef4444' : themeColor}33`, position: 'relative' }}>
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
                 <div>
@@ -558,7 +558,7 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
 
             {/* Footer Actions */}
             <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end', gap: '12px', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '10px' }}>
-                {isHolding && buyStatus?.real_buy_yn !== 'Y' && (
+                {buyStatus?.real_buy_yn !== 'Y' && (
                     <span
                         onClick={() => setModal({ type: 'BUY', isOpen: true })}
                         style={{ fontSize: '0.75rem', color: '#10b981', cursor: 'pointer', fontWeight: 'bold', textDecoration: 'underline' }}
@@ -587,7 +587,7 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
                 modal.isOpen && (
                     <div style={{
                         position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-                        background: 'rgba(0,0,0,0.85)', zIndex: 100,
+                        background: 'rgba(0,0,0,0.85)', zIndex: 9999,
                         display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px'
                     }}>
                         <div style={{ background: '#1e293b', padding: '20px', borderRadius: '12px', width: '100%', maxWidth: '300px', border: '1px solid #334155' }}>

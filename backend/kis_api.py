@@ -119,15 +119,29 @@ class KisApi:
         # If exchange is provided, try it first, then others if failed? 
         # Actually user logic in db.py passes exchange. KIS get_price tries specified list.
         # Let's ensure if exchange is passed, we ONLY try that? No, try others as fallback.
+        # [Ver 5.7] KST Daytime Check (08:00 ~ 17:00)
+        # Server timestamps might be UTC, so we convert explicitly
+        utc_now = datetime.utcnow()
+        kst_now = utc_now + timedelta(hours=9)
+        is_daytime = 8 <= kst_now.hour < 17
+
         if not exchange:
             # Standard order + Daytime order
-            search_order = ["NAS", "NYS", "AMS", "BAQ", "BAY", "PAC", "BAA"]
+            if is_daytime:
+                # Prioritize Daytime Exchanges
+                search_order = ["BAQ", "BAY", "BAA", "NAS", "NYS", "AMS", "PAC"]
+            else:
+                search_order = ["NAS", "NYS", "AMS", "BAQ", "BAY", "PAC", "BAA"]
         else:
             # If specific exchange requested, also check its daytime counterpart
             daytime_map = {'NAS': 'BAQ', 'NYS': 'BAY', 'AMS': 'BAA'}
             search_order = [exchange]
             if exchange in daytime_map:
-                search_order.append(daytime_map[exchange])
+                if is_daytime:
+                    # Prepend if daytime
+                    search_order.insert(0, daytime_map[exchange])
+                else:
+                    search_order.append(daytime_map[exchange])
                 
         best_result = None
         
@@ -148,7 +162,8 @@ class KisApi:
                         'diff': float(out['diff']) if out.get('diff') else 0.0,
                         'rate': float(out['rate']) if out.get('rate') else 0.0,
                         'exchange': excd,
-                        'tvol': float(out['tvol']) if out.get('tvol') else 0.0
+                        'tvol': float(out['tvol']) if out.get('tvol') else 0.0,
+                        'high': float(out['high']) if out.get('high') else 0.0, # [NEW] Max Price for Trailing Stop
                     }
                     
                     # [Logic] Prefer data with Volume (Active Market)

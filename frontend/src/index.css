@@ -503,3 +503,12 @@ header h1 {
     opacity: 1;
   }
 }
+
+/* Global Z-Index Overrides for Popups */
+.swal2-container {
+  z-index: 20000 !important;
+}
+
+.Toastify__toast-container {
+  z-index: 21000 !important;
+}

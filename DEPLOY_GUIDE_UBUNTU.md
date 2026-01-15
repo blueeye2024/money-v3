@@ -79,3 +79,9 @@ journalctl -u cheongan-backend -f
 *   **Backend 소스**: `backend/`
 *   **Web Server Root**: `/var/www/html` (Nginx Default)
 *   **Service Name**: `cheongan-backend`
+
+---
+
+## 5. Deployment Credentials (보안 주의)
+사용자 요청에 따라 배포 시 필요한 관리자 권한 비밀번호를 기록합니다.
+*   **Sudo Password**: `blueeye0037!`
