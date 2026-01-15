@@ -1633,6 +1633,8 @@ def update_stock_prices():
                         is_market_open = False
                         source = "None"
 
+                        change_pct = 0.0
+
                         # 1. KIS API로 현재가 조회
                         # print(f"  🔍 {ticker} ({exchange}) 조회 중... (KIS)")
                         price_data = get_current_price(ticker, exchange)
@@ -1640,6 +1642,7 @@ def update_stock_prices():
                         if price_data and price_data.get('price', 0) > 0:
                             current_price = price_data['price']
                             is_market_open = price_data.get('is_open', True)
+                            change_pct = price_data.get('rate', 0.0) # KIS returns 'rate'
                             source = "KIS"
                         else:
                             # 2. Skip fallback for SOXS/SOXL? No, user wants ALL.
@@ -1657,6 +1660,7 @@ def update_stock_prices():
                                 if not df.empty:
                                     last_price = float(df['Close'].iloc[-1])
                                     source = "YF(Ext)"
+                                    # Try to calc change pct if possible or use 0
                                 else:
                                     source = "YF(Fast)" # Fallback to last close
                                     
@@ -1667,7 +1671,7 @@ def update_stock_prices():
                                 pass
                         
                         if current_price and current_price > 0:
-                            # 현재가 업데이트
+                            # 현재가 업데이트 (managed_stocks)
                             update_sql = """
                                 UPDATE managed_stocks 
                                 SET current_price = %s, 
@@ -1676,6 +1680,10 @@ def update_stock_prices():
                                 WHERE ticker = %s
                             """
                             cursor.execute(update_sql, (current_price, is_market_open, ticker))
+                            
+                            # [Ver 5.7] Sync removed as per user request (Keep market_indices clean)
+                            # sync_sql = ...
+                            
                             conn.commit() # Commit per row to ensure partial success
                             updated_count += 1
                             print(f"  ✅ {ticker}: ${current_price:,.2f} ({source})")

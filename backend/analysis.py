@@ -39,8 +39,8 @@ _DATA_CACHE = {
 
 # Stock Names Mapping
 TICKER_NAMES = {
-    "SOXL": "Direxion Daily Semiconductor Bull 3X",
-    "SOXS": "Direxion Daily Semiconductor Bear 3X",
+    "SOXL": "BULL TOWER",
+    "SOXS": "BEAR TOWER",
     "UPRO": "ProShares UltraPro S&P500 (3X)",
     "AAAU": "Goldman Sachs Physical Gold ETF",
     "TSLA": "Tesla Inc.",
@@ -1338,8 +1338,8 @@ def run_analysis(holdings=None, force_update=False):
     # Update TICKER_NAMES map
     global TICKER_NAMES
     TICKER_NAMES = {
-        "SOXL": "Direxion Daily Semiconductor Bull 3X Shares",
-        "SOXS": "Direxion Daily Semiconductor Bear 3X Shares",
+        "SOXL": "BULL TOWER",
+        "SOXS": "BEAR TOWER",
         "UPRO": "ProShares UltraPro S&P500"
     }
     
@@ -1543,6 +1543,7 @@ def check_triple_filter(ticker, data_30m, data_5m):
         "current_price": 0.0,
         "daily_change": 0.0,
         "entry_price": 0.0,
+        "name": TICKER_NAMES.get(ticker, ticker), # [FIX] Add Name for Frontend/Console
         "sounds": [],
         "price_alerts": []
     }
@@ -2530,11 +2531,30 @@ def run_v2_signal_analysis():
                 if data_1d is not None and ticker in data_1d:
                     d1 = data_1d[ticker]
                     if not d1.empty:
-                        if len(d1) >= 2:
-                            prev_close = float(d1['Close'].iloc[-2])
-                        else:
-                            # Cannot determine prev close from just today's bar
-                            prev_close = 0 # Safe fallback to avoid false triggering 0% rule
+                        try:
+                            # [FIX] Robust Prev Close Logic
+                            # If last candle is Today (NY Time), use iloc[-2].
+                            # If last candle is Yesterday, use iloc[-1].
+                            from datetime import datetime
+                            import pytz
+                            
+                            ny_date = datetime.now(pytz.timezone('US/Eastern')).date()
+                            last_bar_dt = d1.index[-1]
+                            last_bar_date = last_bar_dt.date() if hasattr(last_bar_dt, 'date') else last_bar_dt.date()
+                            
+                            # Check if latest bar is from today (or future)
+                            if last_bar_date >= ny_date:
+                                if len(d1) >= 2:
+                                    prev_close = float(d1['Close'].iloc[-2])
+                                else:
+                                    prev_close = float(d1['Close'].iloc[-1]) # Fallback (Startup)
+                            else:
+                                # Latest bar is yesterday (or older)
+                                prev_close = float(d1['Close'].iloc[-1])
+                                
+                        except Exception as e:
+                            print(f"PrevClose Error: {e}")
+                            if len(d1) >= 2: prev_close = float(d1['Close'].iloc[-2])
                 
                 # Current Values
                 curr_price = float(df_5['Close'].iloc[-1])
@@ -2656,6 +2676,16 @@ def run_v2_signal_analysis():
                 # Active Buy Cycle
                 manage_id = buy_record.get('manage_id', 'UNKNOWN') # Just for logging
                 
+                # [FIX] Catch-up Logic for Sig 1:
+                # If started by Sig2/3 or Manual, Sig1 might be 'N'. Check if condition is met now.
+                if buy_record['buy_sig1_yn'] == 'N' and (is_5m_gc_cross or is_5m_trend_up):
+                     if save_v2_buy_signal(ticker, 'sig1', curr_price):
+                        msg_type = "5분봉 GC (Catch-up)" if is_5m_gc_cross else "5분봉 상승추세 (Catch-up)"
+                        print(f"🚀 {ticker} V2 Buy Signal 1 Backfilled! ({msg_type})")
+                        log_history(manage_id, ticker, "1차매수신호", msg_type, curr_price)
+                        # Optional: SMS? Maybe not to spam if it's just a backfill, but user wants to know.
+                        # send_sms(ticker, "1차매수(Backfill)", curr_price, get_current_time_str_sms(), msg_type)
+
                 # Check Sig 2
                 custom_buy_target = buy_record.get('target_box_price')
                 is_sig2_met = False

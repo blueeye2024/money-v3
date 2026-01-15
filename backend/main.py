@@ -917,18 +917,26 @@ def me_api(token: str):
 def get_v2_status(ticker: str):
     """Get V2 Signal Status (Buy/Sell) + Market Info"""
     try:
-        from db import get_v2_buy_status, get_v2_sell_status, get_market_indices, get_latest_market_indicators
+        from db import get_v2_buy_status, get_v2_sell_status, get_market_indices, get_latest_market_indicators, get_stock_current_price
         ticker = ticker.upper()
         
         buy_record = get_v2_buy_status(ticker)
         sell_record = get_v2_sell_status(ticker)
         
-        # Get current_price from market_indices (Single Source of Truth)
-        market_data = get_market_indices()
-        market_info = next((m for m in market_data if m['ticker'] == ticker), None)
+        # [Ver 5.7] Get current_price from managed_stocks (Active Update Source)
+        # market_indices is restricted to indices only (SPX, VIX, etc)
+        price_info = get_stock_current_price(ticker)
         
-        current_price = float(market_info['current_price']) if market_info else 0.0
-        change_pct = float(market_info.get('change_pct', 0.0)) if market_info else 0.0
+        if price_info:
+             current_price = float(price_info['price'])
+             # Calculate change if needed, or get from somewhere else.
+             change_pct = 0.0 
+        else:
+             # Fallback to market_indices (Old Logic / For pure indices)
+             market_data = get_market_indices()
+             market_info = next((m for m in market_data if m['ticker'] == ticker), None)
+             current_price = float(market_info['current_price']) if market_info else 0.0
+             change_pct = float(market_info.get('change_pct', 0.0)) if market_info else 0.0
 
         # Get latest indicators for metrics display
         indicators = get_latest_market_indicators(ticker)
