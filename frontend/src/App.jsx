@@ -54,6 +54,21 @@ function Dashboard() {
         return () => clearInterval(statusInterval);
     }, []);
 
+    // [Ver 5.4] Sound Playing Logic
+    useEffect(() => {
+        if (data?.sounds && data.sounds.length > 0) {
+            data.sounds.forEach(soundCode => {
+                try {
+                    const audio = new Audio(`/sounds/${soundCode}.mp3`);
+                    audio.play().catch(e => console.warn(`Sound Play Error (${soundCode}):`, e));
+                    console.log(`🔊 Playing sound: ${soundCode}.mp3`);
+                } catch (e) {
+                    console.error("Audio init error:", e);
+                }
+            });
+        }
+    }, [data]); // Runs whenever data updates
+
     // 폴링 모드 저장
     useEffect(() => {
         localStorage.setItem('pollingMode', pollingMode);
@@ -346,7 +361,7 @@ function Layout() {
             }}>
                 <div className="footer-copyright">
                     <p>© 2026 Cheongan Fintech. All rights reserved.</p>
-                    <p className="version-info">Ver 5.3.2 (Updated: 2026-01-14 21:45)</p>
+                    <p className="version-info">Ver 5.7 (Updated: 2026-01-15 16:50)</p>
                 </div>
             </footer>
         </div>
