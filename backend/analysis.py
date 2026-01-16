@@ -2916,26 +2916,44 @@ def run_v2_signal_analysis():
                     elif ('sell1', ticker) in sell_sounds:
                         send_sms(ticker, "1차청산", curr_price, sms_time, "5분봉 하락추세")
                 
-                # === Price Level Alerts ===
+                # ────────────────────────────────────────────────────────────────
+                # Price Level Alerts (사용자 지정가 알림)
+                # ────────────────────────────────────────────────────────────────
+                # BUY: 현재가 >= 지정가 → triggered='Y' (상승 돌파)
+                # SELL: 현재가 <= 지정가 → triggered='Y' (하락 이탈)
+                # 조건 해제 시 → triggered='N' (자동 리셋)
+                # ────────────────────────────────────────────────────────────────
                 try:
-                    from db import get_price_levels, set_price_level_triggered
+                    from db import get_price_levels, set_price_level_triggered, reset_price_level_triggered_only
                     active_levels = get_price_levels(ticker)
+                    
                     for lvl in active_levels:
-                        if lvl['is_active'] == 'Y' and lvl['triggered'] == 'N':
-                            l_type = lvl['level_type']
-                            l_price = float(lvl['price'])
+                        if lvl['is_active'] != 'Y':
+                            continue
                             
-                            should_trigger = False
-                            if l_type == 'BUY' and curr_price >= l_price:
-                                should_trigger = True
-                            elif l_type == 'SELL' and curr_price <= l_price:
-                                should_trigger = True
+                        l_type = lvl['level_type']
+                        l_price = float(lvl['price'])
+                        is_triggered = lvl['triggered'] == 'Y'
+                        
+                        # 조건 충족 여부 확인
+                        condition_met = False
+                        if l_type == 'BUY' and l_price > 0:
+                            condition_met = (curr_price >= l_price)
+                        elif l_type == 'SELL' and l_price > 0:
+                            condition_met = (curr_price <= l_price)
+                        
+                        # 조건 충족 → trigger ON
+                        if condition_met and not is_triggered:
+                            set_price_level_triggered(ticker, l_type, lvl['stage'])
+                            print(f"🔔 {ticker} Alert ON: {l_type} #{lvl['stage']} @ ${l_price}")
+                        
+                        # 조건 해제 → trigger OFF (자동 리셋)
+                        elif not condition_met and is_triggered:
+                            reset_price_level_triggered_only(ticker, l_type, lvl['stage'])
+                            print(f"🔕 {ticker} Alert OFF: {l_type} #{lvl['stage']} (조건 해제)")
                             
-                            if should_trigger:
-                                set_price_level_triggered(ticker, l_type, lvl['stage'])
-                                print(f"🔔 {ticker} Alert: {l_type} #{lvl['stage']} @ ${l_price}")
                 except Exception as e:
-                    pass  # Silent fail for alerts
+                    print(f"Price Alert Error: {e}")
 
 
         except Exception as e:

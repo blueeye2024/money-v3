@@ -2728,7 +2728,7 @@ def set_price_level_triggered(ticker, level_type, stage):
         conn.close()
 
 def reset_price_level_trigger(ticker, level_type, stage):
-    """Reset trigger status (Re-arm)"""
+    """Reset trigger status (Re-arm) - 가격도 0으로 리셋"""
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
@@ -2742,6 +2742,25 @@ def reset_price_level_trigger(ticker, level_type, stage):
         return True
     except Exception as e:
         print(f"Reset Trigger Error: {e}")
+        return False
+    finally:
+        conn.close()
+
+def reset_price_level_triggered_only(ticker, level_type, stage):
+    """[Ver 5.8.4] triggered만 N으로 리셋 (가격/활성 상태 유지)"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            sql = """
+                UPDATE manual_price_levels 
+                SET triggered='N'
+                WHERE ticker=%s AND level_type=%s AND stage=%s
+            """
+            cursor.execute(sql, (ticker, level_type, stage))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Reset Triggered Only Error: {e}")
         return False
     finally:
         conn.close()
