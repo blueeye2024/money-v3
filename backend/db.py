@@ -1914,6 +1914,29 @@ def get_v2_buy_status(ticker):
     finally:
         conn.close()
 
+def create_initial_buy_record(ticker, manage_id):
+    """[Ver 5.8.3] 신호 추적용 초기 매수 레코드 생성"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            # 기존 레코드 확인
+            cursor.execute("SELECT 1 FROM buy_stock WHERE ticker=%s", (ticker,))
+            if cursor.fetchone():
+                return True  # 이미 존재
+            
+            sql = """
+                INSERT INTO buy_stock (ticker, manage_id, row_dt)
+                VALUES (%s, %s, NOW())
+            """
+            cursor.execute(sql, (ticker, manage_id))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Create Initial Buy Record Error: {e}")
+        return False
+    finally:
+        conn.close()
+
 
 
 def get_v2_sell_status(ticker):

@@ -416,7 +416,7 @@ function Layout() {
             }}>
                 <div className="footer-copyright">
                     <p>© 2026 Cheongan Fintech. All rights reserved.</p>
-                    <p className="version-info">Ver 5.8.2 (Updated: 2026-01-16 21:01)</p>
+                    <p className="version-info">Ver 5.8.3 (Updated: 2026-01-16 22:00)</p>
                 </div>
             </footer>
         </div>
