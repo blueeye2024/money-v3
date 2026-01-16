@@ -2666,23 +2666,25 @@ def run_v2_signal_analysis():
                             print(f"📉 {ticker} Signal 1 OFF (5m trend lost)")
                         except: pass
             
-            # === SIGNAL 2: +2% 돌파 (INDEPENDENT) ===
+            # === SIGNAL 2: +1% 돌파 (INDEPENDENT) ===
             if buy_record and not is_holding:
                 sig2_manual = buy_record.get('is_manual_buy2') == 'Y'
                 
-                # Calculate sig2 condition
+                # 조건 1: 사용자 지정가 (수동)
                 custom_target = buy_record.get('target_box_price')
                 if custom_target and float(custom_target) > 0:
                     is_sig2_met = (curr_price >= float(custom_target))
-                    sig2_reason = f"지정가도달(${custom_target})"
+                    sig2_reason = f"지정가 돌파 (${custom_target})"
                 else:
-                    baseline = float(buy_record.get('buy_sig1_price') or prev_close or 0)
-                    if baseline > 0:
-                        is_sig2_met = (curr_price >= baseline * 1.02)
-                        sig2_reason = f"+2% (기준: ${baseline:.2f})"
+                    # 조건 2: 1차 신호 발생가 대비 +1% (자동)
+                    sig1_price = float(buy_record.get('buy_sig1_price') or 0)
+                    if sig1_price > 0:
+                        target_price = sig1_price * 1.01  # +1%
+                        is_sig2_met = (curr_price >= target_price)
+                        sig2_reason = f"+1% 돌파 (1차가: ${sig1_price:.2f} → ${target_price:.2f})"
                     else:
-                        is_sig2_met = cond_2pct
-                        sig2_reason = "+2% 전일대비"
+                        is_sig2_met = False
+                        sig2_reason = "1차 신호 대기"
                 
                 if is_sig2_met:
                     if buy_record['buy_sig2_yn'] == 'N':
