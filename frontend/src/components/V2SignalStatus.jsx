@@ -251,14 +251,16 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
     // Format Price
     const formatPrice = (p) => p ? `$${Number(p).toFixed(2)}` : '-';
 
-    // Steps Configuration Helper
+    // Steps Configuration - 신호 단계 정의
+    // BUY: 매수 신호 (1차: 5분봉 GC, 2차: +1% 상승, 3차: 30분봉 GC)
+    // SELL: 매도 신호 (1차: 5분봉 DC, 2차: Trailing Stop, 3차: 30분봉 DC)
     const getSteps = (type) => type === 'BUY' ? [
         { key: 'buy_sig1_yn', label: '1차: 5분봉 GC', desc: '추세 시작', rawKey: 'buy1' },
-        { key: 'buy_sig2_yn', label: '2차: 박스권+2%', desc: '강력 돌파', rawKey: 'buy2' },
+        { key: 'buy_sig2_yn', label: '2차: 상승 지속(+1%)', desc: '모멘텀 확인', rawKey: 'buy2' },
         { key: 'buy_sig3_yn', label: '3차: 30분봉 GC', desc: '추세 확정', rawKey: 'buy3' }
     ] : [
         { key: 'sell_sig1_yn', label: '1차: 5분봉 DC', desc: '단기 조정', rawKey: 'sell1' },
-        { key: 'sell_sig2_yn', label: '2차: 이익실현', desc: '리스크 관리', rawKey: 'sell2' },
+        { key: 'sell_sig2_yn', label: '2차: Trailing Stop', desc: '리스크 관리', rawKey: 'sell2' },
         { key: 'sell_sig3_yn', label: '3차: 30분봉 DC', desc: '추세 이탈', rawKey: 'sell3' }
     ];
 
