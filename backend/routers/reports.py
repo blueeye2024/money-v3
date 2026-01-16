@@ -60,6 +60,8 @@ def upsert_daily_report(
     pre_market_strategy: str = Form(""),
     post_market_memo: str = Form(""),
     profit_rate: str = Form("0"),
+    profit_amount: str = Form("0"),
+    prev_total_asset: str = Form("0"),
     existing_images: str = Form("[]"), # JSON string of kept images
     new_images: List[UploadFile] = File(None)
 ):
@@ -83,18 +85,19 @@ def upsert_daily_report(
                         shutil.copyfileobj(file.file, buffer)
                     
                     # Store relative path for frontend
-                    # Frontend serves 'uploads' from public? Yes if in public/uploads
                     final_image_paths.append(f"/uploads/{safe_filename}")
 
         # 2. Upsert DB
         with conn.cursor() as cursor:
             sql = """
-            INSERT INTO daily_reports (report_date, pre_market_strategy, post_market_memo, profit_rate, image_paths, updated_at)
-            VALUES (%s, %s, %s, %s, %s, NOW())
+            INSERT INTO daily_reports (report_date, pre_market_strategy, post_market_memo, profit_rate, profit_amount, prev_total_asset, image_paths, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
             ON DUPLICATE KEY UPDATE
                 pre_market_strategy = VALUES(pre_market_strategy),
                 post_market_memo = VALUES(post_market_memo),
                 profit_rate = VALUES(profit_rate),
+                profit_amount = VALUES(profit_amount),
+                prev_total_asset = VALUES(prev_total_asset),
                 image_paths = VALUES(image_paths),
                 updated_at = NOW()
             """
@@ -103,6 +106,8 @@ def upsert_daily_report(
                 pre_market_strategy, 
                 post_market_memo, 
                 float(profit_rate), 
+                float(profit_amount),
+                float(prev_total_asset),
                 json.dumps(final_image_paths)
             ))
         conn.commit()

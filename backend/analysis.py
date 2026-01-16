@@ -1351,6 +1351,26 @@ def run_analysis(holdings=None, force_update=False):
     # 2. Determine Market Regime (V2.3 Master Signal)
     regime_output = determine_market_regime_v2(regime_daily_data, data_30m, data_5m)
     regime_info = regime_output.get('market_regime', {})
+
+    # [Ver 5.8.4] Inject Pre-Market Strategy from Daily Report
+    try:
+        from datetime import datetime
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        from db import get_connection
+        with get_connection() as conn:
+            with conn.cursor() as cursor:
+                sql = "SELECT pre_market_strategy FROM daily_reports WHERE report_date = %s"
+                cursor.execute(sql, (today_str,))
+                row = cursor.fetchone()
+                if row and row['pre_market_strategy']:
+                    if 'details' not in regime_info:
+                        regime_info['details'] = {}
+                        
+                    # Override comment with Strategy
+                    regime_info['details']['comment'] = row['pre_market_strategy']
+                    print(f"✅ Injected Pre-Market Strategy: {row['pre_market_strategy'][:30]}...")
+    except Exception as e:
+        print(f"Strategy Injection Error: {e}")
     
     # Calculate Market Volatility Score (V2.3: Replaced by Master Signals, but keeping variable for compatibility)
     market_vol_score = 5 if regime_info.get('regime') in ['Bull', 'Bear'] else -5
@@ -1568,25 +1588,48 @@ def check_triple_filter(ticker, data_30m, data_5m):
              current_price = float(kis_data['price'])
              daily_change = float(kis_data.get('rate', 0))
              
-             # [Ver 5.7.3] Day High Logic (API vs DB)
-             # KIS API 'high' is often 0 for overseas. Use DB (calculated from candles) if available.
-             api_high = float(kis_data.get('high', 0))
-             db_high = 0.0
-             if buy_db and buy_db.get('day_high_price'):
-                 db_high = float(buy_db['day_high_price'])
+        # [Ver 5.8.6] User Request: Day High based on Today's Close (Max Close / Body High)
+        # Instead of High (Wick), we use the highest Close price of the day.
+        # [Fix] Filter for TODAY's data only (Last available date in DF)
+        high_candidates = []
+        try:
+             # 1. Current Price (always a candidate)
+             if current_price > 0: high_candidates.append(current_price)
              
-             result['day_high'] = max(api_high, db_high)
-             if result['day_high'] == 0 and api_high > 0: result['day_high'] = api_high
-        
-        # Fallback to DF if KIS failed
-        if current_price == 0:
+             # 2. 5m Candles Max Close (Filtered by Date)
+             df5 = None
+             if isinstance(data_5m, dict): df5 = data_5m.get(ticker)
+             elif hasattr(data_5m, 'columns'): df5 = data_5m
+             if df5 is not None and not df5.empty:
+                 # Filter: Last Day Only
+                 last_date = df5.index[-1].normalize() # 00:00:00 of last day
+                 today_df5 = df5.loc[df5.index >= last_date]
+                 if not today_df5.empty:
+                     high_candidates.append(float(today_df5['Close'].max()))
+                 
+             # 3. 30m Candles Max Close (Filtered by Date)
              df30 = None
              if isinstance(data_30m, dict): df30 = data_30m.get(ticker)
              elif hasattr(data_30m, 'columns'): df30 = data_30m
-             
              if df30 is not None and not df30.empty:
-                 current_price = float(df30['Close'].iloc[-1])
+                 last_date_30 = df30.index[-1].normalize()
+                 today_df30 = df30.loc[df30.index >= last_date_30]
+                 if not today_df30.empty:
+                     high_candidates.append(float(today_df30['Close'].max()))
+                 
+        except Exception as e:
+            print(f"Max Close Calc Error {ticker}: {e}")
+            
+        # Set Day High to Max Close
+        if high_candidates:
+            result['day_high'] = max(high_candidates)
+        else:
+            result['day_high'] = current_price
 
+        # API High (Wick) is ignored for "Day High" display/logic as per request, 
+        # but we might want to keep it if candles are empty? 
+        # The candidates include current_price, so it's safe.
+        
         result['current_price'] = current_price
         result['daily_change'] = daily_change
 
@@ -2409,7 +2452,7 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
     # recent_news = get_market_news_v2()
     
     # [Ver 5.8.2] Dynamic Version String
-    version_str = f"Ver 5.8.2 (Updated: {datetime.now().strftime('%Y-%m-%d %H:%M')})"
+    version_str = f"Ver 5.8.7 (Updated: {datetime.now().strftime('%Y-%m-%d %H:%M')})"
     
     details = {
         "version": version_str,

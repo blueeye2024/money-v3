@@ -569,6 +569,8 @@ def init_db():
                 pre_market_strategy TEXT,
                 post_market_memo TEXT,
                 profit_rate FLOAT,
+                profit_amount DECIMAL(15, 2),
+                prev_total_asset DECIMAL(15, 2),
                 image_paths TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP

@@ -414,9 +414,8 @@ function Layout() {
                 textAlign: 'center', padding: '2rem', marginTop: '4rem',
                 borderTop: '1px solid var(--glass-border)', color: 'var(--text-secondary)'
             }}>
-                <div className="footer-copyright">
-                    <p>© 2026 Cheongan Fintech. All rights reserved.</p>
-                    <p className="version-info">Ver 5.8.3 (Updated: 2026-01-16 22:00)</p>
+                <div style={{ textAlign: 'center', padding: '20px', color: '#64748b', fontSize: '0.8rem', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                    <p>&copy; 2026 BlueEye AI. All rights reserved. | System Status: <span style={{ color: '#4ade80' }}>Operational</span> | Ver 5.9.0 (Updated: 2026-01-17 03:58)</p>
                 </div>
             </footer>
         </div>

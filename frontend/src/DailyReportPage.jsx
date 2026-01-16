@@ -11,12 +11,14 @@ import React, { useState, useEffect } from 'react';
 import EventCalendar from './components/EventCalendar';
 import { Plus, Trash2, Calendar as CalIcon, FileText, Edit3, Eye, ArrowLeft, Save, Upload, X, Image } from 'lucide-react';
 import Swal from 'sweetalert2';
+import { ComposedChart, Area, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 const DailyReportPage = () => {
     // 기본 상태
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
     const [reports, setReports] = useState([]);
     const [events, setEvents] = useState([]);
+    const [viewMonth, setViewMonth] = useState({ year: new Date().getFullYear(), month: new Date().getMonth() });
     const [loading, setLoading] = useState(true);
 
     // 뷰 모드: 'list' | 'view' | 'edit'
@@ -29,6 +31,8 @@ const DailyReportPage = () => {
         pre_market_strategy: '',
         post_market_memo: '',
         profit_rate: '',
+        profit_amount: '',
+        prev_total_asset: '',
         existing_images: [],
         new_images: [],
         image_previews: []
@@ -74,6 +78,8 @@ const DailyReportPage = () => {
             pre_market_strategy: '',
             post_market_memo: '',
             profit_rate: '',
+            profit_amount: '',
+            prev_total_asset: '',
             existing_images: [],
             new_images: [],
             image_previews: []
@@ -88,6 +94,8 @@ const DailyReportPage = () => {
             pre_market_strategy: report.pre_market_strategy || '',
             post_market_memo: report.post_market_memo || '',
             profit_rate: report.profit_rate || '',
+            profit_amount: report.profit_amount || '',
+            prev_total_asset: report.prev_total_asset || '',
             existing_images: report.image_paths || [],
             new_images: [],
             image_previews: []
@@ -97,12 +105,28 @@ const DailyReportPage = () => {
 
     // 리포트 저장
     const handleSaveReport = async () => {
+        // 필수 입력 검증: 전일 수익률, 손익, 매도금액
+        if (!editForm.profit_rate || editForm.profit_rate === '') {
+            Swal.fire('입력 필요', '전일 수익률을 입력해 주세요.', 'warning');
+            return;
+        }
+        if (!editForm.profit_amount || editForm.profit_amount === '') {
+            Swal.fire('입력 필요', '전일 손익 금액을 입력해 주세요.', 'warning');
+            return;
+        }
+        if (!editForm.prev_total_asset || editForm.prev_total_asset === '') {
+            Swal.fire('입력 필요', '전일 매도 금액을 입력해 주세요.', 'warning');
+            return;
+        }
+
         try {
             const formData = new FormData();
             formData.append('report_date', editForm.report_date);
             formData.append('pre_market_strategy', editForm.pre_market_strategy);
             formData.append('post_market_memo', editForm.post_market_memo);
             formData.append('profit_rate', editForm.profit_rate || '0');
+            formData.append('profit_amount', editForm.profit_amount || '0');
+            formData.append('prev_total_asset', editForm.prev_total_asset || '0');
             formData.append('existing_images', JSON.stringify(editForm.existing_images));
             editForm.new_images.forEach(file => formData.append('new_images', file));
 
@@ -239,7 +263,10 @@ const DailyReportPage = () => {
 
     // 리포트 리스트 렌더링
     const renderReportList = () => {
-        const sortedReports = [...reports].sort((a, b) => b.report_date.localeCompare(a.report_date));
+        // 월별 필터링
+        const monthStr = `${viewMonth.year}-${String(viewMonth.month + 1).padStart(2, '0')}`;
+        const filteredReports = reports.filter(r => r.report_date.startsWith(monthStr));
+        const sortedReports = [...filteredReports].sort((a, b) => b.report_date.localeCompare(a.report_date));
 
         return (
             <div className="glass-panel" style={{ padding: '24px', height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -248,6 +275,9 @@ const DailyReportPage = () => {
                     <h2 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 'bold', color: 'white', display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <FileText size={22} color="var(--accent-blue)" />
                         일일 리포트
+                        <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 'normal' }}>
+                            ({viewMonth.year}년 {viewMonth.month + 1}월)
+                        </span>
                     </h2>
                     <button
                         onClick={() => handleNewReport()}
@@ -262,8 +292,8 @@ const DailyReportPage = () => {
                     </button>
                 </div>
 
-                {/* 리스트 */}
-                <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {/* 리스트 - 10개 이상은 스크롤 */}
+                <div style={{ flex: 1, overflowY: 'auto', maxHeight: '600px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     {sortedReports.length === 0 ? (
                         <div style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '60px 20px' }}>
                             <FileText size={48} style={{ opacity: 0.3, marginBottom: '16px' }} />
@@ -304,12 +334,15 @@ const DailyReportPage = () => {
                                                 {report.pre_market_strategy || '(전략 미입력)'}
                                             </p>
                                         </div>
-                                        <div style={{ textAlign: 'right', minWidth: '80px' }}>
+                                        <div style={{ textAlign: 'right', minWidth: '120px' }}>
                                             <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: profitColor }}>
                                                 {profitRate > 0 ? '+' : ''}{profitRate.toFixed(2)}%
                                             </div>
-                                            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px' }}>
-                                                수익률
+                                            <div style={{ fontSize: '0.8rem', color: parseFloat(report.profit_amount || 0) > 0 ? '#f87171' : parseFloat(report.profit_amount || 0) < 0 ? '#60a5fa' : '#94a3b8', marginTop: '2px' }}>
+                                                {new Intl.NumberFormat('ko-KR').format(report.profit_amount || 0)}원
+                                            </div>
+                                            <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '2px' }}>
+                                                매도: {new Intl.NumberFormat('ko-KR').format(report.prev_total_asset || 0)}원
                                             </div>
                                         </div>
                                     </div>
@@ -373,11 +406,27 @@ const DailyReportPage = () => {
 
                 {/* 컨텐츠 */}
                 <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                    {/* 수익률 */}
-                    <div style={{ background: 'rgba(15, 23, 42, 0.5)', padding: '16px', borderRadius: '12px', textAlign: 'center' }}>
-                        <div style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '8px' }}>일일 수익률</div>
-                        <div style={{ fontSize: '2rem', fontWeight: 'bold', color: profitColor }}>
-                            {profitRate > 0 ? '+' : ''}{profitRate.toFixed(2)}%
+                    {/* 수익률 & 자산 정보 */}
+                    <div style={{ background: 'rgba(15, 23, 42, 0.5)', padding: '20px', borderRadius: '16px', display: 'flex', justifyContent: 'space-around', alignItems: 'center', flexWrap: 'wrap', gap: '20px' }}>
+                        <div style={{ textAlign: 'center' }}>
+                            <div style={{ fontSize: '0.85rem', color: '#94a3b8', marginBottom: '8px' }}>전일 수익률</div>
+                            <div style={{ fontSize: '1.8rem', fontWeight: 'bold', color: profitColor }}>
+                                {profitRate > 0 ? '+' : ''}{profitRate.toFixed(2)}%
+                            </div>
+                        </div>
+                        <div style={{ width: '1px', height: '40px', background: 'rgba(255,255,255,0.1)' }}></div>
+                        <div style={{ textAlign: 'center' }}>
+                            <div style={{ fontSize: '0.85rem', color: '#94a3b8', marginBottom: '8px' }}>전일 손익</div>
+                            <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: (viewingReport.profit_amount || 0) > 0 ? '#f87171' : (viewingReport.profit_amount || 0) < 0 ? '#60a5fa' : '#e2e8f0' }}>
+                                {new Intl.NumberFormat('ko-KR').format(viewingReport.profit_amount || 0)}원
+                            </div>
+                        </div>
+                        <div style={{ width: '1px', height: '40px', background: 'rgba(255,255,255,0.1)' }}></div>
+                        <div style={{ textAlign: 'center' }}>
+                            <div style={{ fontSize: '0.85rem', color: '#94a3b8', marginBottom: '8px' }}>전일 매도 금액</div>
+                            <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#e2e8f0' }}>
+                                {new Intl.NumberFormat('ko-KR').format(viewingReport.prev_total_asset || 0)}원
+                            </div>
                         </div>
                     </div>
 
@@ -485,26 +534,64 @@ const DailyReportPage = () => {
                         />
                     </div>
 
-                    {/* 수익률 */}
+                    {/* 전일 수익률 / 손익 / 자산 */}
                     <div>
                         <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 'bold', color: '#60a5fa', marginBottom: '8px' }}>
-                            💰 일일 수익률 (%)
+                            💰 전일 수익률 / 손익
+                        </label>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                            <div style={{ position: 'relative' }}>
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    placeholder="전일 수익률 (%)"
+                                    value={editForm.profit_rate}
+                                    onChange={(e) => setEditForm(prev => ({ ...prev, profit_rate: e.target.value }))}
+                                    style={{
+                                        width: '100%', padding: '12px 16px',
+                                        background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(51, 65, 85, 0.6)',
+                                        borderRadius: '10px', fontSize: '1.1rem', fontFamily: 'monospace',
+                                        color: parseFloat(editForm.profit_rate) > 0 ? '#f87171' : parseFloat(editForm.profit_rate) < 0 ? '#60a5fa' : '#e2e8f0'
+                                    }}
+                                />
+                                <span style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)', color: '#64748b', fontWeight: 'bold' }}>%</span>
+                            </div>
+                            <div style={{ position: 'relative' }}>
+                                <input
+                                    type="number"
+                                    placeholder="전일 손익 (원)"
+                                    value={editForm.profit_amount}
+                                    onChange={(e) => setEditForm(prev => ({ ...prev, profit_amount: e.target.value }))}
+                                    style={{
+                                        width: '100%', padding: '12px 16px',
+                                        background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(51, 65, 85, 0.6)',
+                                        borderRadius: '10px', fontSize: '1.1rem', fontFamily: 'monospace',
+                                        color: parseFloat(editForm.profit_amount) > 0 ? '#f87171' : parseFloat(editForm.profit_amount) < 0 ? '#60a5fa' : '#e2e8f0'
+                                    }}
+                                />
+                                <span style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)', color: '#64748b', fontSize: '0.8rem' }}>KRW</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 전일 매도 금액 */}
+                    <div>
+                        <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 'bold', color: '#94a3b8', marginBottom: '8px' }}>
+                            🏦 전일 매도 금액
                         </label>
                         <div style={{ position: 'relative' }}>
                             <input
                                 type="number"
-                                step="0.01"
-                                placeholder="0.00"
-                                value={editForm.profit_rate}
-                                onChange={(e) => setEditForm(prev => ({ ...prev, profit_rate: e.target.value }))}
+                                placeholder="전일 매도 금액 (원)"
+                                value={editForm.prev_total_asset}
+                                onChange={(e) => setEditForm(prev => ({ ...prev, prev_total_asset: e.target.value }))}
                                 style={{
                                     width: '100%', padding: '12px 16px',
                                     background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(51, 65, 85, 0.6)',
-                                    borderRadius: '10px', fontSize: '1.1rem', fontFamily: 'monospace',
-                                    color: parseFloat(editForm.profit_rate) > 0 ? '#f87171' : parseFloat(editForm.profit_rate) < 0 ? '#60a5fa' : '#e2e8f0'
+                                    borderRadius: '10px', fontSize: '1.1rem', fontFamily: 'monospace', color: '#e2e8f0'
                                 }}
                             />
-                            <span style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)', color: '#64748b', fontWeight: 'bold' }}>%</span>
+                            <span style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)', color: '#64748b', fontWeight: 'bold' }}>₩</span>
                         </div>
                     </div>
 
@@ -594,7 +681,7 @@ const DailyReportPage = () => {
 
     // 메인 렌더
     return (
-        <div style={{ minHeight: '100vh', padding: '100px 20px 40px 20px', background: 'var(--bg-primary)' }}>
+        <div style={{ minHeight: '100vh', padding: '30px 20px 40px 20px', background: 'var(--bg-primary)' }}>
             <div className="container" style={{ maxWidth: '1400px', margin: '0 auto' }}>
                 {/* 페이지 타이틀 */}
                 <div style={{ marginBottom: '24px' }}>
@@ -606,22 +693,191 @@ const DailyReportPage = () => {
                     </p>
                 </div>
 
+                {/* 자산 추이 차트 */}
+                <div className="glass-panel" style={{ padding: '20px', marginBottom: '24px', borderRadius: '16px' }}>
+                    <h3 style={{ margin: '0 0 16px 0', fontSize: '1.1rem', color: '#93c5fd', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        📈 전일 손익 추이
+                        <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 'normal' }}>
+                            ({viewMonth.year}년 {viewMonth.month + 1}월)
+                        </span>
+                    </h3>
+                    {(() => {
+                        // 월별 필터링
+                        const monthStr = `${viewMonth.year}-${String(viewMonth.month + 1).padStart(2, '0')}`;
+                        const filteredReports = reports.filter(r => r.report_date.startsWith(monthStr));
+                        const chartData = [...filteredReports].sort((a, b) => a.report_date.localeCompare(b.report_date)).map(r => ({
+                            ...r,
+                            barColor: parseFloat(r.profit_amount || 0) >= 0 ? '#ef4444' : '#3b82f6'
+                        }));
+
+                        if (chartData.length === 0) {
+                            return <div style={{ textAlign: 'center', color: '#64748b', padding: '40px' }}>해당 월에 등록된 리포트가 없습니다.</div>;
+                        }
+
+                        return (
+                            <div style={{ height: '280px', width: '100%' }}>
+                                <ResponsiveContainer width="100%" height="70%">
+                                    <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+                                        <defs>
+                                            <linearGradient id="colorProfitBlue" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.5} />
+                                                <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.05} />
+                                            </linearGradient>
+                                        </defs>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                                        <XAxis dataKey="report_date" stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: 10 }} tickFormatter={(str) => str.slice(8)} />
+                                        <YAxis stroke="#60a5fa" tick={{ fill: '#60a5fa', fontSize: 10 }} domain={['auto', 'auto']} tickFormatter={(val) => `${new Intl.NumberFormat('ko-KR').format(val)}`} />
+                                        <Tooltip
+                                            contentStyle={{ background: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(59, 130, 246, 0.3)', borderRadius: '8px', color: '#e2e8f0' }}
+                                            formatter={(value, name) => [`${new Intl.NumberFormat('ko-KR').format(value)}원`, name === 'profit_amount' ? '전일 손익' : '매도 금액']}
+                                            labelFormatter={(label) => `날짜: ${label}`}
+                                        />
+                                        <Area type="monotone" dataKey="profit_amount" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorProfitBlue)" />
+                                    </ComposedChart>
+                                </ResponsiveContainer>
+                                <ResponsiveContainer width="100%" height="30%">
+                                    <ComposedChart data={chartData} margin={{ top: 0, right: 10, left: 10, bottom: 5 }}>
+                                        <XAxis dataKey="report_date" stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: 9 }} tickFormatter={(str) => str.slice(8)} />
+                                        <YAxis stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: 9 }} domain={['auto', 'auto']} tickFormatter={(val) => ''} hide />
+                                        <Tooltip
+                                            contentStyle={{ background: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(59, 130, 246, 0.3)', borderRadius: '8px', color: '#e2e8f0' }}
+                                            formatter={(value) => [`${new Intl.NumberFormat('ko-KR').format(value)}원`, '매도금액']}
+                                        />
+                                        <Bar dataKey="prev_total_asset" barSize={12} radius={[2, 2, 0, 0]}>
+                                            {chartData.map((entry, index) => (
+                                                <Cell key={`cell-${index}`} fill={entry.barColor} fillOpacity={0.7} />
+                                            ))}
+                                        </Bar>
+                                    </ComposedChart>
+                                </ResponsiveContainer>
+                            </div>
+                        );
+                    })()}
+                </div>
+
+                {/* 📊 통계 리포트 패널 */}
+                {reports.length > 0 && (() => {
+                    // 통계 계산
+                    const sortedByDate = [...reports].sort((a, b) => a.report_date.localeCompare(b.report_date));
+                    const periodStart = sortedByDate[0]?.report_date || '-';
+                    const periodEnd = sortedByDate[sortedByDate.length - 1]?.report_date || '-';
+
+                    const profits = reports.map(r => parseFloat(r.profit_amount || 0));
+                    const rates = reports.map(r => parseFloat(r.profit_rate || 0));
+                    const sells = reports.map(r => parseFloat(r.prev_total_asset || 0));
+
+                    const maxProfit = Math.max(...profits);
+                    const maxProfitRate = Math.max(...rates);
+                    const minProfit = Math.min(...profits);
+                    const minProfitRate = Math.min(...rates);
+
+                    const totalProfit = profits.reduce((a, b) => a + b, 0);
+                    const avgProfit = profits.length > 0 ? totalProfit / profits.length : 0;
+                    const avgRate = rates.length > 0 ? rates.reduce((a, b) => a + b, 0) / rates.length : 0;
+                    const totalSells = sells.reduce((a, b) => a + b, 0);
+
+                    const winCount = profits.filter(p => p > 0).length;
+                    const loseCount = profits.filter(p => p < 0).length;
+                    const winRate = reports.length > 0 ? (winCount / reports.length) * 100 : 0;
+
+                    const StatBox = ({ label, value, subValue, color = '#e2e8f0', icon }) => (
+                        <div style={{
+                            background: 'rgba(15, 23, 42, 0.5)', padding: '16px', borderRadius: '12px',
+                            border: '1px solid rgba(255,255,255,0.05)', textAlign: 'center'
+                        }}>
+                            <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                                {icon && <span>{icon}</span>}
+                                {label}
+                            </div>
+                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: color }}>
+                                {value}
+                            </div>
+                            {subValue && <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '4px' }}>{subValue}</div>}
+                        </div>
+                    );
+
+                    return (
+                        <div className="glass-panel" style={{ padding: '20px', marginBottom: '24px', borderRadius: '16px' }}>
+                            <h3 style={{ margin: '0 0 16px 0', fontSize: '1.1rem', color: '#a78bfa', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                📊 트레이딩 통계 리포트
+                                <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 'normal' }}>
+                                    ({periodStart} ~ {periodEnd}, 총 {reports.length}일)
+                                </span>
+                            </h3>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px' }}>
+                                <StatBox
+                                    icon="🏆" label="최고 수익"
+                                    value={`${new Intl.NumberFormat('ko-KR').format(maxProfit)}원`}
+                                    subValue={`+${maxProfitRate.toFixed(2)}%`}
+                                    color="#10b981"
+                                />
+                                <StatBox
+                                    icon="📉" label="최대 손실"
+                                    value={`${new Intl.NumberFormat('ko-KR').format(minProfit)}원`}
+                                    subValue={`${minProfitRate.toFixed(2)}%`}
+                                    color="#f87171"
+                                />
+                                <StatBox
+                                    icon="📈" label="평균 수익률"
+                                    value={`${avgRate >= 0 ? '+' : ''}${avgRate.toFixed(2)}%`}
+                                    subValue={`일평균`}
+                                    color={avgRate >= 0 ? '#10b981' : '#f87171'}
+                                />
+                                <StatBox
+                                    icon="💰" label="평균 손익"
+                                    value={`${new Intl.NumberFormat('ko-KR').format(Math.round(avgProfit))}원`}
+                                    subValue={`일평균`}
+                                    color={avgProfit >= 0 ? '#10b981' : '#f87171'}
+                                />
+                                <StatBox
+                                    icon="💵" label="누적 손익"
+                                    value={`${new Intl.NumberFormat('ko-KR').format(totalProfit)}원`}
+                                    subValue={`전체 기간`}
+                                    color={totalProfit >= 0 ? '#34d399' : '#fb7185'}
+                                />
+                                <StatBox
+                                    icon="🎯" label="승률"
+                                    value={`${winRate.toFixed(1)}%`}
+                                    subValue={`${winCount}승 ${loseCount}패`}
+                                    color={winRate >= 50 ? '#10b981' : '#f59e0b'}
+                                />
+                                <StatBox
+                                    icon="💳" label="평균 매도금액"
+                                    value={`${new Intl.NumberFormat('ko-KR').format(Math.round(totalSells / reports.length))}원`}
+                                    subValue={`일평균`}
+                                    color="#60a5fa"
+                                />
+                            </div>
+                        </div>
+                    );
+                })()}
+
                 <div className="responsive-grid-1-2">
                     {/* 왼쪽: 캘린더 & 이벤트 목록 */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                        <EventCalendar
-                            reports={reports}
-                            events={events}
-                            selectedDate={selectedDate}
-                            onDateClick={(d) => {
-                                setSelectedDate(d);
-                            }}
-                            onAddEvent={(date) => {
-                                setSelectedDate(date);
-                                handleAddEvent();
-                            }}
-                            onDeleteEvent={handleDeleteEvent}
-                        />
+                        <div style={{ position: 'relative', zIndex: 100 }}>
+                            <EventCalendar
+                                reports={reports}
+                                events={events}
+                                selectedDate={selectedDate}
+                                onDateClick={(d) => {
+                                    setSelectedDate(d);
+                                    // 해당 날짜에 리포트가 있으면 수정, 없으면 새 작성
+                                    const existingReport = reports.find(r => r.report_date === d);
+                                    if (existingReport) {
+                                        handleEditReport(existingReport);
+                                    } else {
+                                        handleNewReport(d);
+                                    }
+                                }}
+                                onAddEvent={(date) => {
+                                    setSelectedDate(date);
+                                    handleAddEvent();
+                                }}
+                                onDeleteEvent={handleDeleteEvent}
+                                onMonthChange={(year, month) => setViewMonth({ year, month })}
+                            />
+                        </div>
 
                         {/* 이벤트 목록 */}
                         <div className="glass-panel" style={{ padding: '20px', minHeight: '280px', display: 'flex', flexDirection: 'column' }}>

@@ -5,6 +5,8 @@ const ReportEditor = ({ date, report, onSave }) => {
     const [strategy, setStrategy] = useState("");
     const [memo, setMemo] = useState("");
     const [profit, setProfit] = useState("");
+    const [profitAmount, setProfitAmount] = useState("");  // 손익 금액 (원)
+    const [prevTotalAsset, setPrevTotalAsset] = useState("");  // 전일 총 자산
     const [images, setImages] = useState([]);
     const [newImages, setNewImages] = useState([]);
     const [imagePreviews, setImagePreviews] = useState([]);
@@ -14,9 +16,11 @@ const ReportEditor = ({ date, report, onSave }) => {
             setStrategy(report.pre_market_strategy || "");
             setMemo(report.post_market_memo || "");
             setProfit(report.profit_rate || "");
+            setProfitAmount(report.profit_amount || "");
+            setPrevTotalAsset(report.prev_total_asset || "");
             setImages(report.image_paths || []);
         } else {
-            setStrategy(""); setMemo(""); setProfit(""); setImages([]);
+            setStrategy(""); setMemo(""); setProfit(""); setProfitAmount(""); setPrevTotalAsset(""); setImages([]);
         }
         setNewImages([]); setImagePreviews([]);
     }, [date, report]);
@@ -46,6 +50,8 @@ const ReportEditor = ({ date, report, onSave }) => {
         formData.append('pre_market_strategy', strategy);
         formData.append('post_market_memo', memo);
         formData.append('profit_rate', profit);
+        formData.append('profit_amount', profitAmount);
+        formData.append('prev_total_asset', prevTotalAsset);
         formData.append('existing_images', JSON.stringify(images));
         newImages.forEach(file => formData.append('new_images', file));
         await onSave(formData);
@@ -101,16 +107,42 @@ const ReportEditor = ({ date, report, onSave }) => {
                 {/* 3. Profit & Images */}
                 <div className="responsive-grid-2">
                     <div>
-                        <label style={{ ...labelStyle, color: '#60a5fa' }}>💰 Daily Profit (%)</label>
+                        <label style={{ ...labelStyle, color: '#60a5fa' }}>💰 전일 수익률 / 손익</label>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                            <div style={{ position: 'relative' }}>
+                                <input
+                                    type="number" step="0.01"
+                                    style={{ ...inputStyle, fontFamily: 'monospace', fontSize: '1.2rem', color: parseFloat(profit) > 0 ? '#f87171' : parseFloat(profit) < 0 ? '#60a5fa' : '#e2e8f0' }}
+                                    placeholder="전일 수익률 (%)"
+                                    value={profit}
+                                    onChange={e => setProfit(e.target.value)}
+                                />
+                                <span style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)', color: '#64748b', fontWeight: 'bold' }}>%</span>
+                            </div>
+                            <div style={{ position: 'relative' }}>
+                                <input
+                                    type="number"
+                                    style={{ ...inputStyle, fontFamily: 'monospace', fontSize: '1.2rem', color: parseFloat(profitAmount) > 0 ? '#f87171' : parseFloat(profitAmount) < 0 ? '#60a5fa' : '#e2e8f0' }}
+                                    placeholder="전일 손익 (원)"
+                                    value={profitAmount}
+                                    onChange={e => setProfitAmount(e.target.value)}
+                                />
+                                <span style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)', color: '#64748b', fontSize: '0.8rem' }}>KRW</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label style={{ ...labelStyle, color: '#94a3b8' }}>🏦 전일 매도 금액</label>
                         <div style={{ position: 'relative' }}>
                             <input
-                                type="number" step="0.01"
-                                style={{ ...inputStyle, fontFamily: 'monospace', fontSize: '1.2rem', color: parseFloat(profit) > 0 ? '#f87171' : parseFloat(profit) < 0 ? '#60a5fa' : '#e2e8f0' }}
-                                placeholder="0.00"
-                                value={profit}
-                                onChange={e => setProfit(e.target.value)}
+                                type="number"
+                                style={{ ...inputStyle, fontFamily: 'monospace', fontSize: '1.2rem' }}
+                                placeholder="총 자산 (원)"
+                                value={prevTotalAsset}
+                                onChange={e => setPrevTotalAsset(e.target.value)}
                             />
-                            <span style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)', color: '#64748b', fontWeight: 'bold' }}>%</span>
+                            <span style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)', color: '#64748b', fontWeight: 'bold' }}>₩</span>
                         </div>
                     </div>
 

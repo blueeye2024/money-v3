@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, X, Trash2, Plus } from 'lucide-react';
 
-const EventCalendar = ({ reports, events, selectedDate, onDateClick, onAddEvent, onDeleteEvent }) => {
+const EventCalendar = ({ reports, events, selectedDate, onDateClick, onAddEvent, onDeleteEvent, onMonthChange }) => {
     const [viewDate, setViewDate] = useState(new Date());
     const [expandedDate, setExpandedDate] = useState(null);
     const [panelPosition, setPanelPosition] = useState({ top: 0, left: 0 });
@@ -15,8 +15,16 @@ const EventCalendar = ({ reports, events, selectedDate, onDateClick, onAddEvent,
     const daysInMonth = getDaysInMonth(currentYear, currentMonth);
     const firstDay = getFirstDayOfMonth(currentYear, currentMonth);
 
-    const prevMonth = () => setViewDate(new Date(currentYear, currentMonth - 1, 1));
-    const nextMonth = () => setViewDate(new Date(currentYear, currentMonth + 1, 1));
+    const prevMonth = () => {
+        const newDate = new Date(currentYear, currentMonth - 1, 1);
+        setViewDate(newDate);
+        if (onMonthChange) onMonthChange(newDate.getFullYear(), newDate.getMonth());
+    };
+    const nextMonth = () => {
+        const newDate = new Date(currentYear, currentMonth + 1, 1);
+        setViewDate(newDate);
+        if (onMonthChange) onMonthChange(newDate.getFullYear(), newDate.getMonth());
+    };
 
     const formatDate = (year, month, day) => `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
@@ -172,7 +180,7 @@ const EventCalendar = ({ reports, events, selectedDate, onDateClick, onAddEvent,
                     border: '1px solid #38bdf8',
                     borderRadius: '12px',
                     boxShadow: '0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(56, 189, 248, 0.3)',
-                    zIndex: 100,
+                    zIndex: 1000,
                     overflow: 'hidden',
                     animation: 'fadeIn 0.15s ease-out'
                 }}>

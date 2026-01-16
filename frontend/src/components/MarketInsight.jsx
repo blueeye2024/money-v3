@@ -216,6 +216,26 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
 
     // V2 Status 실시간 폴링 (market_indices 최신 가격)
     const [v2Status, setV2Status] = React.useState({ SOXL: null, SOXS: null });
+    const [todayStrategy, setTodayStrategy] = React.useState('');
+
+    // 오늘의 장전 전략 가져오기
+    React.useEffect(() => {
+        const fetchTodayStrategy = async () => {
+            try {
+                const today = new Date().toISOString().slice(0, 10);
+                const res = await fetch(`/api/daily-reports/${today}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data && data.pre_market_strategy) {
+                        setTodayStrategy(data.pre_market_strategy);
+                    }
+                }
+            } catch (e) {
+                console.error('Strategy fetch error:', e);
+            }
+        };
+        fetchTodayStrategy();
+    }, []);
 
     React.useEffect(() => {
         const fetchV2Status = async () => {
@@ -450,7 +470,7 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                                     </div>
                                 )}
                                 <p style={{ margin: 0, color: '#bbb', fontSize: '0.95rem', lineHeight: '1.6', fontWeight: '500', flex: 1 }}>
-                                    {regimeDetails?.comment || "시장 상황을 실시간 분석 중입니다."}
+                                    {todayStrategy || regimeDetails?.comment || ''}
                                 </p>
                             </div>
                         </div>
