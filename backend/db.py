@@ -1586,7 +1586,7 @@ def update_stock_prices():
     - 휴장일 감지 및 is_market_open 플래그 설정
     """
     from datetime import datetime
-    from kis_api import get_current_price, get_exchange_code
+    from kis_api_v2 import get_current_price, get_exchange_code
     
     try:
         with get_connection() as conn:
@@ -2683,7 +2683,7 @@ def reset_price_level_trigger(ticker, level_type, stage):
         with conn.cursor() as cursor:
             sql = """
                 UPDATE manual_price_levels 
-                SET triggered='N', updated_at=NOW()
+                SET triggered='N', is_active='N', price=0, updated_at=NOW()
                 WHERE ticker=%s AND level_type=%s AND stage=%s
             """
             cursor.execute(sql, (ticker, level_type, stage))

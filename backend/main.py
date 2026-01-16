@@ -75,7 +75,7 @@ def on_startup():
         # [Ver 5.3.1] Pre-emptive Token Refresh (Every 10 mins)
         # Prevent Rate Limit Loops by refreshing token 30 mins before expiry
         def token_maintenance_job():
-            from kis_api import kis_client
+            from kis_api_v2 import kis_client
             try:
                  kis_client.ensure_fresh_token(buffer_minutes=30)
             except Exception as e:
@@ -247,8 +247,14 @@ def process_system_trading(ticker, result):
     except Exception as e:
         print(f"System Trading Logic Error ({ticker}): {e}")
 
+
+# [Ver 5.7.3] Global Sound Queue
+PENDING_SOUNDS = []
+SOUND_SENT_LOG = {} # {code: signal_dt_obj}
+
 def monitor_signals():
     global SMS_ENABLED
+    global SOUND_SENT_LOG
     print(f"[{datetime.now()}] Monitoring Signals... SMS Enabled: {SMS_ENABLED}")
     
     try:
@@ -398,26 +404,34 @@ def monitor_signals():
                             stock_name=k_ticker,
                             signal_type="마스터 진입",
                             price=full_report['holdings'].get(k_ticker, {}).get('current_price', 0),
-                            signal_time=m_res.get('signal_time', '지금'),
-                            reason="3종 필터 완성"
+                            signal_time=datetime.now().strftime("%m-%d %H:%M"),
+                            reason="트리플 필터 만족"
                         )
                         save_sms_log(receiver="01044900528", message=f"[{k_ticker}] [{m_pos}] 완성", status="Success")
+
+                # B. 5m Dead Cross Warning (Warning 5m)
+                if m_res.get('step3'):
+                    from db import check_recent_sms_log
+                    m_pos = f"마스터 {k_ticker} Step3"
+                    recent = check_recent_sms_log(k_ticker, m_pos, 30)
+                    if not recent and SMS_ENABLED:
+                        send_sms(k_ticker, f"Step3 ({k_ticker})", full_report['holdings'].get(k_ticker, {}).get('current_price', 0), "Step3 진입")
 
                 # B. 5m Dead Cross Warning (Warning 5m)
                 if m_res.get('warning_5m'):
                     from db import check_recent_sms_log
                     w_pos = f"{k_ticker} 5분봉 경고"
-                    recent_w = check_recent_sms_log(k_ticker, w_pos, 30)
+                    recent = check_recent_sms_log(k_ticker, w_pos, 30)
                     
-                    if not recent_w and SMS_ENABLED:
+                    if not recent and SMS_ENABLED:
                         send_sms(
                             stock_name=k_ticker,
-                            signal_type="주의 경보",
+                            signal_type="5분봉 경고",
                             price=full_report['holdings'].get(k_ticker, {}).get('current_price', 0),
-                            signal_time="현재",
-                            reason="5분봉 데드크로스 발생"
+                            signal_time=datetime.now().strftime("%m-%d %H:%M"),
+                            reason="데드크로스 발생"
                         )
-                        save_sms_log(receiver="01044900528", message=f"[{k_ticker}] [{w_pos}] 주의!!", status="Success")
+                        save_sms_log(receiver="01044900528", message=f"[{k_ticker}] [{w_pos}] 발생", status="Success")
 
                 # C. Trend Break (Sell Signal)
                 if m_res.get('is_sell_signal'):
@@ -435,10 +449,133 @@ def monitor_signals():
                         )
                         save_sms_log(receiver="01044900528", message=f"[{k_ticker}] [{s_pos}] 발생", status="Success")
 
+        # [Ver 5.7.3] Sound Matching Logic (User Request)
+        # SOXL (BULL TOWER) -> ULB1/2/3, ULS1/2/3
+        # SOXS (BEAR TOWER) -> USB1/2/3, USS1/2/3
+        try:
+            current_time = datetime.now()
+            
+            for stock_res in stocks_data:
+                t = stock_res.get('ticker')
+                if t not in ['SOXL', 'SOXS']: continue
+                
+                # Check V2 Buy Status
+                v2_buy = stock_res.get('v2_buy') # injected in determine_market_regime_v2
+                if v2_buy:
+                    # SOXL: ULB, SOXS: USB
+                    prefix = "ULB" if t == 'SOXL' else "USB"
+                    
+                    # Helper to enqueue sound
+                    def try_enqueue_sound(suffix, dt_str, code_prefix):
+                        if dt_str:
+                            dt = datetime.strptime(str(dt_str), '%Y-%m-%d %H:%M:%S')
+                            if (current_time - dt).total_seconds() < 60: # Recent trigger (< 1 min)
+                                code = f"{code_prefix}{suffix}"
+                                # Check if already sent for this specific timestamp
+                                last_sent_dt = SOUND_SENT_LOG.get(code)
+                                if str(last_sent_dt) != str(dt):
+                                    if code not in PENDING_SOUNDS: PENDING_SOUNDS.append(code)
+                                    SOUND_SENT_LOG[code] = dt
+                                    print(f"🔊 Queued Sound: {code} (Signal: {dt})")
+
+                    # Check Steps
+                    if v2_buy.get('buy_sig1_yn') == 'Y': try_enqueue_sound("1", v2_buy.get('buy_sig1_dt'), prefix)
+                    if v2_buy.get('buy_sig2_yn') == 'Y': try_enqueue_sound("2", v2_buy.get('buy_sig2_dt'), prefix)
+                    if v2_buy.get('buy_sig3_yn') == 'Y': try_enqueue_sound("3", v2_buy.get('buy_sig3_dt'), prefix)
+
+                # Check V2 Sell Status
+                v2_sell = stock_res.get('v2_sell')
+                if v2_sell:
+                    # SOXL: ULS, SOXS: USS
+                    prefix = "ULS" if t == 'SOXL' else "USS"
+                    
+                    def try_enqueue_sound_sell(suffix, dt_str, code_prefix):
+                        if dt_str:
+                            dt = datetime.strptime(str(dt_str), '%Y-%m-%d %H:%M:%S')
+                            if (current_time - dt).total_seconds() < 60:
+                                code = f"{code_prefix}{suffix}"
+                                last_sent_dt = SOUND_SENT_LOG.get(code)
+                                if str(last_sent_dt) != str(dt):
+                                    if code not in PENDING_SOUNDS: PENDING_SOUNDS.append(code)
+                                    SOUND_SENT_LOG[code] = dt
+                                    print(f"🔊 Queued Sound: {code} (Signal: {dt})")
+
+                    if v2_sell.get('sell_sig1_yn') == 'Y': try_enqueue_sound_sell("1", v2_sell.get('sell_sig1_dt'), prefix)
+                    if v2_sell.get('sell_sig2_yn') == 'Y': try_enqueue_sound_sell("2", v2_sell.get('sell_sig2_dt'), prefix)
+                    if v2_sell.get('sell_sig3_yn') == 'Y': try_enqueue_sound_sell("3", v2_sell.get('sell_sig3_dt'), prefix)
+
+                # [Ver 5.7.5] Check Price Level Alerts Logic (Prioritize Highest Stage)
+                try:
+                    from db import get_price_levels
+                    active_levels = get_price_levels(t)
+                    now_db = datetime.now()
+                    
+                    # Collect triggers
+                    recent_buy_triggers = []
+                    recent_sell_triggers = []
+                    
+                    for lvl in active_levels:
+                        if lvl['triggered'] == 'Y' and lvl.get('triggered_at'):
+                            # Calculate age of trigger
+                            trig_dt = lvl['triggered_at']
+                            if isinstance(trig_dt, str):
+                                trig_dt = datetime.strptime(trig_dt, '%Y-%m-%d %H:%M:%S')
+                            
+                            age_secs = (now_db - trig_dt).total_seconds()
+                            if age_secs < 60: # Recently triggered
+                                if lvl['level_type'] == 'BUY':
+                                    recent_buy_triggers.append(lvl['stage'])
+                                elif lvl['level_type'] == 'SELL':
+                                    recent_sell_triggers.append(lvl['stage'])
+
+                    # Enqueue Highest Stage Sound Only
+                    # [Ver 5.8] Use Distinct Sounds for Manual Alerts (LB/LS/SB/SS)
+                    # SOXL -> L, SOXS -> S
+                    # Buy -> B, Sell -> S
+                    # Ex: SOXL Buy 1 -> LB1, SOXS Buy 3 -> SB3
+                    ticker_code = "L" if t == 'SOXL' else "S"
+                    
+                    if recent_buy_triggers:
+                        max_stage = max(recent_buy_triggers)
+                        sound_code = f"{ticker_code}B{max_stage}"
+                        
+                        last_sent = SOUND_SENT_LOG.get(sound_code)
+                        # Throttle check
+                        if str(last_sent) != str(trig_dt):
+                             if sound_code not in PENDING_SOUNDS:
+                                 PENDING_SOUNDS.append(sound_code)
+                                 print(f"🔊 Queued Manual Alert Sound: {sound_code} (Stage {max_stage})")
+                                 SOUND_SENT_LOG[sound_code] = trig_dt # Log usage
+                    
+                    if recent_sell_triggers:
+                        max_stage = max(recent_sell_triggers)
+                        sound_code = f"{ticker_code}S{max_stage}"
+                        
+                        last_sent = SOUND_SENT_LOG.get(sound_code)
+                        if str(last_sent) != str(trig_dt):
+                            if sound_code not in PENDING_SOUNDS:
+                                PENDING_SOUNDS.append(sound_code)
+                                print(f"🔊 Queued Manual Alert Sound: {sound_code} (Stage {max_stage})")
+                                SOUND_SENT_LOG[sound_code] = trig_dt
+
+                except Exception as e:
+                    print(f"Price Alert Sound Check Error {t}: {e}")
+                                
+        except Exception as e:
+            print(f"Sound Logic Error: {e}")
+
     except Exception as e:
-        print(f"Monitor Error: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"Monitor Signals Error: {e}")
+
+@app.get("/api/test/sound")
+def test_sound(code: str):
+    """Manually enqueue a sound for testing"""
+    if code:
+        if code not in PENDING_SOUNDS:
+            PENDING_SOUNDS.append(code)
+            print(f"🔊 [TEST] Queued Sound: {code}")
+        return {"status": "success", "message": f"Sound {code} queued"}
+    return {"status": "error", "message": "No code provided"}
 
 @app.get("/api/report")
 def get_report():
@@ -508,9 +645,19 @@ def get_report():
             stock['is_visible'] = settings.get(ticker, True)
             response_data['stocks'].append(stock)
             
+
+        # 3. Inject Pending Sounds (One-time consume)
+        global PENDING_SOUNDS
+        if PENDING_SOUNDS:
+            response_data['sounds'] = list(set(PENDING_SOUNDS)) # Remove duplicates
+            PENDING_SOUNDS = [] # Clear queue
+            print(f"🔊 Sent Sounds: {response_data['sounds']}")
+        else:
+            response_data['sounds'] = []
+
         return response_data
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Get Report Error: {e}")
         return {"error": str(e)}
 
 @app.get("/api/health")
@@ -938,6 +1085,21 @@ def get_v2_status(ticker: str):
              current_price = float(market_info['current_price']) if market_info else 0.0
              change_pct = float(market_info.get('change_pct', 0.0)) if market_info else 0.0
 
+        # [Ver 5.7.3] Inject Day High from Cached Analysis
+        day_high = 0.0
+        try:
+            from analysis import get_cached_report
+            cached = get_cached_report()
+            if cached and 'stocks' in cached:
+                stock_data = next((s for s in cached['stocks'] if s['ticker'] == ticker), None)
+                if stock_data:
+                    day_high = float(stock_data.get('day_high', 0.0))
+            print(f"DEBUG: {ticker} day_high found in cache: {day_high}")
+        except Exception as e:
+            print(f"DEBUG Error getting day_high: {e}")
+            pass
+
+
         # Get latest indicators for metrics display
         indicators = get_latest_market_indicators(ticker)
         
@@ -964,7 +1126,8 @@ def get_v2_status(ticker: str):
             "sell": serialize(sell_record),
             "market_info": {
                 "current_price": current_price,
-                "change_pct": change_pct
+                "change_pct": change_pct,
+                "day_high": day_high
             },
             "metrics": serialize(indicators)  # Add metrics from market_indicators_log
         }

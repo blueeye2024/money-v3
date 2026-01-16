@@ -6,7 +6,7 @@ import time
 
 # Add backend directory to load KIS Client
 sys.path.append('/home/blue/blue/my_project/money/backend')
-from kis_api import kis_client
+from kis_api_v2 import kis_client
 
 def test_detail():
     print("Testing KIS Detail API for SOXL...")

@@ -1,5 +1,5 @@
 
-from kis_api import get_minute_candles
+from kis_api_v2 import get_minute_candles
 import pandas as pd
 from datetime import datetime
 

@@ -1,29 +1,22 @@
 #!/bin/bash
-echo "🚀 [Deploy Helper] Starting Deployment Process..."
+set -e
 
-# 1. Update Frontend
-echo "📦 Building Frontend (Vite)..."
-cd /home/blue/blue/my_project/money/frontend
+# Project root
+PROJECT_ROOT="/home/blue/blue/my_project/money"
+FRONTEND_DIR="$PROJECT_ROOT/frontend"
+
+# 1. Build frontend
+cd "$FRONTEND_DIR"
+npm install
 npm run build
-if [ $? -eq 0 ]; then
-    echo "✅ Frontend Build Success!"
-    echo "📂 Copying files to /var/www/html..."
-    sudo cp -r dist/* /var/www/html/
-else
-    echo "❌ Frontend Build Failed!"
-    exit 1
-fi
-cd ..
 
-# 2. Restart Backend
-echo "🔄 Restarting Backend Service..."
-echo "🔒 Sudo password might be required."
+# 2. Copy built files to remote server
+REMOTE_USER="blue"
+REMOTE_HOST="money.mysmartgate.kr"
+REMOTE_PATH="/var/www/html"
+sshpass -p "blueeye0037!" rsync -avz "$FRONTEND_DIR/dist/" "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}/"
 
-sudo systemctl restart cheongan-backend
+# 3. Restart backend service on remote server
+sshpass -p "blueeye0037!" ssh -o StrictHostKeyChecking=no "${REMOTE_USER}@${REMOTE_HOST}" "echo 'blueeye0037!' | sudo -S systemctl restart cheongan-backend"
 
-if [ $? -eq 0 ]; then
-    echo "✅ Backend Restarted Successfully!"
-    echo "🎉 Deployment Complete! Please Refresh your Browser (Ctrl+Shift+R)."
-else
-    echo "❌ Backend Restart Failed. Please check password or permissions."
-fi
+echo "✅ Deployment to $REMOTE_HOST completed."

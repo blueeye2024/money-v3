@@ -6,7 +6,7 @@ from datetime import datetime
 
 # Add backend directory
 sys.path.append('/home/blue/blue/my_project/money/backend')
-from kis_api import kis_client
+from kis_api_v2 import kis_client
 
 def check_kis_time():
     print(f"Current System Time: {datetime.now()}")

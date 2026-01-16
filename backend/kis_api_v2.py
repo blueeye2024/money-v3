@@ -1,9 +1,12 @@
+import logging
 import requests
 import json
 import time
 import os
 import fcntl
 from datetime import datetime, timedelta
+
+print("DEBUG: KIS API MODULE LOADED -----------------------------------")
 
 class KisApi:
     def __init__(self):
@@ -157,13 +160,17 @@ class KisApi:
                     price = float(out['last'])
                     if price <= 0: continue
                     
+                    # DEBUG KIS
+                    print(f"KIS RAW KEYS: {out.keys()}") 
+                    print(f"KIS RAW HIGH: {out.get('high')} / {out.get('hgpr')}")
+                    
                     data = {
                         'price': price,
                         'diff': float(out['diff']) if out.get('diff') else 0.0,
                         'rate': float(out['rate']) if out.get('rate') else 0.0,
                         'exchange': excd,
                         'tvol': float(out['tvol']) if out.get('tvol') else 0.0,
-                        'high': float(out['high']) if out.get('high') else 0.0, # [NEW] Max Price for Trailing Stop
+                        'high': float(out['high']) if out.get('high') else float(out.get('hgpr', 0.0)), # [FIX] Try hgpr too
                     }
                     
                     # [Logic] Prefer data with Volume (Active Market)

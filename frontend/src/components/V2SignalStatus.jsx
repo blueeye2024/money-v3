@@ -65,10 +65,10 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
         }
     }, [modal.isOpen]); // [FIX] Remove current_price dependency to prevent live updates
 
-    // --- Audio Alert Logic (Ver 3.9) ---
-    const prevBuyRef = React.useRef(null);
-    const prevSellRef = React.useRef(null);
-    const isFirstLoad = React.useRef(true);
+    // --- Audio Alert Logic Removed (Handled by App.jsx to prevent duplicates) ---
+    // const prevBuyRef = React.useRef(null);
+    // const prevSellRef = React.useRef(null);
+    // const isFirstLoad = React.useRef(true);
 
     // Custom Target Inputs State
     const [targetInputs, setTargetInputs] = React.useState({});
@@ -77,6 +77,7 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
     // Derived from title: "SOXL (BULL TOWER)" -> "C", "SOXS (BEAR TOWER)" -> "P"
     const tickerPrefix = title.includes('SOXL') ? 'C' : (title.includes('SOXS') ? 'P' : null);
 
+    /* 
     const playSound = (filename) => {
         try {
             const audio = new Audio(`/sounds/${filename}`);
@@ -85,7 +86,9 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
             console.error("Audio setup error:", e);
         }
     };
+    */
 
+    /*
     React.useEffect(() => {
         // Skip audio on first load / mount (prevent symphony on refresh)
         if (isFirstLoad.current) {
@@ -99,27 +102,9 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
 
         if (!tickerPrefix) return;
 
-        // Check Buy Signals
-        if (buyStatus) {
-            const prev = prevBuyRef.current || {};
-            if (buyStatus.buy_sig1_yn === 'Y' && prev.buy_sig1_yn !== 'Y') playSound(`${tickerPrefix}B1.mp3`);
-            if (buyStatus.buy_sig2_yn === 'Y' && prev.buy_sig2_yn !== 'Y') playSound(`${tickerPrefix}B2.mp3`);
-            if (buyStatus.buy_sig3_yn === 'Y' && prev.buy_sig3_yn !== 'Y') playSound(`${tickerPrefix}B3.mp3`);
-        }
-
-        // Check Sell Signals
-        if (sellStatus) {
-            const prev = prevSellRef.current || {};
-            if (sellStatus.sell_sig1_yn === 'Y' && prev.sell_sig1_yn !== 'Y') playSound(`${tickerPrefix}S1.mp3`);
-            if (sellStatus.sell_sig2_yn === 'Y' && prev.sell_sig2_yn !== 'Y') playSound(`${tickerPrefix}S2.mp3`);
-            if (sellStatus.sell_sig3_yn === 'Y' && prev.sell_sig3_yn !== 'Y') playSound(`${tickerPrefix}S3.mp3`);
-        }
-
-        // Update Refs
-        prevBuyRef.current = buyStatus;
-        prevSellRef.current = sellStatus;
-
-    }, [buyStatus, sellStatus, tickerPrefix]);
+        // Logic removed to prevent double playing
+    }, [buyStatus, sellStatus, tickerPrefix]); 
+    */
 
     const handleUpdateTarget = async () => {
         const type = modal.key === 'buy_sig2_yn' ? 'box' : 'stop';
@@ -341,7 +326,7 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
         { key: 'buy_sig3_yn', label: '3차: 30분봉 GC', desc: '추세 확정', rawKey: 'buy3' }
     ] : [
         { key: 'sell_sig1_yn', label: '1차: 5분봉 DC', desc: '단기 조정', rawKey: 'sell1' },
-        { key: 'sell_sig2_yn', label: '2차: 손절/익절', desc: '리스크 관리', rawKey: 'sell2' },
+        { key: 'sell_sig2_yn', label: '2차: 이익실현', desc: '리스크 관리', rawKey: 'sell2' },
         { key: 'sell_sig3_yn', label: '3차: 30분봉 DC', desc: '추세 이탈', rawKey: 'sell3' }
     ];
 
@@ -499,6 +484,14 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
                             {isUpdating && (
                                 <span style={{ color: '#fbbf24', fontSize: '1rem', animation: 'pulse 0.5s infinite' }}>⚡</span>
                             )}
+                        </div>
+                    )}
+
+                    {/* [Ver 5.7.3] Day High Display - Visible in both BUY/SELL modes */}
+                    {(activeData?.day_high_price > 0 || renderInfo?.day_high > 0) && (
+                        <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <span style={{ color: '#f472b6' }}>High: ${Number(activeData?.day_high_price || renderInfo?.day_high).toFixed(2)}</span>
+                            <span style={{ fontSize: '0.7rem', color: '#64748b' }}>(-1.5% Stop: ${(Number(activeData?.day_high_price || renderInfo?.day_high) * 0.985).toFixed(2)})</span>
                         </div>
                     )}
                 </div>

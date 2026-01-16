@@ -7,7 +7,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../b
 
 try:
     from analysis import check_triple_filter
-    from kis_api import kis_client
+    from kis_api_v2 import kis_client
     
     ticker = "SOXL"
     print(f"Testing check_triple_filter for {ticker}...")

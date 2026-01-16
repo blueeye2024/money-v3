@@ -7,7 +7,7 @@ import os
 import time
 import re
 from concurrent.futures import ThreadPoolExecutor
-from kis_api import kis_client
+from kis_api_v2 import kis_client
 from sms import send_sms
 from db import (
     load_market_candles, 
@@ -154,7 +154,7 @@ def refresh_market_indices():
     try:
         print("🌍 Refreshing Market Indices to DB (KIS + YFinance Hybrid)...")
         from db import update_market_indices
-        from kis_api import kis_client, get_exchange_code
+        from kis_api_v2 import kis_client, get_exchange_code
         
         data_list = []
         
@@ -383,7 +383,7 @@ def load_data_from_db(target_list=None):
         # KIS Live Patching (Fast, Direct Broker API)
         # We do this on LOAD so the cache always has the latest live price on top of DB history
         try:
-            from kis_api import kis_client
+            from kis_api_v2 import kis_client
             EXCHANGE_MAP = {"SOXL": "NYS", "SOXS": "NYS", "UPRO": "NYS"}
             for ticker in ["SOXL", "SOXS", "UPRO"]:
                 if ticker in cache_30m or ticker in cache_5m:
@@ -402,7 +402,7 @@ def load_data_from_db(target_list=None):
                             
             # [NEW] Gap Filling: Stitch KIS 5m Candles
             print("  🧵 Stitching KIS Candles to fill 15m delay...")
-            from kis_api import kis_client
+            from kis_api_v2 import kis_client
             for ticker in target_list:
                 if ticker not in ["SOXL", "SOXS", "UPRO"]: continue # Only for main tickers
                 
@@ -633,9 +633,9 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, df_1dRaw, market_vol_score=0, is
                      # If data[0] date == today, then previous close is data[1]['ovrs_nmix_prpr'] (for index) or 'close'?
                      # For overseas stock KIS get_daily_price returns: 
                      # { 'sign':..., 'symb':..., 'date':..., 'clos':... } (keys might differ depending on endpoint)
-                     # Based on kis_api.py: returns output2. keys are usually acronyms.
+                     # Based on kis_api_v2.py: returns output2. keys are usually acronyms.
                      # "clos" is likely close. let's assume 'clos' or similar.
-                     # Actually, looking at kis_api.py, it returns raw dict.
+                     # Actually, looking at kis_api_v2.py, it returns raw dict.
                      
                      # Let's rely on calculation:
                      # If we can get a stable previous close.
@@ -1324,7 +1324,7 @@ def run_analysis(holdings=None, force_update=False):
     # MASTER CONTROL TOWER ONLY: SOXL, SOXS, UPRO
     # -------------------------------------------------------------
     from db import get_total_capital, update_market_status
-    from kis_api import kis_client  # Import singleton instance
+    from kis_api_v2 import kis_client  # Import singleton instance
     
     # Exchange Mapping for Speed
     EXCHANGE_MAP_KIS = {
@@ -1562,11 +1562,21 @@ def check_triple_filter(ticker, data_30m, data_5m):
         daily_change = 0.0
         
         # Try KIS Cache or Live
-        from kis_api import kis_client
+        from kis_api_v2 import kis_client
         kis_data = kis_client.get_price(ticker)
         if kis_data and kis_data.get('price', 0) > 0:
              current_price = float(kis_data['price'])
              daily_change = float(kis_data.get('rate', 0))
+             
+             # [Ver 5.7.3] Day High Logic (API vs DB)
+             # KIS API 'high' is often 0 for overseas. Use DB (calculated from candles) if available.
+             api_high = float(kis_data.get('high', 0))
+             db_high = 0.0
+             if v2_buy and v2_buy.get('day_high_price'):
+                 db_high = float(v2_buy['day_high_price'])
+             
+             result['day_high'] = max(api_high, db_high)
+             if result['day_high'] == 0 and api_high > 0: result['day_high'] = api_high
         
         # Fallback to DF if KIS failed
         if current_price == 0:
@@ -1641,7 +1651,7 @@ def check_triple_filter(ticker, data_30m, data_5m):
 
         # 8. Price Alerts (Read-Only Check)
         try:
-             from db import get_price_levels
+             from db import get_price_levels, set_price_level_triggered
              levels = get_price_levels(ticker)
              # Logic to just display alerts not triggering them? 
              # Actually, run_v2 triggers them. We just display.
@@ -2440,13 +2450,14 @@ if __name__ == "__main__":
 
 # --- Cheongan V2 Signal Analysis ---
 def run_v2_signal_analysis():
-    print(f"🚀 Backend Starting V5.6 Signal Analysis... [{datetime.now()}]")
+    print(f"🚀 Backend Starting V5.6 Signal Analysis... ")
     """
     Cheongan V2 3-Step Buy/Sell Logic Implementation
     Run via Scheduler (Every 5 mins)
     """
     global _LAST_ANALYSIS_TIME
-    print(f"[{datetime.now()}] 🔄 V2 Signal Analysis Started...")
+    print(f"🔄 V2 Signal Analysis Started...")
+    import kis_api_v2
     
     # 1. Target Tickers
     targets = ['SOXL', 'SOXS']
@@ -2535,7 +2546,6 @@ def run_v2_signal_analysis():
                             # [FIX] Robust Prev Close Logic
                             # If last candle is Today (NY Time), use iloc[-2].
                             # If last candle is Yesterday, use iloc[-1].
-                            from datetime import datetime
                             import pytz
                             
                             ny_date = datetime.now(pytz.timezone('US/Eastern')).date()
@@ -2855,6 +2865,58 @@ def run_v2_signal_analysis():
                 # DEBUG Log for Verification
                 if ticker in ['SOXL', 'SOXS']:
                     print(f"🧐 [DEBUG {ticker}] Price: {curr_price}, High: {day_high:.2f}, Stop: {trailing_stop_price:.2f} (-1.5% Trailing)")
+                    
+                    # [Ver 5.7.3] Persistent Day High
+                    # Save 'day_high' to DB so frontend can display it
+                    try:
+                        from db import get_connection
+                        with get_connection() as conn:
+                            with conn.cursor() as cursor:
+                                # [Ver 5.7.3] Persistent Day High
+                                # Update day_high_price for both ACTIVE buy and sell records to ensure visibility in all modes
+                                sql_buy = "UPDATE buy_stock SET day_high_price = %s WHERE manage_id = %s"
+                                cursor.execute(sql_buy, (day_high, manage_id))
+                                
+                                # Update sell_stock as well since V2SignalStatus uses it in SELL mode
+                                sql_sell = "UPDATE sell_stock SET day_high_price = %s WHERE manage_id = %s AND close_yn='N'"
+                                cursor.execute(sql_sell, (day_high, manage_id))
+                                
+                                conn.commit()
+                    except Exception as e:
+                        print(f"Error saving day_high: {e}")
+
+                    # [Ver 5.7.3] Price Level Alerts Trigger Logic
+                    try:
+                        from db import get_price_levels, set_price_level_triggered
+                        active_levels = get_price_levels(ticker)
+                        for lvl in active_levels:
+                            if lvl['is_active'] == 'Y':
+                                l_type = lvl['level_type']
+                                l_price = float(lvl['price'])
+                                l_triggered = lvl['triggered']
+                                
+                                should_trigger = False
+                                
+                                if l_triggered == 'N' and l_price > 0 and curr_price > 0:
+                                    if l_type == 'BUY':
+                                        # Breakout (Current >= Target)
+                                        if curr_price >= l_price:
+                                            should_trigger = True
+                                    elif l_type == 'SELL':
+                                        # Breakdown (Current <= Target)
+                                        if curr_price <= l_price:
+                                            should_trigger = True
+                                            
+                                if should_trigger:
+                                    print(f"DEBUG: Alert Triggered! {ticker} {l_type} Price:{curr_price} >= Target:{l_price}")
+                                    try:
+                                        set_price_level_triggered(ticker, l_type, lvl['stage'])
+                                        print(f"DEBUG: DB Updated for {ticker} {l_type}")
+                                    except Exception as e:
+                                        print(f"DEBUG: DB Update Failed: {e}")
+                                    print(f"🔔 {ticker} Alert Triggered: {l_type} #{lvl['stage']} (${l_price}) @ ${curr_price}")
+                    except Exception as e:
+                        print(f"Error checking alerts for {ticker}: {e}")
                 
                 if sell_record['sell_sig2_yn'] == 'N':
                     triggered = False
@@ -2933,6 +2995,7 @@ def run_v2_signal_analysis():
                         # We skip auto-calculating base_price from buy record for these tickers.
                         if ticker in ['SOXL', 'SOXS']:
                              base_price = 0 
+                             reason_msg = "이익실현" # Modified
                         else:
                             if buy_record and buy_record.get('real_buy_yn') == 'Y' and buy_record.get('real_buy_price'):
                                 base_price = float(buy_record['real_buy_price'])
@@ -3045,7 +3108,7 @@ def stitch_kis_candles(ticker, yf_df, interval_min):
     """
     Fetches missing candles from KIS API and appends/overwrites YFinance DF.
     """
-    from kis_api import kis_client
+    from kis_api_v2 import kis_client
     try:
         # Fetch recent candles from KIS (Default returns 30 candles)
         print(f"    🧵 Stitching {ticker} (Interval {interval_min}m)...")

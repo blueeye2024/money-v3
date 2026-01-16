@@ -2,7 +2,7 @@
 import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), 'backend'))
-from kis_api import kis_client
+from kis_api_v2 import kis_client
 import datetime
 import pytz
 

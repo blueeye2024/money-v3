@@ -5,7 +5,7 @@ import json
 # Add backend to path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from kis_api import kis_client
+from kis_api_v2 import kis_client
 
 def check_soxl():
     print("\n--- KIS API SOXL Realtime Check ---")

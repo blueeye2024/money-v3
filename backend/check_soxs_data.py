@@ -9,7 +9,7 @@ import json
 from datetime import datetime
 import pytz
 from db import get_global_config, set_global_config
-from kis_api import kis_client
+from kis_api_v2 import kis_client
 from analysis import fetch_data, check_triple_filter
 
 def main():

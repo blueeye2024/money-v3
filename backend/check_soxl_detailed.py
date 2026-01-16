@@ -3,7 +3,7 @@ import pandas as pd
 import pandas_ta as ta
 import sys
 
-# Add path for kis_api
+# Add path for kis_api_v2
 sys.path.append('/home/blue/blue/my_project/money/backend')
 
 DB_CONFIG = {
@@ -21,7 +21,7 @@ def check_soxl_signals():
     
     # 1. Check Real-time Price & Change from KIS
     try:
-        from kis_api import kis_client
+        from kis_api_v2 import kis_client
         # Force 'NYS'
         res = kis_client.get_price('SOXL', 'NYS')
         print(f"[KIS API] Current Price: {res.get('price')}")

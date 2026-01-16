@@ -6,7 +6,7 @@ import pytz
 import time
 from db import get_connection
 # [USER REQUEST] KIS Fallback
-from kis_api import kis_client, get_exchange_code
+from kis_api_v2 import kis_client, get_exchange_code
 
 def populate_ticker_candle_data(ticker):
     """

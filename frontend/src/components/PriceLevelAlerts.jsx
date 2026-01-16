@@ -111,23 +111,35 @@ const PriceLevelAlerts = ({ ticker }) => {
 
         return (
             <div key={`${type}-${stage}`} style={{
-                display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px',
-                padding: '8px', background: isTriggered ? 'rgba(239, 68, 68, 0.2)' : 'rgba(255,255,255,0.05)',
-                borderRadius: '8px', border: isTriggered ? '1px solid #ef4444' : '1px solid transparent'
+                display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px',
+                padding: '4px 8px',
+                background: isTriggered ? 'rgba(239, 68, 68, 0.4)' : 'rgba(255,255,255,0.03)',
+                borderRadius: '6px',
+                border: isTriggered ? '1px solid #ef4444' : '1px solid transparent',
+                animation: isTriggered ? 'pulse-red 2s infinite' : 'none'
             }}>
-                <div style={{ width: '80px', fontSize: '0.8rem', color: '#94a3b8' }}>
-                    {label} <br />
-                    <span style={{ fontSize: '0.7rem', color: '#64748b' }}>({soundCode})</span>
+                <style>
+                    {`
+                        @keyframes pulse-red {
+                            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+                            70% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+                            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+                        }
+                    `}
+                </style>
+                <div style={{ flex: 1, minWidth: '0', fontSize: '0.7rem', color: '#94a3b8', lineHeight: '1.2' }}>
+                    {label} <span style={{ fontSize: '0.65rem', color: '#64748b' }}>({soundCode})</span>
                 </div>
 
                 <input
+                    key={`${type}-${stage}-${price}`} // Force re-render when price changes (e.g. Reset)
                     type="number" step="0.01"
-                    placeholder="Price($)"
+                    placeholder="$"
                     defaultValue={price}
                     id={`input-${ticker}-${type}-${stage}`}
                     style={{
-                        width: '80px', padding: '4px', background: '#1e293b', border: '1px solid #334155',
-                        color: '#fff', borderRadius: '4px', textAlign: 'right'
+                        width: '64px', padding: '2px 4px', background: '#1e293b', border: '1px solid #334155',
+                        color: '#fff', borderRadius: '4px', textAlign: 'right', fontSize: '0.75rem', height: '24px' // h-6 equivalent
                     }}
                 />
 
@@ -137,9 +149,9 @@ const PriceLevelAlerts = ({ ticker }) => {
                         handleUpdate(type, stage, val, !isActive);
                     }}
                     style={{
-                        padding: '4px 8px', fontSize: '0.75rem', borderRadius: '4px', border: 'none', cursor: 'pointer',
+                        padding: '0 6px', height: '24px', fontSize: '0.7rem', borderRadius: '4px', border: 'none', cursor: 'pointer',
                         background: isActive ? (type === 'BUY' ? '#10b981' : '#f87171') : '#475569',
-                        color: '#fff', fontWeight: 'bold'
+                        color: '#fff', fontWeight: 'bold', display: 'flex', alignItems: 'center'
                     }}
                 >
                     {isActive ? 'ON' : 'OFF'}
@@ -151,8 +163,8 @@ const PriceLevelAlerts = ({ ticker }) => {
                         handleUpdate(type, stage, val, true);
                     }}
                     style={{
-                        padding: '4px 8px', fontSize: '0.75rem', borderRadius: '4px', border: 'none', cursor: 'pointer',
-                        background: '#3b82f6', color: '#fff'
+                        padding: '0 6px', height: '24px', fontSize: '0.7rem', borderRadius: '4px', border: 'none', cursor: 'pointer',
+                        background: '#3b82f6', color: '#fff', display: 'flex', alignItems: 'center'
                     }}
                 >
                     저장
@@ -162,11 +174,11 @@ const PriceLevelAlerts = ({ ticker }) => {
                     <button
                         onClick={() => handleReset(type, stage)}
                         style={{
-                            padding: '4px 8px', fontSize: '0.75rem', borderRadius: '4px', border: '1px solid #ef4444',
-                            background: 'transparent', color: '#ef4444', cursor: 'pointer'
+                            padding: '0 6px', height: '24px', fontSize: '0.7rem', borderRadius: '4px', border: '1px solid #ef4444',
+                            background: 'transparent', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center'
                         }}
                     >
-                        Reset
+                        R
                     </button>
                 )}
             </div>
@@ -174,28 +186,38 @@ const PriceLevelAlerts = ({ ticker }) => {
     };
 
     return (
-        <div style={{ padding: '15px', background: 'rgba(30, 41, 59, 0.5)', borderRadius: '12px', marginTop: '10px' }}>
-            <h4 style={{ margin: '0 0 10px 0', color: themeColor, fontSize: '0.95rem' }}>📢 {ticker} Price Alerts</h4>
+        <div style={{
+            padding: '12px',
+            background: 'rgba(30, 41, 59, 0.4)', // Slightly transparent
+            borderRadius: '12px',
+            marginTop: '0px', // Remove top margin to align with grid
+            maxWidth: '100%',
+            boxSizing: 'border-box',
+            border: `1px solid ${themeColor}22` // Minimal border
+        }}>
+            <h4 style={{ margin: '0 0 10px 0', color: themeColor, fontSize: '0.85rem', fontWeight: '700', letterSpacing: '0.5px' }}>
+                📢 {ticker} Price Alerts
+            </h4>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                 {/* BUY Section */}
                 <div>
-                    <div style={{ fontSize: '0.8rem', color: '#10b981', marginBottom: '5px', fontWeight: 'bold' }}>
-                        📈 매수 (상향 돌파)
+                    <div style={{ fontSize: '0.7rem', color: '#10b981', marginBottom: '4px', fontWeight: 'bold', borderBottom: '1px solid #10b98133', paddingBottom: '2px' }}>
+                        📈 매수 (Breakout)
                     </div>
-                    {renderLevelRow('BUY', 1, '1차 진입(20%)')}
-                    {renderLevelRow('BUY', 2, '2차 진입(40%)')}
-                    {renderLevelRow('BUY', 3, '3차 풀매수')}
+                    {renderLevelRow('BUY', 1, '1차 20%')}
+                    {renderLevelRow('BUY', 2, '2차 40%')}
+                    {renderLevelRow('BUY', 3, '3차 Max')}
                 </div>
 
                 {/* SELL Section */}
                 <div>
-                    <div style={{ fontSize: '0.8rem', color: '#ef4444', marginBottom: '5px', fontWeight: 'bold' }}>
-                        📉 매도 (하향 돌파)
+                    <div style={{ fontSize: '0.7rem', color: '#ef4444', marginBottom: '4px', fontWeight: 'bold', borderBottom: '1px solid #ef444433', paddingBottom: '2px' }}>
+                        📉 매도 (Breakdown)
                     </div>
-                    {renderLevelRow('SELL', 1, '1차 지지(주의)')}
-                    {renderLevelRow('SELL', 2, '2차 지지(경고)')}
-                    {renderLevelRow('SELL', 3, '3차 손절선')}
+                    {renderLevelRow('SELL', 1, '1차 주의')}
+                    {renderLevelRow('SELL', 2, '2차 경고')}
+                    {renderLevelRow('SELL', 3, '3차 손절')}
                 </div>
             </div>
         </div>

@@ -1,6 +1,6 @@
 import yfinance as yf
 import pandas as pd
-from kis_api import kis_client
+from kis_api_v2 import kis_client
 from datetime import datetime
 import pytz
 
@@ -22,7 +22,7 @@ def test_gap_fill():
     # 2. Fetch KIS Data (Realtime/Gap)
     print("\n2. Fetching KIS API 30m Minute Candles...")
     # interval 30 meant 30 minutes in KIS logic? or 30m?
-    # kis_api.get_minute_candles doc says interval_min: 1, 3, 5... default 30
+    # kis_api_v2.get_minute_candles doc says interval_min: 1, 3, 5... default 30
     # We want 5 minute candles to match 5m chart.
     kis_candles = kis_client.get_minute_candles(ticker, interval_min=5)
     

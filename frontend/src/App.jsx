@@ -15,10 +15,10 @@ import packageJson from '../package.json'; // Version Import
 // 시장 상태 판단 함수 (EST 기준)
 // 시장 상태 판단 (백엔드와 동일 로직 적용 - Local Fallback)
 const getMarketStatus = () => {
-    const VERSION = "Ver 5.7.2"; Date();
+    const now = new Date();
     // UTC Time
     const utcHours = now.getUTCHours();
-    const utcMinutes = now.getUTCMiutes();
+    const utcMinutes = now.getUTCMinutes();
     const utcTime = utcHours * 60 + utcMinutes;
     const day = now.getUTCDay(); // 0=Sun, 6=Sat
 
@@ -54,20 +54,68 @@ function Dashboard() {
         return () => clearInterval(statusInterval);
     }, []);
 
-    // [Ver 5.4] Sound Playing Logic
+    // [Ver 5.7.4] Sequential Sound Queue with 30s Throttle
+    const [lastPlayedMap, setLastPlayedMap] = useState({});
+    const soundQueueRef = React.useRef([]);
+    const isPlayingRef = React.useRef(false);
+
+    const processQueue = () => {
+        if (isPlayingRef.current || soundQueueRef.current.length === 0) return;
+
+        const nextSound = soundQueueRef.current.shift(); // Dequeue
+        isPlayingRef.current = true;
+
+        console.log(`🔊 Playing Sequence: ${nextSound}.mp3`);
+        const audio = new Audio(`/sounds/${nextSound}.mp3`);
+
+        audio.onended = () => {
+            isPlayingRef.current = false;
+            processQueue(); // Play next
+        };
+
+        audio.onerror = (e) => {
+            console.warn(`Sound Error (${nextSound}):`, e);
+            isPlayingRef.current = false;
+            processQueue(); // Skip to next
+        };
+
+        audio.play().catch(e => {
+            console.warn("Play interrupted/failed:", e);
+            isPlayingRef.current = false;
+            processQueue();
+        });
+    };
+
     useEffect(() => {
         if (data?.sounds && data.sounds.length > 0) {
+            const now = Date.now();
+            const newPlayedMap = { ...lastPlayedMap };
+            let hasUpdate = false;
+
             data.sounds.forEach(soundCode => {
-                try {
-                    const audio = new Audio(`/sounds/${soundCode}.mp3`);
-                    audio.play().catch(e => console.warn(`Sound Play Error (${soundCode}):`, e));
-                    console.log(`🔊 Playing sound: ${soundCode}.mp3`);
-                } catch (e) {
-                    console.error("Audio init error:", e);
+                // Check throttle (30 seconds)
+                const lastTime = newPlayedMap[soundCode] || 0;
+
+                // Only enqueue if NOT throttled
+                if (now - lastTime > 30000) {
+                    // Also check if already in queue to prevent burst duplicates
+                    if (!soundQueueRef.current.includes(soundCode)) {
+                        soundQueueRef.current.push(soundCode);
+                        newPlayedMap[soundCode] = now;
+                        hasUpdate = true;
+                        console.log(`➕ Enqueued: ${soundCode}`);
+                    }
+                } else {
+                    // console.log(`🔇 Throttled: ${soundCode}`);
                 }
             });
+
+            if (hasUpdate) {
+                setLastPlayedMap(newPlayedMap);
+                processQueue(); // Trigger processing
+            }
         }
-    }, [data]); // Runs whenever data updates
+    }, [data?.sounds]); // Only run when sounds array changes
 
     // 폴링 모드 저장
     useEffect(() => {
@@ -361,7 +409,7 @@ function Layout() {
             }}>
                 <div className="footer-copyright">
                     <p>© 2026 Cheongan Fintech. All rights reserved.</p>
-                    <p className="version-info">Ver 5.7 (Updated: 2026-01-15 16:50)</p>
+                    <p className="version-info">Ver 5.8.0 (Updated: 2026-01-16 15:30)</p>
                 </div>
             </footer>
         </div>

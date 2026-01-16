@@ -5,7 +5,7 @@ import os
 # Add backend to path
 sys.path.append('/home/blue/blue/my_project/money/backend')
 
-from kis_api import kis_client
+from kis_api_v2 import kis_client
 
 def test_price():
     ticker = "SOXL"
@@ -24,7 +24,7 @@ def test_price():
 
     # Check Default Logic
     print("\n3. Checking Default Logic (get_current_price)...")
-    from kis_api import get_current_price
+    from kis_api_v2 import get_current_price
     final = get_current_price(ticker)
     print(f"Final Auto Result: {final}")
 

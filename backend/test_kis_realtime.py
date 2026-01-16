@@ -5,7 +5,7 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../backend')))
 
 try:
-    from kis_api import kis_client
+    from kis_api_v2 import kis_client
     print("Attempting to fetch SOXL price from KIS API (Smart Detection)...")
     
     # Test High Level get_price
