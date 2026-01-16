@@ -1,31 +1,37 @@
 import React from 'react';
 import Swal from 'sweetalert2';
 
+// Constants
+const KRW_EXCHANGE_RATE = 1450;
+
+// Helper: Extract clean ticker from title
+const getCleanTicker = (title) => {
+    if (title.toUpperCase().includes('SOXL')) return 'SOXL';
+    if (title.toUpperCase().includes('SOXS')) return 'SOXS';
+    return title.split(' ')[0].toUpperCase();
+};
+
 const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: propMetrics, isBear = false, onRefresh }) => {
-    // Info from V1 status (Price, Change)
+    // Derived values
     const { current_price, daily_change, change_pct } = renderInfo || {};
-    const displayChange = change_pct ?? daily_change; // change_pct 우선 사용
+    const displayChange = change_pct ?? daily_change;
+    const cleanTicker = React.useMemo(() => getCleanTicker(title), [title]);
 
-    // Determine Current Mode
+    // Mode determination
     const isHolding = buyStatus?.final_buy_yn === 'Y';
-    const isSellFinished = sellStatus?.final_sell_yn === 'Y';
-
-    // [FIX] While Holding, always show SELL mode (even if finished, show result)
     const mode = isHolding ? 'SELL' : 'BUY';
     const activeData = mode === 'BUY' ? buyStatus : sellStatus;
 
-    // Colors
+    // Theme colors
     const themeColor = isBear ? '#a855f7' : '#06b6d4';
-    const modeColor = mode === 'SELL' ? '#ef4444' : themeColor;
 
-    // State for Modal
+    // State
     const [modal, setModal] = React.useState({ type: null, isOpen: false, key: null, isActive: false });
     const [formData, setFormData] = React.useState({ price: '', qty: '' });
     const [submitting, setSubmitting] = React.useState(false);
-
-    // [Ver 5.0] Transient Icon Update State
     const [isUpdating, setIsUpdating] = React.useState(false);
 
+    // Update indicator effect
     React.useEffect(() => {
         if (renderInfo) {
             setIsUpdating(true);
@@ -34,83 +40,30 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
         }
     }, [renderInfo]);
 
-    // Initial Load of Real Data or Manual Target
+    // Modal form initialization
     React.useEffect(() => {
         if (modal.isOpen) {
             let initialPrice = current_price || '';
             let initialQty = '';
 
-            // 1. If Manual Signal (Sell/Buy), check for existing Target
             if (modal.type === 'MANUAL_SIGNAL') {
-                const stepIdx = modal.key?.slice(-1); // 'sell1' -> '1'
+                const stepIdx = modal.key?.slice(-1);
                 const targetKey = `manual_target_${modal.key?.startsWith('sell') ? 'sell' : 'buy'}${stepIdx}`;
-
-                // If a manual target is already saved, use it (Pre-fill)
-                if (activeData?.[targetKey] && activeData[targetKey] > 0) {
-                    initialPrice = activeData[targetKey];
-                }
-            }
-            // 2. Real Buy/Sell Logic
-            else if (modal.type === 'BUY' && buyStatus?.real_buy_yn === 'Y') {
+                if (activeData?.[targetKey] > 0) initialPrice = activeData[targetKey];
+            } else if (modal.type === 'BUY' && buyStatus?.real_buy_yn === 'Y') {
                 initialPrice = buyStatus.real_buy_price || current_price || '';
                 initialQty = buyStatus.real_buy_qn || '';
             } else if (modal.type === 'SELL') {
                 initialQty = buyStatus?.real_buy_qn || '';
             }
 
-            setFormData({
-                price: initialPrice,
-                qty: initialQty
-            });
+            setFormData({ price: initialPrice, qty: initialQty });
         }
-    }, [modal.isOpen]); // [FIX] Remove current_price dependency to prevent live updates
-
-    // --- Audio Alert Logic Removed (Handled by App.jsx to prevent duplicates) ---
-    // const prevBuyRef = React.useRef(null);
-    // const prevSellRef = React.useRef(null);
-    // const isFirstLoad = React.useRef(true);
-
-    // Custom Target Inputs State
-    const [targetInputs, setTargetInputs] = React.useState({});
-
-    // Determine Ticker Prefix (C=SOXL, P=SOXS)
-    // Derived from title: "SOXL (BULL TOWER)" -> "C", "SOXS (BEAR TOWER)" -> "P"
-    const tickerPrefix = title.includes('SOXL') ? 'C' : (title.includes('SOXS') ? 'P' : null);
-
-    /* 
-    const playSound = (filename) => {
-        try {
-            const audio = new Audio(`/sounds/${filename}`);
-            audio.play().catch(e => console.log("Audio Play Error:", e));
-        } catch (e) {
-            console.error("Audio setup error:", e);
-        }
-    };
-    */
-
-    /*
-    React.useEffect(() => {
-        // Skip audio on first load / mount (prevent symphony on refresh)
-        if (isFirstLoad.current) {
-            if (buyStatus || sellStatus) {
-                prevBuyRef.current = buyStatus;
-                prevSellRef.current = sellStatus;
-                isFirstLoad.current = false;
-            }
-            return;
-        }
-
-        if (!tickerPrefix) return;
-
-        // Logic removed to prevent double playing
-    }, [buyStatus, sellStatus, tickerPrefix]); 
-    */
+    }, [modal.isOpen]);
 
     const handleUpdateTarget = async () => {
         const type = modal.key === 'buy_sig2_yn' ? 'box' : 'stop';
         const price = formData.price;
-        // [FIX] Use ticker instead of manage_id
-        const cleanTicker = title.toUpperCase().includes('SOXL') ? 'SOXL' : (title.toUpperCase().includes('SOXS') ? 'SOXS' : title);
 
         if (!price || price <= 0) return Swal.fire('Error', "유효한 가격을 입력해주세요.", 'error');
 
@@ -154,44 +107,29 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
 
         if (modal.type === 'MANUAL_SIGNAL') {
             endpoint = '/api/v2/manual-signal';
-
-            // [FIX] Clean Ticker from Title (remove extra text like "(BULL TOWER)")
-            const cleanTicker = title.toUpperCase().includes('SOXL') ? 'SOXL' : (title.toUpperCase().includes('SOXS') ? 'SOXS' : title);
-
-            // Generate New ID matching Backend Format: Ticker + YYYYMMDD_HHMM
             const now = new Date();
-            const year = now.getFullYear();
-            const month = String(now.getMonth() + 1).padStart(2, '0');
-            const day = String(now.getDate()).padStart(2, '0');
-            const hour = String(now.getHours()).padStart(2, '0');
-            const min = String(now.getMinutes()).padStart(2, '0');
-            const newId = `${cleanTicker}${year}${month}${day}_${hour}${min}`;
+            const newId = `${cleanTicker}${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
 
             payload = {
                 manage_id: activeData?.manage_id || newId,
-                ticker: cleanTicker, // Send Clean Ticker
+                ticker: cleanTicker,
                 signal_key: modal.key,
                 price: parseFloat(formData.price),
                 status: modal.signalType === 'SELL' ? 'SET_TARGET' : 'Y'
             };
         } else if (modal.type === 'BUY' || modal.type === 'SELL') {
-            // BUY requires qty input, SELL uses buy qty automatically
             if (modal.type === 'BUY' && !formData.qty) {
                 setSubmitting(false);
                 return Swal.fire('Error', "수량을 입력해주세요.", 'error');
             }
             endpoint = modal.type === 'BUY' ? '/api/v2/confirm-buy' : '/api/v2/confirm-sell';
-            // [FIX] Use ticker instead of manage_id (Backend expects 'ticker')
-            const cleanTicker = title.toUpperCase().includes('SOXL') ? 'SOXL' : (title.toUpperCase().includes('SOXS') ? 'SOXS' : title);
-            // SELL: 자동으로 매수 수량 사용
             const autoQty = modal.type === 'SELL' ? (buyStatus?.real_buy_qn || formData.qty || 0) : formData.qty;
             payload = {
                 ticker: cleanTicker,
                 price: parseFloat(formData.price),
                 qty: parseFloat(autoQty),
-                is_end: isEnd  // 종결 여부 (true면 레코드 삭제)
+                is_end: isEnd
             };
-
         }
 
 
@@ -224,19 +162,16 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
     };
 
     const handleCancelSignal = async () => {
-        // Only for Manual Signal Modal
         if (modal.type !== 'MANUAL_SIGNAL') return;
 
         setSubmitting(true);
         try {
-            // Extract ticker from title (e.g., "SOXL (BULL TOWER)" -> "SOXL")
-            const ticker = title.split(' ')[0].toUpperCase();
 
             const payload = {
-                ticker: ticker,
+                ticker: cleanTicker,
                 signal_key: modal.key,
                 price: parseFloat(formData.price) || 0,
-                status: 'N' // Cancel Signal
+                status: 'N'
             };
 
             const res = await fetch('/api/v2/manual-signal', {
@@ -266,10 +201,7 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
     }
 
     const handleDelete = async () => {
-        // Extract ticker from title
-        const ticker = title.split(' ')[0].toUpperCase();
-
-        if (!ticker) return;
+        if (!cleanTicker) return;
 
         // SweetAlert with options
         const result = await Swal.fire({
@@ -288,11 +220,11 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
 
         if (result.isDismissed) return;
 
-        let endpoint = `/api/v2/record/${ticker}`;
+        let endpoint = `/api/v2/record/${cleanTicker}`;
         let successMsg = "전체 기록이 삭제되었습니다.";
 
         if (result.isDenied) {
-            endpoint = `/api/v2/sell-record/${ticker}`;
+            endpoint = `/api/v2/sell-record/${cleanTicker}`;
             successMsg = "매도 기록만 삭제되었습니다.";
         }
 
@@ -517,7 +449,7 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
                             <div style={{ fontSize: '0.8rem', color: '#cbd5e1', marginTop: '2px' }}>
                                 Total: <span style={{ color: '#fff', fontWeight: 'bold' }}>${(buyStatus.real_buy_qn * buyStatus.real_buy_price).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
                                 <span style={{ fontSize: '0.75rem', color: '#64748b', marginLeft: '4px' }}>
-                                    (≈₩{((buyStatus.real_buy_qn * buyStatus.real_buy_price) * 1450).toLocaleString(undefined, { maximumFractionDigits: 0 })})
+                                    (≈₩{((buyStatus.real_buy_qn * buyStatus.real_buy_price) * KRW_EXCHANGE_RATE).toLocaleString(undefined, { maximumFractionDigits: 0 })})
                                 </span>
                             </div>
                         </div>
