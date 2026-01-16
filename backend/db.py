@@ -561,6 +561,34 @@ def init_db():
             """
             cursor.execute(sql_trade_journal)
 
+            # 16. Daily Reports (Ver 5.8)
+            sql_daily_reports = """
+            CREATE TABLE IF NOT EXISTS daily_reports (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                report_date DATE UNIQUE NOT NULL,
+                pre_market_strategy TEXT,
+                post_market_memo TEXT,
+                profit_rate FLOAT,
+                image_paths TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )
+            """
+            cursor.execute(sql_daily_reports)
+
+            # 17. Market Events / Calendar (Ver 5.8)
+            sql_market_events = """
+            CREATE TABLE IF NOT EXISTS market_events (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                event_date DATE NOT NULL,
+                title VARCHAR(255) NOT NULL,
+                description TEXT,
+                importance ENUM('HIGH', 'MEDIUM', 'LOW') DEFAULT 'MEDIUM',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+            cursor.execute(sql_market_events)
+
             # --- Seed Initial Data ---
             # Seed Managed Stocks
             initial_stocks = [

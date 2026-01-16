@@ -1,6 +1,7 @@
 import React from 'react';
 import V2SignalStatus from './V2SignalStatus';
 import PriceLevelAlerts from './PriceLevelAlerts';
+import TodayEventsWidget from './TodayEventsWidget';
 
 
 
@@ -305,6 +306,9 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
 
     return (
         <div className="glass-panel" style={{ padding: '2rem', marginBottom: '3rem', display: 'flex', flexDirection: 'column', gap: '2.5rem' }}>
+
+            {/* Today's Key Alerts */}
+            <TodayEventsWidget />
 
             {/* 1. MASTER CONTROL TOWER (V2.3) */}
             <div>

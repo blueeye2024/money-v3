@@ -9,6 +9,7 @@ import SignalPage from './SignalPage';
 import ManagedStocksPage from './ManagedStocksPage';
 import BacktestPage from './BacktestPage';
 import AssetDashboardPage from './AssetDashboardPage';
+import DailyReportPage from './DailyReportPage';
 import './index.css';
 import packageJson from '../package.json'; // Version Import
 
@@ -332,7 +333,11 @@ function Layout() {
                     color: location.pathname === '/' ? 'var(--accent-blue)' : 'var(--text-primary)',
                     fontWeight: location.pathname === '/' ? 'bold' : 'normal',
                 }}>대시보드</Link>
-                <Link to="/trading-journal" className="nav-link" style={{
+                <Link to="/daily-reports" className="nav-link" style={{
+                    color: location.pathname === '/daily-reports' ? 'var(--accent-blue)' : 'var(--text-primary)',
+                    fontWeight: location.pathname === '/daily-reports' ? 'bold' : 'normal',
+                }}>📅 Daily Reports</Link>
+                < Link to="/trading-journal" className="nav-link" style={{
                     color: location.pathname === '/trading-journal' ? 'var(--accent-blue)' : 'var(--text-primary)',
                     fontWeight: location.pathname === '/trading-journal' ? 'bold' : 'normal',
                 }}>매매일지</Link>
@@ -398,6 +403,8 @@ function Layout() {
                 <Route path="/managed-stocks" element={<ManagedStocksPage />} />
                 <Route path="/backtest" element={<BacktestPage />} />
                 <Route path="/requests" element={<RequestPage />} />
+                <Route path="/daily-reports" element={<DailyReportPage />} />
+                <Route path="/asset-dashboard" element={<AssetDashboardPage />} />
                 <Route path="/asset-dashboard" element={<AssetDashboardPage />} />
                 <Route path="/login" element={<LoginPage />} />
             </Routes>
@@ -409,7 +416,7 @@ function Layout() {
             }}>
                 <div className="footer-copyright">
                     <p>© 2026 Cheongan Fintech. All rights reserved.</p>
-                    <p className="version-info">Ver 5.8.0 (Updated: 2026-01-16 15:30)</p>
+                    <p className="version-info">Ver 5.8.2 (Updated: 2026-01-16 21:01)</p>
                 </div>
             </footer>
         </div>

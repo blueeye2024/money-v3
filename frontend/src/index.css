@@ -135,11 +135,18 @@ code {
   gap: 24px;
 }
 
+.responsive-grid-1-2 {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 24px;
+}
+
 @media (max-width: 768px) {
 
   .responsive-grid-3,
   .responsive-grid-2,
-  .responsive-grid-2-1 {
+  .responsive-grid-2-1,
+  .responsive-grid-1-2 {
     grid-template-columns: 1fr !important;
     gap: 15px !important;
   }

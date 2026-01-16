@@ -1572,8 +1572,8 @@ def check_triple_filter(ticker, data_30m, data_5m):
              # KIS API 'high' is often 0 for overseas. Use DB (calculated from candles) if available.
              api_high = float(kis_data.get('high', 0))
              db_high = 0.0
-             if v2_buy and v2_buy.get('day_high_price'):
-                 db_high = float(v2_buy['day_high_price'])
+             if buy_db and buy_db.get('day_high_price'):
+                 db_high = float(buy_db['day_high_price'])
              
              result['day_high'] = max(api_high, db_high)
              if result['day_high'] == 0 and api_high > 0: result['day_high'] = api_high
@@ -2408,14 +2408,15 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
     recent_history = get_filtered_history_v2()
     # recent_news = get_market_news_v2()
     
+    # [Ver 5.8.2] Dynamic Version String
+    version_str = f"Ver 5.8.2 (Updated: {datetime.now().strftime('%Y-%m-%d %H:%M')})"
+    
     details = {
-        "version": "Ver 5.6.2 (Updated: 2026-01-15 05:20)",
+        "version": version_str,
         "prime_guide": {
             "scores": scores,
             "guides": guides,
             "tech_summary": techs, 
-            "tech_comments": tech_comments, 
-            "news": [],
             "tech_comments": tech_comments, 
             "news": [],
             "history": recent_history,
@@ -2628,12 +2629,7 @@ def run_v2_signal_analysis():
             
             
             # Check if we can start a new cycle
-            can_start_new = False
-            
-            if not buy_record:
-                can_start_new = True
-            # [REFACTOR] V5.1.0 Strict Single Record per Ticker (No manage_id)
-            # If Buy Record exists and is NOT Finalized, it's Active.
+            # [FIX Ver 5.8.2] Removed duplicate code
             can_start_new = False
             
             if not buy_record:
@@ -2765,7 +2761,7 @@ def run_v2_signal_analysis():
                              manual_update_signal(ticker, 'buy3', 0, 'N')
                              print(f"📉 {ticker} Buy Signal 3 Reset (30m Trend Lost)")
                         except: pass
-                        send_sms(ticker, "3차매수(30분봉/V2)", curr_price, sms_time, "30분봉 추세확정")
+                        # [FIX Ver 5.8.2] Removed duplicate SMS call (was incorrectly placed in reset block)
 
                 # Final Signal Completion Check
                 updated_buy = get_v2_buy_status(ticker)

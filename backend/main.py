@@ -1,5 +1,7 @@
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from routers import reports, events
 from typing import Optional
 from pydantic import BaseModel
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -28,6 +30,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Mount Static Uploads
+app.mount("/uploads", StaticFiles(directory="../frontend/public/uploads"), name="uploads")
+
+# Include Routers
+app.include_router(reports.router)
+app.include_router(events.router)
 
 # 1. Initialize DB & Scheduler
 @app.on_event("startup")
@@ -567,15 +576,7 @@ def monitor_signals():
     except Exception as e:
         print(f"Monitor Signals Error: {e}")
 
-@app.get("/api/test/sound")
-def test_sound(code: str):
-    """Manually enqueue a sound for testing"""
-    if code:
-        if code not in PENDING_SOUNDS:
-            PENDING_SOUNDS.append(code)
-            print(f"🔊 [TEST] Queued Sound: {code}")
-        return {"status": "success", "message": f"Sound {code} queued"}
-    return {"status": "error", "message": "No code provided"}
+
 
 @app.get("/api/report")
 def get_report():
