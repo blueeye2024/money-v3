@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
 import FinalSignal from './components/FinalSignal';
 import MarketStats from './components/MarketStats';
@@ -242,21 +242,7 @@ function Dashboard() {
 
     return (
         <div className="container">
-            <header>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '2.5rem', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '1.5rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{ width: '4px', height: '24px', background: 'var(--accent-blue)', borderRadius: '2px' }}></div>
-                        <h1 style={{ margin: 0, fontSize: '1.8rem', fontWeight: 700, letterSpacing: '-0.5px', background: 'linear-gradient(135deg, #fff 0%, #a5b4fc 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                            청안 해외주식 종합 분석
-                        </h1>
-                    </div>
-                    <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
-                        {/* 상태 정보는 MarketInsight로 이동됨 */}
-                    </div>
-                </div>
-
-
-            </header>
+            {/* Header removed for space optimization */}
 
             {data?.market && <MarketStats market={data.market} />}
 
@@ -279,6 +265,83 @@ function Dashboard() {
 
 import RequestPage from './RequestPage';
 import LoginPage from './LoginPage';
+
+// ═══════════════════════════════════════════════════════════════════
+// [Ver 5.9.1] GlobalAlertSounds - 전역 알림 사운드 (모든 페이지에서 동작)
+// ═══════════════════════════════════════════════════════════════════
+const GlobalAlertSounds = () => {
+    const prevTriggeredRef = useRef(new Set());  // 이전 트리거 상태
+    const lastPlayedRef = useRef({});  // 쓰로틀링용
+    const isPlayingRef = useRef(false);
+    const queueRef = useRef([]);
+
+    // 순차 재생 처리
+    const processQueue = () => {
+        if (isPlayingRef.current || queueRef.current.length === 0) return;
+
+        const sound = queueRef.current.shift();
+        isPlayingRef.current = true;
+
+        const audio = new Audio(`/sounds/${sound}.mp3`);
+        audio.onended = () => { isPlayingRef.current = false; processQueue(); };
+        audio.onerror = () => { isPlayingRef.current = false; processQueue(); };
+        audio.play().catch(() => { isPlayingRef.current = false; processQueue(); });
+
+        console.log(`🔔 GlobalAlert Sound: ${sound}`);
+    };
+
+    useEffect(() => {
+        const checkAlerts = async () => {
+            try {
+                const [soxlRes, soxsRes] = await Promise.all([
+                    fetch('/api/v2/alerts/SOXL').then(r => r.json()),
+                    fetch('/api/v2/alerts/SOXS').then(r => r.json())
+                ]);
+
+                const allLevels = [
+                    ...(soxlRes.data || []).map(l => ({ ...l, ticker: 'SOXL' })),
+                    ...(soxsRes.data || []).map(l => ({ ...l, ticker: 'SOXS' }))
+                ];
+
+                const currentTriggered = new Set();
+                const now = Date.now();
+
+                allLevels.forEach(lvl => {
+                    if (lvl.triggered === 'Y' && lvl.is_active === 'Y') {
+                        const key = `${lvl.ticker}-${lvl.level_type}-${lvl.stage}`;
+                        currentTriggered.add(key);
+
+                        // 새로 트리거된 경우에만 사운드
+                        if (!prevTriggeredRef.current.has(key)) {
+                            // 쓰로틀링 (30초)
+                            const lastPlayed = lastPlayedRef.current[key] || 0;
+                            if (now - lastPlayed > 30000) {
+                                // 사운드 코드: LB1, LS2, SB3 등
+                                const tickerCode = lvl.ticker === 'SOXL' ? 'L' : 'S';
+                                const typeCode = lvl.level_type === 'BUY' ? 'B' : 'S';
+                                const soundCode = `${tickerCode}${typeCode}${lvl.stage}`;
+
+                                queueRef.current.push(soundCode);
+                                lastPlayedRef.current[key] = now;
+                            }
+                        }
+                    }
+                });
+
+                prevTriggeredRef.current = currentTriggered;
+                processQueue();
+            } catch (e) {
+                // Silent fail
+            }
+        };
+
+        checkAlerts();
+        const interval = setInterval(checkAlerts, 5000);
+        return () => clearInterval(interval);
+    }, []);
+
+    return null;  // UI 없음
+};
 
 function Layout() {
     const location = useLocation();
@@ -321,6 +384,9 @@ function Layout() {
 
     return (
         <div className="app-container">
+            {/* 전역 알림 사운드 (항상 실행) */}
+            <GlobalAlertSounds />
+
             <button
                 className="mobile-menu-btn"
                 onClick={() => setIsMenuOpen(!isMenuOpen)}
@@ -415,7 +481,7 @@ function Layout() {
                 borderTop: '1px solid var(--glass-border)', color: 'var(--text-secondary)'
             }}>
                 <div style={{ textAlign: 'center', padding: '20px', color: '#64748b', fontSize: '0.8rem', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                    <p>&copy; 2026 BlueEye AI. All rights reserved. | System Status: <span style={{ color: '#4ade80' }}>Operational</span> | Ver 5.9.0 (Updated: 2026-01-17 03:58)</p>
+                    <p>&copy; 2026 BlueEye AI. All rights reserved. | System Status: <span style={{ color: '#4ade80' }}>Operational</span> | Ver 5.9.2 (Updated: 2026-01-17 05:01)</p>
                 </div>
             </footer>
         </div>

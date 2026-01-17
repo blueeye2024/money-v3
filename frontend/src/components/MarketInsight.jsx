@@ -214,9 +214,10 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
     const { market_regime } = market;
     const regimeDetails = market_regime?.details;
 
-    // V2 Status 실시간 폴링 (market_indices 최신 가격)
     const [v2Status, setV2Status] = React.useState({ SOXL: null, SOXS: null });
     const [todayStrategy, setTodayStrategy] = React.useState('');
+    const [showJournal, setShowJournal] = React.useState(false);
+    const [todayEvents, setTodayEvents] = React.useState([]);
 
     // 오늘의 장전 전략 가져오기
     React.useEffect(() => {
@@ -235,6 +236,15 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
             }
         };
         fetchTodayStrategy();
+
+        // Fetch today events
+        const fetchTodayEvents = async () => {
+            try {
+                const res = await fetch('/api/market-events/today');
+                if (res.ok) setTodayEvents(await res.json());
+            } catch (e) { console.error('Events fetch error:', e); }
+        };
+        fetchTodayEvents();
     }, []);
 
     React.useEffect(() => {
@@ -327,39 +337,46 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
     return (
         <div className="glass-panel" style={{ padding: '2rem', marginBottom: '3rem', display: 'flex', flexDirection: 'column', gap: '2.5rem' }}>
 
-            {/* Today's Key Alerts */}
-            <TodayEventsWidget />
-
-            {/* 1. MASTER CONTROL TOWER (V2.3) */}
+            {/* 1. Status Bar with Events */}
             <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                        <div style={{ width: '48px', height: '48px', background: 'rgba(212, 175, 55, 0.1)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.8rem' }}>🛰️</div>
-                        <h3 style={{ margin: 0, fontSize: '1.4rem', color: 'var(--accent-gold)', letterSpacing: '1px', fontWeight: '900' }}>MASTER CONTROL TOWER</h3>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', fontSize: '0.85rem' }}>
+                    {/* Left: Today Events */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        {todayEvents.length > 0 && (
+                            <>
+                                <span style={{ color: '#f87171', fontWeight: 'bold', fontSize: '0.8rem' }}>📅 오늘</span>
+                                {todayEvents.slice(0, 3).map((evt, i) => (
+                                    <span key={i} style={{
+                                        background: evt.importance === 'HIGH' ? 'rgba(239,68,68,0.15)' : 'rgba(59,130,246,0.1)',
+                                        color: evt.importance === 'HIGH' ? '#fca5a5' : '#93c5fd',
+                                        padding: '2px 8px', borderRadius: '10px', fontSize: '0.75rem', fontWeight: '500'
+                                    }}>
+                                        {evt.event_time?.slice(0, 5)} {evt.title}
+                                    </span>
+                                ))}
+                                {todayEvents.length > 3 && <span style={{ color: '#64748b', fontSize: '0.75rem' }}>+{todayEvents.length - 3}</span>}
+                            </>
+                        )}
                     </div>
-                    <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        {/* 1. Regime (상승장/하락장/보합장) - 맨 앞, Darker Colors */}
+                    {/* Right: Status */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                         <span style={{
                             color: market_regime?.regime?.includes('Bull') ? '#16a34a' : market_regime?.regime?.includes('Bear') ? '#dc2626' : '#9ca3af',
-                            fontWeight: 'bold', fontSize: '0.9rem'
+                            fontWeight: 'bold'
                         }}>
                             {market_regime?.regime?.includes('Bull') ? '상승장' : market_regime?.regime?.includes('Bear') ? '하락장' : '보합장'}
                         </span>
-
-                        {/* 2. 시장 상태 (장중/휴장) */}
                         <span style={{
                             color: marketStatus === 'open' ? '#4ade80' :
                                 (marketStatus === 'pre' || marketStatus === 'post' || marketStatus === 'pre-after') ? '#facc15' :
                                     (marketStatus === 'daytime' || marketStatus === 'day-market') ? '#38bdf8' : '#f87171',
-                            fontWeight: 'bold', fontSize: '0.9rem'
+                            fontWeight: '500'
                         }}>
-                            {marketStatus === 'open' ? '🇺🇸 정규장 (Regular)' :
-                                (marketStatus === 'pre' || marketStatus === 'pre-after') ? '🌅 프리마켓 (Pre)' :
-                                    marketStatus === 'post' ? '🌙 애프터마켓 (Post)' :
-                                        (marketStatus === 'daytime' || marketStatus === 'day-market') ? '☀️ 주간거래 (Daytime)' : '🌑 휴장 (Closed)'}
+                            {marketStatus === 'open' ? '정규장' :
+                                (marketStatus === 'pre' || marketStatus === 'pre-after') ? '프리마켓' :
+                                    marketStatus === 'post' ? '애프터마켓' :
+                                        (marketStatus === 'daytime' || marketStatus === 'day-market') ? '주간거래' : '휴장'}
                         </span>
-
-                        {/* 3. 폴링 모드 (자동/수동ON/수동OFF) - Orange/Blue Colors */}
                         <span
                             onClick={() => {
                                 const modes = ['auto', 'on', 'off'];
@@ -368,114 +385,27 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                             }}
                             style={{
                                 color: pollingMode === 'on' ? '#f97316' : pollingMode === 'off' ? '#3b82f6' : '#4ade80',
-                                cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9rem'
+                                cursor: 'pointer', fontWeight: '500'
                             }}
                             title="클릭하여 폴링 모드 변경"
                         >
                             {pollingMode === 'auto' ? '자동' : pollingMode === 'on' ? '수동ON' : '수동OFF'}
                         </span>
-
-                        {/* 4. 시간 */}
-                        <span style={{ color: '#888', fontSize: '0.9rem', fontWeight: '500' }}>
-                            {lastUpdateTime}
+                        <span
+                            onClick={() => setShowJournal(!showJournal)}
+                            style={{
+                                color: showJournal ? '#fbbf24' : '#64748b',
+                                cursor: 'pointer', fontWeight: '500'
+                            }}
+                        >
+                            매매일지
                         </span>
                     </div>
                 </div>
 
-                {/* Insight Comment Box with VIX Alert */}
-                {(() => {
-                    // Get VIX from market indices
-                    const indices = Array.isArray(market?.indices) ? market.indices : [];
-                    const vixData = indices.find(m => m.ticker === 'VIX');
-                    const vixValue = vixData ? Number(vixData.current_price || vixData.price) : null;
+                {/* Today's Key Alerts - Toggle Controlled */}
+                {showJournal && <TodayEventsWidget />}
 
-                    // VIX Level Classification
-                    let vixAlert = null;
-                    let alertStyle = {};
-
-                    if (vixValue !== null) {
-                        if (vixValue >= 30) {
-                            vixAlert = { level: 'EXTREME', icon: '🚨', text: `VIX ${vixValue.toFixed(1)} - 극도의 공포 구간! 시장 급변동 주의`, color: '#ef4444', bg: 'rgba(239, 68, 68, 0.1)' };
-                        } else if (vixValue >= 25) {
-                            vixAlert = { level: 'HIGH', icon: '⚠️', text: `VIX ${vixValue.toFixed(1)} - 높은 변동성! 신규 진입 자제 권고`, color: '#f97316', bg: 'rgba(249, 115, 22, 0.1)' };
-                        } else if (vixValue >= 20) {
-                            vixAlert = { level: 'ELEVATED', icon: '📊', text: `VIX ${vixValue.toFixed(1)} - 변동성 상승 구간`, color: '#eab308', bg: 'rgba(234, 179, 8, 0.1)' };
-                        } else if (vixValue >= 15) {
-                            vixAlert = { level: 'NORMAL', icon: '✅', text: `VIX ${vixValue.toFixed(1)} - 정상 시장 상태`, color: '#22c55e', bg: 'rgba(34, 197, 94, 0.05)' };
-                        } else {
-                            vixAlert = { level: 'LOW', icon: '😌', text: `VIX ${vixValue.toFixed(1)} - 매우 낮은 변동성 (과열 가능성)`, color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.05)' };
-                        }
-                    }
-
-                    return (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', marginBottom: '2rem' }}>
-                            {/* VIX Alert Banner (if warning level) */}
-                            {vixAlert && vixAlert.level !== 'NORMAL' && vixAlert.level !== 'LOW' && (
-                                <div style={{
-                                    background: vixAlert.bg,
-                                    padding: '1rem 1.2rem',
-                                    borderRadius: '12px',
-                                    border: `1px solid ${vixAlert.color}33`,
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '12px',
-                                    animation: vixAlert.level === 'EXTREME' ? 'pulse 1.5s infinite' : 'none'
-                                }}>
-                                    <span style={{ fontSize: '1.5rem' }}>{vixAlert.icon}</span>
-                                    <div style={{ flex: 1 }}>
-                                        <div style={{ color: vixAlert.color, fontWeight: '700', fontSize: '0.95rem' }}>
-                                            공포 지수 {vixAlert.level === 'EXTREME' ? '경보' : '주의'}
-                                        </div>
-                                        <div style={{ color: vixAlert.color, fontSize: '0.85rem', opacity: 0.9, marginTop: '2px' }}>
-                                            {vixAlert.text}
-                                        </div>
-                                    </div>
-                                    <div style={{
-                                        background: vixAlert.color,
-                                        color: '#fff',
-                                        padding: '4px 10px',
-                                        borderRadius: '20px',
-                                        fontSize: '0.8rem',
-                                        fontWeight: 'bold'
-                                    }}>
-                                        VIX {vixValue.toFixed(1)}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Main Comment Box */}
-                            <div style={{
-                                background: 'rgba(255,255,255,0.03)',
-                                padding: '1.2rem',
-                                borderRadius: '16px',
-                                borderLeft: `5px solid ${vixAlert?.color || 'var(--accent-gold)'}`,
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '12px'
-                            }}>
-                                {vixAlert && (
-                                    <div style={{
-                                        background: vixAlert.bg,
-                                        padding: '8px 12px',
-                                        borderRadius: '8px',
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        alignItems: 'center',
-                                        minWidth: '70px'
-                                    }}>
-                                        <span style={{ fontSize: '0.7rem', color: '#888' }}>VIX</span>
-                                        <span style={{ fontSize: '1.2rem', fontWeight: '800', color: vixAlert.color }}>
-                                            {vixValue?.toFixed(1) || '-'}
-                                        </span>
-                                    </div>
-                                )}
-                                <p style={{ margin: 0, color: '#bbb', fontSize: '0.95rem', lineHeight: '1.6', fontWeight: '500', flex: 1 }}>
-                                    {todayStrategy || regimeDetails?.comment || ''}
-                                </p>
-                            </div>
-                        </div>
-                    );
-                })()}
 
                 <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', marginBottom: '2.5rem' }}>
                     <V2SignalStatus

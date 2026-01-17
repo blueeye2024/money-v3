@@ -1452,6 +1452,115 @@ def get_candle_data(ticker, timeframe, limit=100):
     # [DEPRECATED] Ver 5.1.0
     return None
 
+
+# [Ver 5.9.2] Enhanced Mini Chart Data with MA and Cross Detection
+def get_mini_chart_data(ticker, limit=50):
+    """
+    5분봉/30분봉 데이터 + MA10/MA30 + 골든/데드크로스 감지
+    Returns: {
+        'candles_5m': [...],  # 5분봉 데이터
+        'candles_30m': [...], # 30분봉 데이터
+    }
+    """
+    table_name = f"{ticker.lower()}_candle_data"
+    conn = get_connection()
+    try:
+        result = {'candles_5m': [], 'candles_30m': []}
+        
+        with conn.cursor() as cursor:
+            # 5분봉 데이터 (MA 계산용 충분한 데이터)
+            sql_5m = f"""
+                SELECT candle_date, hour, minute, close_price 
+                FROM {table_name} 
+                WHERE is_30m IS NULL OR is_30m != 'Y'
+                ORDER BY candle_date DESC, hour DESC, minute DESC 
+                LIMIT %s
+            """
+            cursor.execute(sql_5m, (limit + 30,))  # MA30용 추가 데이터
+            rows_5m = list(reversed(cursor.fetchall()))
+            
+            # 30분봉 데이터
+            sql_30m = f"""
+                SELECT candle_date, hour, minute, close_price 
+                FROM {table_name} 
+                WHERE is_30m = 'Y'
+                ORDER BY candle_date DESC, hour DESC, minute DESC 
+                LIMIT %s
+            """
+            cursor.execute(sql_30m, (limit + 30,))
+            rows_30m = list(reversed(cursor.fetchall()))
+        
+        # MA 계산 함수
+        def calc_ma(data, period, idx):
+            if idx < period - 1:
+                return None
+            vals = [float(data[i]['close_price']) for i in range(idx - period + 1, idx + 1)]
+            return sum(vals) / period
+        
+        # 5분봉 처리
+        prev_cross_5m = None
+        for i, r in enumerate(rows_5m):
+            if i < 29:  # MA30 계산 불가
+                continue
+            
+            price = float(r['close_price']) if r['close_price'] else 0
+            ma10 = calc_ma(rows_5m, 10, i)
+            ma30 = calc_ma(rows_5m, 30, i)
+            
+            # 크로스 감지
+            cross = None
+            if ma10 and ma30:
+                current_cross = 'golden' if ma10 > ma30 else 'dead'
+                if prev_cross_5m and current_cross != prev_cross_5m:
+                    cross = current_cross
+                prev_cross_5m = current_cross
+            
+            result['candles_5m'].append({
+                'time': f"{r['hour']:02d}:{r['minute']:02d}",
+                'price': price,
+                'ma10': round(ma10, 4) if ma10 else None,
+                'ma30': round(ma30, 4) if ma30 else None,
+                'cross': cross
+            })
+        
+        # 30분봉 처리
+        prev_cross_30m = None
+        for i, r in enumerate(rows_30m):
+            if i < 29:
+                continue
+            
+            price = float(r['close_price']) if r['close_price'] else 0
+            ma10 = calc_ma(rows_30m, 10, i)
+            ma30 = calc_ma(rows_30m, 30, i)
+            
+            cross = None
+            if ma10 and ma30:
+                current_cross = 'golden' if ma10 > ma30 else 'dead'
+                if prev_cross_30m and current_cross != prev_cross_30m:
+                    cross = current_cross
+                prev_cross_30m = current_cross
+            
+            result['candles_30m'].append({
+                'time': f"{r['hour']:02d}:{r['minute']:02d}",
+                'price': price,
+                'ma10': round(ma10, 4) if ma10 else None,
+                'ma30': round(ma30, 4) if ma30 else None,
+                'cross': cross
+            })
+        
+        # 마지막 N개만 반환
+        result['candles_5m'] = result['candles_5m'][-limit:]
+        result['candles_30m'] = result['candles_30m'][-limit:]
+        
+        return result
+    except Exception as e:
+        print(f"Get Mini Chart Data Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'candles_5m': [], 'candles_30m': []}
+    finally:
+        conn.close()
+
 # --- New DB-Centric Data Management (market_candles) ---
 
 def get_last_candle_time(ticker, timeframe):

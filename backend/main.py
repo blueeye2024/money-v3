@@ -820,6 +820,15 @@ async def reset_alert(item: AlertLevelUpdate):
         return {"status": "success"}
     return {"status": "error", "message": "Reset failed"}
 
+
+# [Ver 5.9.1] Mini Chart Data API
+@app.get("/api/v2/chart/{ticker}")
+async def get_chart_data(ticker: str, limit: int = 50):
+    """5분봉 기준 최근 N개 캔들 데이터 조회 (차트용)"""
+    from db import get_mini_chart_data
+    data = get_mini_chart_data(ticker.upper(), limit)
+    return {"status": "success", "data": data}
+
 # --- Stock APIs ---
 class StockModel(BaseModel):
     code: str

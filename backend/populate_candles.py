@@ -101,6 +101,11 @@ def populate_ticker_candle_data(ticker):
 
     print(f"📝 {ticker} 가공된 레코드 수: {len(records)}개")
     
+    # [Ver 5.9.2] Safeguard: 200개 미만이면 데이터 손실 방지를 위해 스킵
+    if len(records) < 200:
+        print(f"⚠️ {ticker} 레코드 수 부족({len(records)}<200) - 기존 데이터 유지")
+        return
+    
     if not records:
         return
 

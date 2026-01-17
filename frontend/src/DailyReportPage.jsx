@@ -741,6 +741,8 @@ const DailyReportPage = () => {
                                         <YAxis stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: 9 }} domain={['auto', 'auto']} tickFormatter={(val) => ''} hide />
                                         <Tooltip
                                             contentStyle={{ background: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(59, 130, 246, 0.3)', borderRadius: '8px', color: '#e2e8f0' }}
+                                            labelStyle={{ color: '#fbbf24' }}
+                                            itemStyle={{ color: '#fbbf24' }}
                                             formatter={(value) => [`${new Intl.NumberFormat('ko-KR').format(value)}원`, '매도금액']}
                                         />
                                         <Bar dataKey="prev_total_asset" barSize={12} radius={[2, 2, 0, 0]}>

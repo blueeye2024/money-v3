@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 
 const getScoreInterpretation = (score, position) => {
     const pos = position || '';
@@ -7,6 +8,68 @@ const getScoreInterpretation = (score, position) => {
     if (score >= 70) return isSell ? "📉 매도" : "🟢 매수";
     if (score >= 50) return isSell ? "⚠ 경계/약세" : "🟡 관망/중립";
     return isSell ? "📉 단기 조정" : "⚪ 관망";
+};
+
+// [Ver 5.9.1] Mini Chart Component
+const MiniPriceChart = ({ ticker, isBuy, isSell, currentPrice }) => {
+    const [chartData, setChartData] = useState([]);
+
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                const res = await fetch(`/api/v2/chart/${ticker}?limit=40`);
+                const json = await res.json();
+                if (json.status === 'success' && json.data) {
+                    setChartData(json.data);
+                }
+            } catch (e) {
+                console.error('Chart fetch error:', e);
+            }
+        };
+        fetchData();
+        const interval = setInterval(fetchData, 60000); // 1분마다 갱신
+        return () => clearInterval(interval);
+    }, [ticker]);
+
+    if (chartData.length === 0) return null;
+
+    const gradientColor = isBuy ? '#ef4444' : isSell ? '#3b82f6' : '#64748b';
+
+    return (
+        <div style={{
+            marginTop: '12px',
+            background: 'rgba(0,0,0,0.2)',
+            borderRadius: '8px',
+            padding: '8px',
+            border: '1px solid rgba(255,255,255,0.05)'
+        }}>
+            <div style={{ fontSize: '0.7rem', color: '#64748b', marginBottom: '4px', display: 'flex', justifyContent: 'space-between' }}>
+                <span>📈 5분봉 가격 추이</span>
+                <span>{chartData.length}개</span>
+            </div>
+            <ResponsiveContainer width="100%" height={80}>
+                <AreaChart data={chartData} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
+                    <defs>
+                        <linearGradient id={`grad-${ticker}`} x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor={gradientColor} stopOpacity={0.4} />
+                            <stop offset="95%" stopColor={gradientColor} stopOpacity={0.05} />
+                        </linearGradient>
+                    </defs>
+                    <XAxis dataKey="time" tick={false} axisLine={false} />
+                    <YAxis domain={['dataMin', 'dataMax']} hide />
+                    <Tooltip
+                        contentStyle={{ background: 'rgba(15,23,42,0.95)', border: '1px solid #334155', borderRadius: '6px', fontSize: '0.75rem' }}
+                        labelStyle={{ color: '#94a3b8' }}
+                        formatter={(val) => [`$${val.toFixed(2)}`, '가격']}
+                    />
+                    {currentPrice && (
+                        <ReferenceLine y={currentPrice} stroke="#fbbf24" strokeDasharray="3 3" strokeWidth={1} />
+                    )}
+                    <Area type="monotone" dataKey="price" stroke={gradientColor} strokeWidth={1.5} fill={`url(#grad-${ticker})`} />
+                </AreaChart>
+            </ResponsiveContainer>
+        </div>
+    );
 };
 
 const StockCard = ({ data }) => {
@@ -96,6 +159,9 @@ const StockCard = ({ data }) => {
                     </div>
                 </div>
             )}
+
+            {/* [Ver 5.9.1] Mini Price Chart */}
+            <MiniPriceChart ticker={ticker} isBuy={isBuy} isSell={isSell} currentPrice={current_price} />
 
             {/* Strategy Diagnosis Section (Replaces generic News) */}
             <div style={{ marginTop: '1rem', background: 'rgba(0,0,0,0.2)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>

@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Swal from 'sweetalert2';
+import { ComposedChart, AreaChart, Area, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, ReferenceDot } from 'recharts';
 
 // Constants
 const KRW_EXCHANGE_RATE = 1450;
@@ -15,7 +16,49 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
     // Derived values
     const { current_price, daily_change, change_pct } = renderInfo || {};
     const displayChange = change_pct ?? daily_change;
-    const cleanTicker = React.useMemo(() => getCleanTicker(title), [title]);
+    const cleanTicker = useMemo(() => getCleanTicker(title), [title]);
+
+    // [Ver 5.9.2] Mini Chart Data (5m + 30m with MA)
+    const [chartData5m, setChartData5m] = useState([]);
+    const [chartData30m, setChartData30m] = useState([]);
+    const [alertLevels, setAlertLevels] = useState([]);
+    const [showMaChart, setShowMaChart] = useState(false);
+
+    useEffect(() => {
+        const fetchChart = async () => {
+            try {
+                const res = await fetch(`/api/v2/chart/${cleanTicker}?limit=40`);
+                const json = await res.json();
+                if (json.status === 'success' && json.data) {
+                    setChartData5m(json.data.candles_5m || []);
+                    setChartData30m(json.data.candles_30m || []);
+                }
+            } catch (e) {
+                console.error('Chart fetch error:', e);
+            }
+        };
+
+        const fetchAlerts = async () => {
+            try {
+                const res = await fetch(`/api/v2/alerts/${cleanTicker}`);
+                const json = await res.json();
+                if (json.status === 'success' && json.data) {
+                    setAlertLevels(json.data.filter(a => a.is_active === 'Y' && a.price > 0));
+                }
+            } catch (e) {
+                console.error('Alert fetch error:', e);
+            }
+        };
+
+        fetchChart();
+        fetchAlerts();
+        const chartInterval = setInterval(fetchChart, 60000);
+        const alertInterval = setInterval(fetchAlerts, 10000);
+        return () => {
+            clearInterval(chartInterval);
+            clearInterval(alertInterval);
+        };
+    }, [cleanTicker]);
 
     // Mode determination
     const isHolding = buyStatus?.final_buy_yn === 'Y';
@@ -485,6 +528,12 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
 
             {/* Footer Actions */}
             <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end', gap: '12px', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '10px' }}>
+                <span
+                    onClick={() => setShowMaChart(!showMaChart)}
+                    style={{ fontSize: '0.75rem', color: showMaChart ? '#fbbf24' : '#64748b', cursor: 'pointer', fontWeight: 'bold' }}
+                >
+                    [{showMaChart ? '보조 차트 닫기' : '보조 차트 보기'}]
+                </span>
                 {buyStatus?.real_buy_yn !== 'Y' && (
                     <span
                         onClick={() => setModal({ type: 'BUY', isOpen: true })}
@@ -640,6 +689,234 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
                     100% { opacity: 1; }
                 }
             `}</style>
+
+            {/* [Ver 5.9.6] Enhanced Alert Levels Reference Chart */}
+            {chartData5m.length > 0 && (() => {
+                // 최근 30분 데이터 (6개 캔들) + 현재가 포인트
+                const baseData = chartData5m.slice(-6);
+                const now = new Date();
+                const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+                const recentData = current_price
+                    ? [...baseData, { time: currentTime, price: current_price }]
+                    : baseData;
+
+                const prices = recentData.map(d => d.price);
+                const alertPrices = alertLevels.map(a => parseFloat(a.price));
+                const allPrices = [...prices, ...alertPrices, current_price || 0].filter(p => p > 0);
+                const minY = Math.min(...allPrices) - 0.1;
+                const maxY = Math.max(...allPrices) + 0.1;
+
+                const lastPrice = current_price || recentData[recentData.length - 1]?.price || 0;
+                const touchedAlerts = alertLevels.filter(a => {
+                    const alertPrice = parseFloat(a.price);
+                    return Math.abs(lastPrice - alertPrice) < 0.05;
+                });
+
+                return (
+                    <div style={{
+                        marginTop: '12px',
+                        background: 'rgba(0,0,0,0.3)',
+                        borderRadius: '8px',
+                        padding: '12px',
+                        border: '1px solid rgba(255,255,255,0.05)'
+                    }}>
+                        <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span>🎯 가격 알림 기준선 (최근 30분)</span>
+                            <span style={{ fontSize: '0.7rem' }}>
+                                {alertLevels.filter(a => a.level_type === 'BUY').length > 0 && <span style={{ color: '#f87171', marginRight: '8px' }}>● 매수 {alertLevels.filter(a => a.level_type === 'BUY').length}개</span>}
+                                {alertLevels.filter(a => a.level_type === 'SELL').length > 0 && <span style={{ color: '#c084fc' }}>● 매도 {alertLevels.filter(a => a.level_type === 'SELL').length}개</span>}
+                                {touchedAlerts.length > 0 && <span style={{ color: '#fbbf24', marginLeft: '8px', animation: 'pulse 1s infinite' }}>⚠️ 근접!</span>}
+                            </span>
+                        </div>
+                        <ResponsiveContainer width="100%" height={240}>
+                            <ComposedChart data={recentData} margin={{ top: 5, right: 15, left: 0, bottom: 5 }}>
+                                <defs>
+                                    <linearGradient id={`gradAlert-${cleanTicker}`} x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.4} />
+                                        <stop offset="95%" stopColor="#38bdf8" stopOpacity={0.05} />
+                                    </linearGradient>
+                                </defs>
+                                <XAxis dataKey="time" tick={{ fill: '#64748b', fontSize: 10 }} axisLine={{ stroke: '#334155' }} tickLine={false} />
+                                <YAxis
+                                    domain={[minY, maxY]}
+                                    tick={{ fill: '#94a3b8', fontSize: 9 }}
+                                    axisLine={{ stroke: '#334155' }}
+                                    tickLine={false}
+                                    tickFormatter={(val) => `$${val.toFixed(2)}`}
+                                    width={45}
+                                />
+                                <Tooltip
+                                    contentStyle={{ background: 'rgba(15,23,42,0.95)', border: '1px solid #334155', borderRadius: '6px', fontSize: '0.75rem' }}
+                                    labelStyle={{ color: '#94a3b8' }}
+                                    formatter={(val, name) => {
+                                        if (name === 'price') {
+                                            const nearestBuy = alertLevels.filter(a => a.level_type === 'BUY').map(a => parseFloat(a.price)).sort((a, b) => Math.abs(a - val) - Math.abs(b - val))[0];
+                                            const nearestSell = alertLevels.filter(a => a.level_type === 'SELL').map(a => parseFloat(a.price)).sort((a, b) => Math.abs(a - val) - Math.abs(b - val))[0];
+                                            let info = [`$${val?.toFixed(2)}`];
+                                            if (nearestBuy) info.push(`매수선: $${(val - nearestBuy).toFixed(2)}`);
+                                            if (nearestSell) info.push(`매도선: $${(nearestSell - val).toFixed(2)}`);
+                                            return [info.join(' | '), '현재가'];
+                                        }
+                                        return [val, name];
+                                    }}
+                                />
+                                {/* Price Line */}
+                                <Area type="monotone" dataKey="price" stroke="#38bdf8" strokeWidth={2.5} fill={`url(#gradAlert-${cleanTicker})`} />
+                                {/* Current Price Dot */}
+                                {current_price && (
+                                    <ReferenceDot
+                                        x={currentTime}
+                                        y={current_price}
+                                        r={5}
+                                        fill="#38bdf8"
+                                        stroke="#fff"
+                                        strokeWidth={2}
+                                    />
+                                )}
+                                {/* Alert Level Lines - BUY: Red, SELL: Purple */}
+                                {alertLevels.map((alert, i) => {
+                                    const aPrice = parseFloat(alert.price);
+                                    const isTouched = Math.abs(lastPrice - aPrice) < 0.05;
+                                    const isBuy = alert.level_type === 'BUY';
+                                    return (
+                                        <ReferenceLine
+                                            key={`alert-${i}`}
+                                            y={aPrice}
+                                            stroke={isBuy ? 'rgba(248, 113, 113, 0.5)' : 'rgba(192, 132, 252, 0.5)'}
+                                            strokeWidth={isTouched ? 2 : 1}
+                                            strokeDasharray="4 2"
+                                        />
+                                    );
+                                })}
+                                {/* Touch Indicators */}
+                                {touchedAlerts.map((alert, i) => (
+                                    <ReferenceDot
+                                        key={`touch-${i}`}
+                                        x={currentTime}
+                                        y={parseFloat(alert.price)}
+                                        r={6}
+                                        fill={alert.level_type === 'BUY' ? '#f87171' : '#c084fc'}
+                                        stroke="#fff"
+                                        strokeWidth={2}
+                                    />
+                                ))}
+                            </ComposedChart>
+                        </ResponsiveContainer>
+                        {/* Alert Level Labels below chart */}
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px', fontSize: '0.7rem' }}>
+                            {alertLevels.map((alert, i) => (
+                                <span key={`label-${i}`} style={{
+                                    color: alert.level_type === 'BUY' ? '#f87171' : '#c084fc',
+                                    background: 'rgba(255,255,255,0.05)',
+                                    padding: '2px 6px',
+                                    borderRadius: '4px'
+                                }}>
+                                    {alert.stage}차 ${parseFloat(alert.price).toFixed(2)}
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+                );
+            })()}
+
+            {/* [Ver 5.9.2] Enhanced Mini Price Charts with MA10/MA30 - Toggle Controlled */}
+            {showMaChart && (chartData5m.length > 0 || chartData30m.length > 0) && (
+                <div style={{
+                    marginTop: '8px',
+                    background: 'rgba(0,0,0,0.3)',
+                    borderRadius: '8px',
+                    padding: '10px',
+                    border: '1px solid rgba(255,255,255,0.05)'
+                }}>
+                    {/* 5분봄 차트 */}
+                    {chartData5m.length > 0 && (
+                        <>
+                            <div style={{ fontSize: '0.7rem', color: '#64748b', marginBottom: '4px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span>📈 5분봄 (MA10<span style={{ color: '#f87171' }}>●</span> / MA30<span style={{ color: '#60a5fa' }}>●</span>)</span>
+                                <span style={{ display: 'flex', gap: '6px', fontSize: '0.65rem' }}>
+                                    {chartData5m.some(d => d.cross === 'golden') && <span style={{ color: '#22c55e' }}>🟢 GC</span>}
+                                    {chartData5m.some(d => d.cross === 'dead') && <span style={{ color: '#ef4444' }}>🔴 DC</span>}
+                                </span>
+                            </div>
+                            <ResponsiveContainer width="100%" height={90}>
+                                <ComposedChart data={chartData5m} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
+                                    <defs>
+                                        <linearGradient id={`grad5m-${cleanTicker}`} x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
+                                            <stop offset="95%" stopColor="#22c55e" stopOpacity={0.05} />
+                                        </linearGradient>
+                                    </defs>
+                                    <XAxis dataKey="time" tick={false} axisLine={false} />
+                                    <YAxis domain={['dataMin', 'dataMax']} hide />
+                                    <Tooltip
+                                        contentStyle={{ background: 'rgba(15,23,42,0.95)', border: '1px solid #334155', borderRadius: '6px', fontSize: '0.7rem' }}
+                                        labelStyle={{ color: '#94a3b8' }}
+                                        formatter={(val, name) => {
+                                            if (name === 'price') return [`$${val?.toFixed(2)}`, '가격'];
+                                            if (name === 'ma10') return [`$${val?.toFixed(2)}`, 'MA10'];
+                                            if (name === 'ma30') return [`$${val?.toFixed(2)}`, 'MA30'];
+                                            return [val, name];
+                                        }}
+                                    />
+                                    <Area type="monotone" dataKey="price" stroke="#22c55e" strokeWidth={2.5} fill={`url(#grad5m-${cleanTicker})`} />
+                                    <Line type="monotone" dataKey="ma10" stroke="#f87171" strokeWidth={1} dot={false} />
+                                    <Line type="monotone" dataKey="ma30" stroke="#60a5fa" strokeWidth={1} dot={false} />
+                                    {chartData5m.map((d, i) => d.cross === 'golden' && (
+                                        <ReferenceDot key={`gc5-${i}`} x={d.time} y={d.price} r={4} fill="#22c55e" stroke="#fff" strokeWidth={1} />
+                                    ))}
+                                    {chartData5m.map((d, i) => d.cross === 'dead' && (
+                                        <ReferenceDot key={`dc5-${i}`} x={d.time} y={d.price} r={4} fill="#ef4444" stroke="#fff" strokeWidth={1} />
+                                    ))}
+                                </ComposedChart>
+                            </ResponsiveContainer>
+                        </>
+                    )}
+
+                    {/* 30분봄 차트 */}
+                    {chartData30m.length > 0 && (
+                        <>
+                            <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '8px', marginBottom: '4px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '8px' }}>
+                                <span>📈 30분봄 (MA10<span style={{ color: '#f87171' }}>●</span> / MA30<span style={{ color: '#60a5fa' }}>●</span>)</span>
+                                <span style={{ display: 'flex', gap: '6px', fontSize: '0.65rem' }}>
+                                    {chartData30m.some(d => d.cross === 'golden') && <span style={{ color: '#22c55e' }}>🟢 GC</span>}
+                                    {chartData30m.some(d => d.cross === 'dead') && <span style={{ color: '#ef4444' }}>🔴 DC</span>}
+                                </span>
+                            </div>
+                            <ResponsiveContainer width="100%" height={90}>
+                                <ComposedChart data={chartData30m} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
+                                    <defs>
+                                        <linearGradient id={`grad30m-${cleanTicker}`} x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                                            <stop offset="95%" stopColor="#10b981" stopOpacity={0.05} />
+                                        </linearGradient>
+                                    </defs>
+                                    <XAxis dataKey="time" tick={false} axisLine={false} />
+                                    <YAxis domain={['dataMin', 'dataMax']} hide />
+                                    <Tooltip
+                                        contentStyle={{ background: 'rgba(15,23,42,0.95)', border: '1px solid #334155', borderRadius: '6px', fontSize: '0.7rem' }}
+                                        labelStyle={{ color: '#94a3b8' }}
+                                        formatter={(val, name) => {
+                                            if (name === 'price') return [`$${val?.toFixed(2)}`, '가격'];
+                                            if (name === 'ma10') return [`$${val?.toFixed(2)}`, 'MA10'];
+                                            if (name === 'ma30') return [`$${val?.toFixed(2)}`, 'MA30'];
+                                            return [val, name];
+                                        }}
+                                    />
+                                    <Area type="monotone" dataKey="price" stroke="#10b981" strokeWidth={2.5} fill={`url(#grad30m-${cleanTicker})`} />
+                                    <Line type="monotone" dataKey="ma10" stroke="#f87171" strokeWidth={1} dot={false} />
+                                    <Line type="monotone" dataKey="ma30" stroke="#60a5fa" strokeWidth={1} dot={false} />
+                                    {chartData30m.map((d, i) => d.cross === 'golden' && (
+                                        <ReferenceDot key={`gc30-${i}`} x={d.time} y={d.price} r={4} fill="#22c55e" stroke="#fff" strokeWidth={1} />
+                                    ))}
+                                    {chartData30m.map((d, i) => d.cross === 'dead' && (
+                                        <ReferenceDot key={`dc30-${i}`} x={d.time} y={d.price} r={4} fill="#ef4444" stroke="#fff" strokeWidth={1} />
+                                    ))}
+                                </ComposedChart>
+                            </ResponsiveContainer>
+                        </>
+                    )}
+                </div>
+            )}
         </div >
     );
 };
