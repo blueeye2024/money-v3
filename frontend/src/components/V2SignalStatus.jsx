@@ -691,14 +691,24 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
             `}</style>
 
             {/* [Ver 5.9.6] Enhanced Alert Levels Reference Chart */}
-            {chartData5m.length > 0 && (() => {
+            {(alertLevels.length > 0 || chartData5m.length > 0) && current_price && (() => {
                 // 최근 30분 데이터 (6개 캔들) + 현재가 포인트
-                const baseData = chartData5m.slice(-6);
+                // If no 5m data, create minimal data points with current price
                 const now = new Date();
                 const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-                const recentData = current_price
-                    ? [...baseData, { time: currentTime, price: current_price }]
-                    : baseData;
+
+                let recentData;
+                if (chartData5m.length > 0) {
+                    const baseData = chartData5m.slice(-6);
+                    recentData = [...baseData, { time: currentTime, price: current_price }];
+                } else {
+                    // Fallback: create simple data points around current price for visualization
+                    const times = ['00:00', '00:05', '00:10', '00:15', '00:20', currentTime];
+                    recentData = times.map((t, i) => ({
+                        time: t,
+                        price: i === times.length - 1 ? current_price : current_price * (0.998 + Math.random() * 0.004)
+                    }));
+                }
 
                 const prices = recentData.map(d => d.price);
                 const alertPrices = alertLevels.map(a => parseFloat(a.price));

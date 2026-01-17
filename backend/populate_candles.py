@@ -101,9 +101,17 @@ def populate_ticker_candle_data(ticker):
 
     print(f"📝 {ticker} 가공된 레코드 수: {len(records)}개")
     
-    # [Ver 5.9.2] Safeguard: 200개 미만이면 데이터 손실 방지를 위해 스킵
+    # [Ver 6.0.1] Enhanced Safeguard: Check both total and 5m candle count
+    # Count 5m candles (is_30m is None)
+    count_5m = sum(1 for r in records if r['is_30m'] is None)
+    print(f"📊 {ticker} 5분봉: {count_5m}개, 30분봉: {len(records) - count_5m}개")
+    
     if len(records) < 200:
         print(f"⚠️ {ticker} 레코드 수 부족({len(records)}<200) - 기존 데이터 유지")
+        return
+    
+    if count_5m < 150:
+        print(f"⚠️ {ticker} 5분봉 데이터 부족({count_5m}<150) - 기존 데이터 유지")
         return
     
     if not records:

@@ -128,7 +128,7 @@ const cssAnimation = `
     }
 `;
 
-const PriceLevelAlerts = ({ ticker }) => {
+const PriceLevelAlerts = ({ ticker, currentPrice }) => {
     // State
     const [levels, setLevels] = useState([]);
     const [priceInputs, setPriceInputs] = useState({});  // Controlled inputs
@@ -222,8 +222,20 @@ const PriceLevelAlerts = ({ ticker }) => {
     const renderRow = (type, stage) => {
         const key = `${type}-${stage}`;
         const data = levels.find(l => l.level_type === type && l.stage === stage) || {};
-        const isTriggered = data.triggered === 'Y';
+        const alertPrice = parseFloat(data.price) || 0;
         const isActive = data.is_active === 'Y';
+
+        // [Ver 6.0.1] Real-time validation of trigger state using currentPrice
+        // BUY: currentPrice >= alertPrice, SELL: currentPrice <= alertPrice
+        let isTriggered = false;
+        if (isActive && alertPrice > 0 && currentPrice > 0) {
+            if (type === 'BUY') {
+                isTriggered = currentPrice >= alertPrice;
+            } else if (type === 'SELL') {
+                isTriggered = currentPrice <= alertPrice;
+            }
+        }
+
         const label = LABELS[type][stage - 1];
         const typeCode = type === 'BUY' ? 'B' : 'S';
         const soundCode = `${tickerCode}${typeCode}${stage}`;

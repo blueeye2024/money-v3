@@ -203,23 +203,31 @@ const DailyReportPage = () => {
     const handleAddEvent = async () => {
         const { value: formValues } = await Swal.fire({
             title: '새 이벤트 추가',
+            width: '450px',
             html: `
-                <div style="text-align: left; display: flex; flex-direction: column; gap: 10px;">
-                    <label style="font-size: 0.9rem; font-weight: bold; color: #333;">제목</label>
-                    <input id="evt-title" class="swal2-input" placeholder="예: CPI 발표" style="margin: 0; width: 100%;">
+                <div style="text-align: left; display: flex; flex-direction: column; gap: 8px;">
+                    <label style="font-size: 0.8rem; font-weight: bold; color: #333;">제목</label>
+                    <input id="evt-title" class="swal2-input" placeholder="예: CPI 발표" style="margin: 0; width: 100%; font-size: 0.85rem; padding: 8px;">
                     
-                    <label style="font-size: 0.9rem; font-weight: bold; color: #333;">시간 (선택)</label>
-                    <input id="evt-time" type="time" class="swal2-input" style="margin: 0; width: 100%;">
+                    <div style="display: flex; gap: 10px;">
+                        <div style="flex: 1;">
+                            <label style="font-size: 0.8rem; font-weight: bold; color: #333;">시간 (선택)</label>
+                            <input id="evt-time" type="time" class="swal2-input" style="margin: 0; width: 100%; font-size: 0.85rem; padding: 8px;">
+                        </div>
+                        <div style="flex: 1;">
+                            <label style="font-size: 0.8rem; font-weight: bold; color: #333;">중요도</label>
+                            <select id="evt-imp" class="swal2-select" style="margin: 0; width: 100%; font-size: 0.85rem; padding: 8px;">
+                                <option value="CRITICAL">매우중요 (보라)</option>
+                                <option value="HIGH">높음 (빨강)</option>
+                                <option value="MEDIUM" selected>중간 (주황)</option>
+                                <option value="LOW">낮음 (파랑)</option>
+                                <option value="CLOSED">휴장 (회색)</option>
+                            </select>
+                        </div>
+                    </div>
                     
-                    <label style="font-size: 0.9rem; font-weight: bold; color: #333;">설명</label>
-                    <textarea id="evt-desc" class="swal2-textarea" placeholder="상세 내용..." style="margin: 0; width: 100%; height: 80px; resize: none;"></textarea>
-                    
-                    <label style="font-size: 0.9rem; font-weight: bold; color: #333;">중요도</label>
-                    <select id="evt-imp" class="swal2-select" style="margin: 0; width: 100%;">
-                        <option value="HIGH">높음 (빨강)</option>
-                        <option value="MEDIUM" selected>보통 (주황)</option>
-                        <option value="LOW">낮음 (파랑)</option>
-                    </select>
+                    <label style="font-size: 0.8rem; font-weight: bold; color: #333;">설명</label>
+                    <textarea id="evt-desc" class="swal2-textarea" placeholder="상세 내용..." style="margin: 0; width: 100%; height: 120px; resize: none; font-size: 0.85rem; padding: 8px;"></textarea>
                 </div>
             `,
             focusConfirm: false,
@@ -242,6 +250,72 @@ const DailyReportPage = () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     event_date: selectedDate,
+                    event_time: formValues.time,
+                    title: formValues.title,
+                    description: formValues.desc,
+                    importance: formValues.imp
+                })
+            });
+            fetchData();
+        }
+    };
+
+    // [Ver 6.0.1] 이벤트 수정
+    const handleEditEvent = async (evt) => {
+        const { value: formValues } = await Swal.fire({
+            title: '이벤트 수정',
+            width: '450px',
+            html: `
+                <div style="text-align: left; display: flex; flex-direction: column; gap: 8px;">
+                    <label style="font-size: 0.8rem; font-weight: bold; color: #333;">제목</label>
+                    <input id="evt-title" class="swal2-input" style="margin: 0; width: 100%; font-size: 0.85rem; padding: 8px;">
+                    
+                    <div style="display: flex; gap: 10px;">
+                        <div style="flex: 1;">
+                            <label style="font-size: 0.8rem; font-weight: bold; color: #333;">시간 (선택)</label>
+                            <input id="evt-time" type="time" class="swal2-input" style="margin: 0; width: 100%; font-size: 0.85rem; padding: 8px;">
+                        </div>
+                        <div style="flex: 1;">
+                            <label style="font-size: 0.8rem; font-weight: bold; color: #333;">중요도</label>
+                            <select id="evt-imp" class="swal2-select" style="margin: 0; width: 100%; font-size: 0.85rem; padding: 8px;">
+                                <option value="CRITICAL">매우중요 (보라)</option>
+                                <option value="HIGH">높음 (빨강)</option>
+                                <option value="MEDIUM">중간 (주황)</option>
+                                <option value="LOW">낮음 (파랑)</option>
+                                <option value="CLOSED">휴장 (회색)</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <label style="font-size: 0.8rem; font-weight: bold; color: #333;">설명</label>
+                    <textarea id="evt-desc" class="swal2-textarea" style="margin: 0; width: 100%; height: 120px; resize: none; font-size: 0.85rem; padding: 8px;"></textarea>
+                </div>
+            `,
+            didOpen: () => {
+                document.getElementById('evt-title').value = evt.title || '';
+                document.getElementById('evt-time').value = evt.event_time?.slice(0, 5) || '';
+                document.getElementById('evt-imp').value = evt.importance || 'MEDIUM';
+                document.getElementById('evt-desc').value = evt.description || '';
+            },
+            focusConfirm: false,
+            showCancelButton: true,
+            confirmButtonText: '저장',
+            cancelButtonText: '취소',
+            preConfirm: () => {
+                const title = document.getElementById('evt-title').value;
+                const time = document.getElementById('evt-time').value;
+                const desc = document.getElementById('evt-desc').value;
+                const imp = document.getElementById('evt-imp').value;
+                if (!title) Swal.showValidationMessage('제목을 입력해주세요');
+                return { title, time, desc, imp };
+            }
+        });
+
+        if (formValues) {
+            await fetch(`/api/market-events/${evt.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
                     event_time: formValues.time,
                     title: formValues.title,
                     description: formValues.desc,
@@ -902,26 +976,38 @@ const DailyReportPage = () => {
                                         예정된 이벤트 없음
                                     </div>
                                 )}
-                                {currentEvents.map(evt => (
-                                    <div key={evt.id} style={{
-                                        background: 'rgba(30, 41, 59, 0.4)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)',
-                                        display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-                                    }}>
-                                        <div>
-                                            <div style={{
-                                                fontSize: '0.9rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px',
-                                                color: evt.importance === 'HIGH' ? '#f87171' : evt.importance === 'MEDIUM' ? '#fbbf24' : '#60a5fa'
-                                            }}>
-                                                {evt.event_time && <span style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: '4px', fontSize: '0.8em', color: '#cbd5e1' }}>{evt.event_time.slice(0, 5)}</span>}
-                                                {evt.title}
+                                {currentEvents.map(evt => {
+                                    const importanceColor =
+                                        evt.importance === 'CRITICAL' ? '#c084fc' :
+                                            evt.importance === 'HIGH' ? '#f87171' :
+                                                evt.importance === 'MEDIUM' ? '#fbbf24' :
+                                                    evt.importance === 'CLOSED' ? '#9ca3af' : '#60a5fa';
+                                    return (
+                                        <div key={evt.id} style={{
+                                            background: 'rgba(30, 41, 59, 0.4)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)',
+                                            display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                                        }}>
+                                            <div style={{ flex: 1, cursor: 'pointer' }} onClick={() => handleEditEvent(evt)}>
+                                                <div style={{
+                                                    fontSize: '0.9rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px',
+                                                    color: importanceColor
+                                                }}>
+                                                    {evt.event_time && <span style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: '4px', fontSize: '0.8em', color: '#cbd5e1' }}>{evt.event_time.slice(0, 5)}</span>}
+                                                    {evt.title}
+                                                </div>
+                                                {evt.description && <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '4px', whiteSpace: 'pre-wrap' }}>{evt.description}</div>}
                                             </div>
-                                            {evt.description && <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '4px', whiteSpace: 'pre-wrap' }}>{evt.description}</div>}
+                                            <div style={{ display: 'flex', gap: '4px' }}>
+                                                <button onClick={() => handleEditEvent(evt)} style={{ color: '#38bdf8', background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }} title="수정">
+                                                    ✏️
+                                                </button>
+                                                <button onClick={() => handleDeleteEvent(evt.id)} style={{ color: '#64748b', background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }} title="삭제">
+                                                    <Trash2 size={14} />
+                                                </button>
+                                            </div>
                                         </div>
-                                        <button onClick={() => handleDeleteEvent(evt.id)} style={{ color: '#64748b', background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}>
-                                            <Trash2 size={14} />
-                                        </button>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         </div>
                     </div>

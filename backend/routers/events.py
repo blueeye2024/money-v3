@@ -105,6 +105,33 @@ def create_event(event: EventModel):
     finally:
         conn.close()
 
+class EventUpdateModel(BaseModel):
+    event_time: Optional[str] = None
+    title: str
+    description: Optional[str] = ""
+    importance: str = "MEDIUM"
+
+@router.put("/{event_id}")
+def update_event(event_id: int, event: EventUpdateModel):
+    """[Ver 6.0.1] Update existing market event"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            e_time = event.event_time if event.event_time and event.event_time.strip() else None
+            sql = """
+            UPDATE market_events 
+            SET event_time=%s, title=%s, description=%s, importance=%s
+            WHERE id=%s
+            """
+            cursor.execute(sql, (e_time, event.title, event.description, event.importance, event_id))
+        conn.commit()
+        return {"status": "success"}
+    except Exception as e:
+        print(f"Event Update Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
 @router.delete("/{event_id}")
 def delete_event(event_id: int):
     conn = get_connection()

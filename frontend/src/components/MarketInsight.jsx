@@ -429,10 +429,19 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                 </div>
 
                 {/* [Ver 5.4] Independent Price Level Alert Panel */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '2rem' }}>
-                    <PriceLevelAlerts ticker="SOXL" />
-                    <PriceLevelAlerts ticker="SOXS" />
-                </div>
+                {(() => {
+                    const indices = Array.isArray(market?.indices) ? market.indices : [];
+                    const soxlData = indices.find(m => m.ticker === 'SOXL');
+                    const soxsData = indices.find(m => m.ticker === 'SOXS');
+                    const soxlPrice = soxlData ? Number(soxlData.current_price || soxlData.price) : 0;
+                    const soxsPrice = soxsData ? Number(soxsData.current_price || soxsData.price) : 0;
+                    return (
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '2rem' }}>
+                            <PriceLevelAlerts ticker="SOXL" currentPrice={soxlPrice} />
+                            <PriceLevelAlerts ticker="SOXS" currentPrice={soxsPrice} />
+                        </div>
+                    );
+                })()}
 
                 {/* 수동 테스트 패널 (Params 전달) */}
                 <ManualTestPanel onRefresh={onRefresh} marketData={market?.indices} v2Status={v2Status} />

@@ -11,8 +11,12 @@ const ManagedStocksPage = () => {
         ticker: '',
         name: '',
         group_name: '',
-        buy_strategy: '',
-        sell_strategy: '',
+        total_buy_amount: 0,
+        avg_buy_price: 0,
+        target_sell_price: 0,
+        expected_buy_date: '',
+        expected_sell_date: '',
+        is_holding: 'N',
         target_ratio: 0,
         scenario_yield: 0,
         memo: ''
@@ -43,8 +47,12 @@ const ManagedStocksPage = () => {
                 ticker: stock.ticker,
                 name: stock.name || '',
                 group_name: stock.group_name || '',
-                buy_strategy: stock.buy_strategy || '',
-                sell_strategy: stock.sell_strategy || '',
+                total_buy_amount: stock.total_buy_amount || 0,
+                avg_buy_price: stock.avg_buy_price || 0,
+                target_sell_price: stock.target_sell_price || 0,
+                expected_buy_date: stock.expected_buy_date || '',
+                expected_sell_date: stock.expected_sell_date || '',
+                is_holding: stock.is_holding || 'N',
                 target_ratio: stock.target_ratio || 0,
                 scenario_yield: stock.scenario_yield || 0,
                 memo: stock.memo || ''
@@ -55,8 +63,12 @@ const ManagedStocksPage = () => {
                 ticker: '',
                 name: '',
                 group_name: '',
-                buy_strategy: '',
-                sell_strategy: '',
+                total_buy_amount: 0,
+                avg_buy_price: 0,
+                target_sell_price: 0,
+                expected_buy_date: '',
+                expected_sell_date: '',
+                is_holding: 'N',
                 target_ratio: 0,
                 scenario_yield: 0,
                 memo: ''
@@ -72,9 +84,10 @@ const ManagedStocksPage = () => {
 
     const handleInputChange = (e) => {
         const { name, value } = e.target;
+        const numericFields = ['target_ratio', 'scenario_yield', 'total_buy_amount', 'avg_buy_price', 'target_sell_price'];
         setFormData(prev => ({
             ...prev,
-            [name]: (name === 'target_ratio' || name === 'scenario_yield') ? parseFloat(value) : value
+            [name]: numericFields.includes(name) ? parseFloat(value) || 0 : value
         }));
     };
 
@@ -223,10 +236,10 @@ const ManagedStocksPage = () => {
                             <thead>
                                 <tr style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-secondary)' }}>
                                     <th style={{ padding: '12px', textAlign: 'left' }}>Ticker / Name</th>
-                                    <th style={{ padding: '12px', textAlign: 'right' }}>현재가</th>
-                                    <th style={{ padding: '12px', textAlign: 'left' }}>전략 (Strategy)</th>
-                                    <th style={{ padding: '12px', textAlign: 'center' }}>비중</th>
-                                    <th style={{ padding: '12px', textAlign: 'center' }}>목표 수익</th>
+                                    <th style={{ padding: '12px', textAlign: 'right' }}>총매수금액/평단</th>
+                                    <th style={{ padding: '12px', textAlign: 'right' }}>목표매도가</th>
+                                    <th style={{ padding: '12px', textAlign: 'center' }}>매매예정일</th>
+                                    <th style={{ padding: '12px', textAlign: 'center' }}>보유</th>
                                     <th style={{ padding: '12px', textAlign: 'right' }}>Actions</th>
                                 </tr>
                             </thead>
@@ -236,102 +249,41 @@ const ManagedStocksPage = () => {
                                         <td style={{ padding: '12px' }}>
                                             <div style={{ fontWeight: 'bold', fontSize: '1.2rem', color: 'white' }}>{stock.ticker}</div>
                                             <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{stock.name || '-'}</div>
+                                            {stock.memo && (
+                                                <div style={{ marginTop: '4px', fontSize: '0.75rem', color: '#888', fontStyle: 'italic' }}>
+                                                    {stock.memo}
+                                                </div>
+                                            )}
                                         </td>
                                         <td style={{ padding: '12px', textAlign: 'right' }}>
-                                            {editingPrice === stock.id ? (
-                                                <div style={{ display: 'flex', gap: '5px', justifyContent: 'flex-end', alignItems: 'center' }}>
-                                                    <input
-                                                        type="number"
-                                                        step="0.01"
-                                                        value={manualPrice}
-                                                        onChange={(e) => setManualPrice(e.target.value)}
-                                                        style={{
-                                                            width: '80px',
-                                                            padding: '4px 8px',
-                                                            background: 'rgba(0,0,0,0.3)',
-                                                            border: '1px solid var(--accent-blue)',
-                                                            color: 'white',
-                                                            borderRadius: '4px',
-                                                            fontSize: '0.9rem'
-                                                        }}
-                                                        autoFocus
-                                                    />
-                                                    <button
-                                                        onClick={() => handlePriceSave(stock.id)}
-                                                        style={{
-                                                            padding: '4px 8px',
-                                                            fontSize: '0.75rem',
-                                                            background: 'var(--accent-blue)',
-                                                            border: 'none',
-                                                            color: 'white',
-                                                            borderRadius: '4px',
-                                                            cursor: 'pointer'
-                                                        }}
-                                                    >
-                                                        ✓
-                                                    </button>
-                                                    <button
-                                                        onClick={handlePriceCancel}
-                                                        style={{
-                                                            padding: '4px 8px',
-                                                            fontSize: '0.75rem',
-                                                            background: 'rgba(255,255,255,0.1)',
-                                                            border: 'none',
-                                                            color: 'white',
-                                                            borderRadius: '4px',
-                                                            cursor: 'pointer'
-                                                        }}
-                                                    >
-                                                        ✕
-                                                    </button>
-                                                </div>
-                                            ) : (
-                                                <div style={{ display: 'flex', gap: '5px', justifyContent: 'flex-end', alignItems: 'center' }}>
-                                                    <div style={{
-                                                        fontSize: '1rem',
-                                                        fontWeight: 'bold',
-                                                        color: stock.is_manual_price ? 'var(--accent-gold)' : 'white'
-                                                    }}>
-                                                        ${stock.current_price ? Number(stock.current_price).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 4 }) : '0.00'}
-                                                    </div>
-                                                    {stock.is_manual_price && (
-                                                        <span style={{ fontSize: '0.7rem', color: 'var(--accent-gold)' }} title="수동 입력값">✋</span>
-                                                    )}
-                                                    <button
-                                                        onClick={() => handlePriceEdit(stock)}
-                                                        style={{
-                                                            padding: '2px 6px',
-                                                            fontSize: '0.7rem',
-                                                            background: 'rgba(255,255,255,0.05)',
-                                                            border: '1px solid rgba(255,255,255,0.2)',
-                                                            color: '#888',
-                                                            borderRadius: '3px',
-                                                            cursor: 'pointer'
-                                                        }}
-                                                    >
-                                                        ✏️
-                                                    </button>
-                                                </div>
-                                            )}
-                                        </td>
-                                        <td style={{ padding: '12px' }}>
-                                            <div style={{ marginBottom: '6px' }}>
-                                                <span style={{ color: 'var(--accent-red)', fontWeight: 600 }}>[BUY]</span> {stock.buy_strategy}
+                                            <div style={{ fontSize: '1rem', fontWeight: 'bold', color: 'var(--accent-gold)' }}>
+                                                ₩{stock.total_buy_amount ? Number(stock.total_buy_amount).toLocaleString() : '0'}
                                             </div>
-                                            <div>
-                                                <span style={{ color: 'var(--accent-blue)', fontWeight: 600 }}>[SELL]</span> {stock.sell_strategy}
+                                            <div style={{ fontSize: '0.8rem', color: '#888' }}>
+                                                평단 ${stock.avg_buy_price ? Number(stock.avg_buy_price).toFixed(2) : '0.00'}
                                             </div>
-                                            {stock.memo && (
-                                                <div style={{ marginTop: '4px', fontSize: '0.8rem', color: '#888', fontStyle: 'italic' }}>
-                                                    Memo: {stock.memo}
-                                                </div>
-                                            )}
                                         </td>
-                                        <td style={{ padding: '12px', textAlign: 'center', color: 'var(--accent-gold)', fontWeight: 'bold' }}>
-                                            {stock.target_ratio}%
+                                        <td style={{ padding: '12px', textAlign: 'right', fontWeight: 'bold', color: 'var(--accent-blue)' }}>
+                                            ${stock.target_sell_price ? Number(stock.target_sell_price).toFixed(2) : '-'}
                                         </td>
                                         <td style={{ padding: '12px', textAlign: 'center' }}>
-                                            {stock.scenario_yield > 0 ? `+${stock.scenario_yield}%` : '-'}
+                                            <div style={{ fontSize: '0.8rem' }}>
+                                                {stock.expected_buy_date && <div style={{ color: 'var(--accent-red)' }}>매수: {stock.expected_buy_date}</div>}
+                                                {stock.expected_sell_date && <div style={{ color: 'var(--accent-blue)' }}>매도: {stock.expected_sell_date}</div>}
+                                                {!stock.expected_buy_date && !stock.expected_sell_date && <span style={{ color: '#666' }}>-</span>}
+                                            </div>
+                                        </td>
+                                        <td style={{ padding: '12px', textAlign: 'center' }}>
+                                            <span style={{
+                                                padding: '4px 8px',
+                                                borderRadius: '12px',
+                                                fontSize: '0.75rem',
+                                                fontWeight: 'bold',
+                                                background: stock.is_holding === 'Y' ? 'rgba(34, 197, 94, 0.2)' : 'rgba(100, 116, 139, 0.2)',
+                                                color: stock.is_holding === 'Y' ? '#22c55e' : '#64748b'
+                                            }}>
+                                                {stock.is_holding === 'Y' ? '보유중' : '미보유'}
+                                            </span>
                                         </td>
                                         <td style={{ padding: '12px', textAlign: 'right' }}>
                                             <div style={{ display: 'flex', gap: '5px', justifyContent: 'flex-end' }}>
@@ -407,27 +359,65 @@ const ManagedStocksPage = () => {
                                 />
                             </div>
 
-                            <div>
-                                <label style={{ display: 'block', marginBottom: '5px', fontSize: '0.85rem', color: '#888' }}>매수 전략 (Buy Strategy)</label>
-                                <textarea
-                                    name="buy_strategy" value={formData.buy_strategy} onChange={handleInputChange} required
-                                    rows="2" style={{ width: '100%', padding: '0.6rem', background: 'rgba(0,0,0,0.2)', border: '1px solid #444', color: 'white' }}
-                                />
+                            <div style={{ display: 'flex', gap: '1rem' }}>
+                                <div style={{ flex: 1 }}>
+                                    <label style={{ display: 'block', marginBottom: '5px', fontSize: '0.85rem', color: '#888' }}>총 매수 금액 (원)</label>
+                                    <input
+                                        type="number" name="total_buy_amount" value={formData.total_buy_amount} onChange={handleInputChange}
+                                        placeholder="EX) 1000000" style={{ width: '100%', padding: '0.6rem', background: 'rgba(0,0,0,0.2)', border: '1px solid #444', color: 'white' }}
+                                    />
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                    <label style={{ display: 'block', marginBottom: '5px', fontSize: '0.85rem', color: '#888' }}>평균 매수 단가 ($)</label>
+                                    <input
+                                        type="number" step="0.01" name="avg_buy_price" value={formData.avg_buy_price} onChange={handleInputChange}
+                                        placeholder="EX) 50.25" style={{ width: '100%', padding: '0.6rem', background: 'rgba(0,0,0,0.2)', border: '1px solid #444', color: 'white' }}
+                                    />
+                                </div>
                             </div>
 
-                            <div>
-                                <label style={{ display: 'block', marginBottom: '5px', fontSize: '0.85rem', color: '#888' }}>매도 전략 (Sell Strategy)</label>
-                                <textarea
-                                    name="sell_strategy" value={formData.sell_strategy} onChange={handleInputChange} required
-                                    rows="2" style={{ width: '100%', padding: '0.6rem', background: 'rgba(0,0,0,0.2)', border: '1px solid #444', color: 'white' }}
-                                />
+                            <div style={{ display: 'flex', gap: '1rem' }}>
+                                <div style={{ flex: 1 }}>
+                                    <label style={{ display: 'block', marginBottom: '5px', fontSize: '0.85rem', color: '#888' }}>목표 매도 단가 ($)</label>
+                                    <input
+                                        type="number" step="0.01" name="target_sell_price" value={formData.target_sell_price} onChange={handleInputChange}
+                                        placeholder="EX) 65.00" style={{ width: '100%', padding: '0.6rem', background: 'rgba(0,0,0,0.2)', border: '1px solid #444', color: 'white' }}
+                                    />
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                    <label style={{ display: 'block', marginBottom: '5px', fontSize: '0.85rem', color: '#888' }}>실제 보유 여부</label>
+                                    <select
+                                        name="is_holding" value={formData.is_holding} onChange={handleInputChange}
+                                        style={{ width: '100%', padding: '0.6rem', background: 'rgba(0,0,0,0.2)', border: '1px solid #444', color: 'white' }}
+                                    >
+                                        <option value="Y">예 (보유중)</option>
+                                        <option value="N">아니오 (미보유)</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '1rem' }}>
+                                <div style={{ flex: 1 }}>
+                                    <label style={{ display: 'block', marginBottom: '5px', fontSize: '0.85rem', color: '#888' }}>예상 매수일</label>
+                                    <input
+                                        type="date" name="expected_buy_date" value={formData.expected_buy_date} onChange={handleInputChange}
+                                        style={{ width: '100%', padding: '0.6rem', background: 'rgba(0,0,0,0.2)', border: '1px solid #444', color: 'white' }}
+                                    />
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                    <label style={{ display: 'block', marginBottom: '5px', fontSize: '0.85rem', color: '#888' }}>예상 매도일</label>
+                                    <input
+                                        type="date" name="expected_sell_date" value={formData.expected_sell_date} onChange={handleInputChange}
+                                        style={{ width: '100%', padding: '0.6rem', background: 'rgba(0,0,0,0.2)', border: '1px solid #444', color: 'white' }}
+                                    />
+                                </div>
                             </div>
 
                             <div style={{ display: 'flex', gap: '1rem' }}>
                                 <div style={{ flex: 1 }}>
                                     <label style={{ display: 'block', marginBottom: '5px', fontSize: '0.85rem', color: '#888' }}>목표 비중 (%)</label>
                                     <input
-                                        type="number" name="target_ratio" value={formData.target_ratio} onChange={handleInputChange} required
+                                        type="number" name="target_ratio" value={formData.target_ratio} onChange={handleInputChange}
                                         style={{ width: '100%', padding: '0.6rem', background: 'rgba(0,0,0,0.2)', border: '1px solid #444', color: 'white' }}
                                     />
                                 </div>
