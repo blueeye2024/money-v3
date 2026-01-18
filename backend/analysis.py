@@ -38,21 +38,9 @@ _DATA_CACHE = {
 
 
 # Stock Names Mapping
-TICKER_NAMES = {
-    "SOXL": "BULL TOWER",
-    "SOXS": "BEAR TOWER",
-    "UPRO": "ProShares UltraPro S&P500 (3X)",
-    "AAAU": "Goldman Sachs Physical Gold ETF",
-    "TSLA": "Tesla Inc.",
-    "IONQ": "IonQ Inc.",
-    "AMZU": "Direxion Daily AMZN Bull 1.5X",
-    "UFO": "Procure Space ETF",
-    "GOOGL": "Alphabet Inc. Class A",
-    "XPON": "Expion360 Inc."
-}
-
-# Tickers List (Collected from keys)
-TARGET_TICKERS = list(TICKER_NAMES.keys())
+# [Modified] Dynamic Ticker Management - Removed Hardcoded List
+TICKER_NAMES = {} 
+TARGET_TICKERS = [] # Populated from DB on runtime
 
 MARKET_INDICATORS = {
     "S&P500": "^GSPC",
@@ -248,7 +236,17 @@ def update_market_data(tickers=None, override_period=None):
     Fetches data from YFinance/KIS, updates DB, and refreshes Memory Cache.
     """
     global _DATA_CACHE
-    target_list = tickers if tickers else TARGET_TICKERS
+    if tickers:
+        target_list = tickers
+    else:
+        # Load from DB dynamically
+        from db import get_managed_stocks
+        try:
+             stocks = get_managed_stocks()
+             target_list = [s['ticker'] for s in stocks]
+        except:
+             target_list = []
+    
     now = time.time()
     
     # 1. Refresh Market Indices (Spy, Nasdaq, etc)
@@ -359,7 +357,16 @@ def update_market_data(tickers=None, override_period=None):
 def load_data_from_db(target_list=None):
     """Reloads _DATA_CACHE from DB (Fast)"""
     global _DATA_CACHE
-    if not target_list: target_list = TARGET_TICKERS
+    if target_list:
+        pass
+    else:
+        # Load from DB dynamically
+        from db import get_managed_stocks
+        try:
+             stocks = get_managed_stocks()
+             target_list = [s['ticker'] for s in stocks]
+        except:
+             target_list = []
     
     try:
         from db import load_market_candles, get_market_indices

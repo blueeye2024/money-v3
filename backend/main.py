@@ -18,7 +18,7 @@ ALGORITHM = "HS256"
 
 from analysis import run_analysis, fetch_data, analyze_ticker, TARGET_TICKERS, run_v2_signal_analysis
 from sms import send_sms
-from db import init_db, save_signal, check_last_signal, get_stocks, add_stock, delete_stock, add_transaction, get_transactions, update_transaction, delete_transaction, get_signals, save_sms_log, get_sms_logs, delete_all_signals, delete_sms_log, delete_all_sms_logs, get_ticker_settings, update_ticker_setting, update_stock_status, get_v2_buy_status, get_v2_sell_status
+from db import init_db, save_signal, check_last_signal, get_stocks, add_stock, delete_stock, add_transaction, get_transactions, update_transaction, delete_transaction, get_signals, save_sms_log, get_sms_logs, delete_all_signals, delete_sms_log, delete_all_sms_logs, get_ticker_settings, update_ticker_setting, update_stock_status, get_v2_buy_status, get_v2_sell_status, delete_holding
 
 app = FastAPI()
 
@@ -41,8 +41,13 @@ app.include_router(events.router)
 # 1. Initialize DB & Scheduler
 @app.on_event("startup")
 def on_startup():
-    from db import init_db, get_global_config, update_stock_prices
+    from db import init_db, get_global_config, update_stock_prices, migrate_journal_transactions_v62, migrate_v63_add_is_holding, migrate_v64_add_group_name_to_managed_stocks, migrate_v67_add_new_columns_to_managed_stocks, migrate_v68_add_simulation_columns
     init_db()
+    migrate_journal_transactions_v62()  # [Ver 6.2] Add new columns
+    migrate_v63_add_is_holding()        # [Ver 6.3] Add is_holding column
+    migrate_v64_add_group_name_to_managed_stocks() # [Ver 6.6] Add group_name
+    migrate_v67_add_new_columns_to_managed_stocks() # [Ver 6.7] Add strategy columns
+    migrate_v68_add_simulation_columns() # [Ver 6.8] Add simulation columns
     
     # Load SMS Setting from DB
     global SMS_ENABLED
@@ -127,6 +132,38 @@ class TickerSettingUpdate(BaseModel):
 
 class CapitalModel(BaseModel):
     amount: float
+
+class HoldingUpdateModel(BaseModel):
+    ticker: str
+    qty: Optional[int] = None
+    avg_price: Optional[float] = None
+    current_price: Optional[float] = None
+    group_name: Optional[str] = None
+    category: Optional[str] = None
+    is_holding: Optional[bool] = None
+    target_sell_price: Optional[float] = None
+    expected_sell_date: Optional[str] = None # Expecting 'YYYY-MM-DD'
+    strategy_memo: Optional[str] = None
+
+@app.put("/api/holdings/{ticker}")
+def update_holding_endpoint(ticker: str, data: HoldingUpdateModel):
+    from db import update_holding_info
+    
+    success, msg = update_holding_info(
+        ticker, 
+        category=data.category, 
+        group_name=data.group_name, 
+        is_holding=data.is_holding,
+        target_sell_price=data.target_sell_price,
+        expected_sell_date=data.expected_sell_date,
+        strategy_memo=data.strategy_memo
+    )
+    
+    if success:
+        return {"status": "success", "message": "Updated"}
+    else:
+        return {"status": "error", "message": msg}
+
 
 @app.get("/api/settings/sms")
 def get_sms_setting():
@@ -884,6 +921,13 @@ class TransactionModel(BaseModel):
     price: float
     trade_date: str
     memo: str = ""
+    # [Ver 6.2] New fields
+    category: str = "기타"
+    group_name: Optional[str] = ""
+    is_holding: Optional[bool] = True
+    expected_sell_date: Optional[str] = None
+    target_sell_price: Optional[float] = None
+    strategy_memo: Optional[str] = ""
 
 @app.get("/api/transactions")
 def api_get_transactions():
@@ -914,6 +958,36 @@ def api_delete_transaction(id: int):
     if delete_transaction(id):
         return {"status": "success"}
     return {"status": "error"}
+
+# [Ver 6.3] Delete Holding
+@app.delete("/api/holdings/{ticker}")
+def remove_holding_endpoint(ticker: str):
+    success, msg = delete_holding(ticker)
+    if success:
+        return {"status": "success", "message": msg}
+    else:
+        raise HTTPException(status_code=500, detail=msg)
+
+
+# [Ver 6.5] Holding Update Model (Direct, No Journal)
+class HoldingUpdateModel(BaseModel):
+    qty: Optional[int] = 0
+    price: Optional[float] = 0
+    category: Optional[str] = "기타"
+    group_name: Optional[str] = ""
+    is_holding: Optional[bool] = True
+    expected_sell_date: Optional[str] = None
+    target_sell_price: Optional[float] = None
+    strategy_memo: Optional[str] = ""
+
+@app.put("/api/holdings/{ticker}")
+def update_holding_endpoint(ticker: str, data: HoldingUpdateModel):
+    from db import update_holding_info
+    success, msg = update_holding_info(ticker, data.dict())
+    if success:
+        return {"status": "success", "message": msg}
+    else:
+        return JSONResponse(status_code=400, content={"status": "error", "message": msg})
 
 @app.get("/api/transactions/stats")
 def api_get_txn_stats():

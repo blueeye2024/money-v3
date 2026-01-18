@@ -75,22 +75,22 @@ const FinalSignal = ({ stocks, total_assets }) => {
     const listTotalKrw = listTotalUsd * KRW_RATE;
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', marginBottom: '3rem' }}>
-            <h2 style={{ fontSize: '1.2rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', letterSpacing: '2px', textAlign: 'center' }}>
-                ⭐ Cheongan Recommended Portfolio (Rebalancing)
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '2rem' }}>
+            <h2 style={{ fontSize: '1rem', color: 'var(--text-secondary)', marginBottom: '0.25rem', letterSpacing: '1px', textAlign: 'center' }}>
+                ⭐ 리밸런싱 포트폴리오
             </h2>
 
             <div className="glass-panel" style={{ padding: '0', overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                     <thead>
                         <tr style={{ background: 'rgba(255, 255, 255, 0.05)', color: 'var(--text-secondary)' }}>
-                            <th style={{ padding: '1rem', textAlign: 'center' }}>Rank</th>
-                            <th style={{ padding: '1rem', textAlign: 'left' }}>Stock</th>
-                            <th style={{ padding: '1rem', textAlign: 'center' }}>Type</th>
-                            <th style={{ padding: '1rem', textAlign: 'center' }}>Target %</th>
-                            <th style={{ padding: '1rem', textAlign: 'left' }}>Action</th>
-                            <th style={{ padding: '1rem', textAlign: 'right' }}>Est. Cost / Target</th>
-                            <th style={{ padding: '1rem', textAlign: 'right' }}>Price / Current</th>
+                            <th style={{ padding: '0.75rem 0.5rem', textAlign: 'center', fontSize: '0.75rem' }}>#</th>
+                            <th style={{ padding: '0.75rem 0.5rem', textAlign: 'left', fontSize: '0.75rem' }}>Stock</th>
+                            <th style={{ padding: '0.75rem 0.5rem', textAlign: 'center', fontSize: '0.75rem' }}>Type</th>
+                            <th style={{ padding: '0.75rem 0.5rem', textAlign: 'center', fontSize: '0.75rem' }}>목표</th>
+                            <th style={{ padding: '0.75rem 0.5rem', textAlign: 'left', fontSize: '0.75rem' }}>Action</th>
+                            <th className="hide-mobile" style={{ padding: '0.75rem 0.5rem', textAlign: 'right', fontSize: '0.75rem' }}>Cost</th>
+                            <th style={{ padding: '0.75rem 0.5rem', textAlign: 'right', fontSize: '0.75rem' }}>Price</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -108,49 +108,49 @@ const FinalSignal = ({ stocks, total_assets }) => {
 
                             return (
                                 <tr key={stock.ticker} style={{ background: rowBg, borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                                    <td style={{ padding: '1rem', textAlign: 'center', fontWeight: 'bold', color: index === 0 ? 'var(--accent-gold)' : '#ccc' }}>
+                                    <td style={{ padding: '0.5rem', textAlign: 'center', fontWeight: 'bold', color: index === 0 ? 'var(--accent-gold)' : '#ccc', fontSize: '0.8rem' }}>
                                         {index + 1}
                                     </td>
-                                    <td style={{ padding: '1rem', fontWeight: 'bold', fontSize: '1.1rem' }}>
+                                    <td style={{ padding: '0.5rem', fontWeight: 'bold', fontSize: '0.9rem' }}>
                                         {stock.ticker}
                                         <div style={{
-                                            fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 'normal',
-                                            maxWidth: '150px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                                            fontSize: '0.7rem', color: 'var(--text-secondary)', fontWeight: 'normal',
+                                            maxWidth: '100px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                                             lineHeight: '1.2'
                                         }} title={stock.name}>
                                             {stock.displayName}
                                         </div>
                                     </td>
-                                    <td style={{ padding: '1rem', textAlign: 'center' }}>
+                                    <td style={{ padding: '0.5rem', textAlign: 'center' }}>
                                         <span style={{
-                                            padding: '4px 10px', borderRadius: '4px', fontWeight: 'bold', fontSize: '0.8rem',
+                                            padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', fontSize: '0.7rem',
                                             background: isBuy ? 'rgba(34, 197, 94, 0.2)' : isSell ? 'rgba(239, 68, 68, 0.2)' : 'rgba(255, 255, 255, 0.1)',
                                             color: isBuy ? '#4ade80' : isSell ? '#f87171' : '#ccc'
                                         }}>
                                             {stock.type}
                                         </span>
                                     </td>
-                                    <td style={{ padding: '1rem', textAlign: 'center', fontWeight: 'bold', color: '#fff' }}>
+                                    <td style={{ padding: '0.5rem', textAlign: 'center', fontWeight: 'bold', color: '#fff', fontSize: '0.85rem' }}>
                                         {stock.target}%
                                     </td>
-                                    <td style={{ padding: '1rem', color: isBuy ? '#4ade80' : isSell ? '#f87171' : '#ddd', fontWeight: 'bold' }}>
+                                    <td style={{ padding: '0.5rem', color: isBuy ? '#4ade80' : isSell ? '#f87171' : '#ddd', fontWeight: 'bold', fontSize: '0.8rem' }}>
                                         {stock.action}
                                     </td>
-                                    <td style={{ padding: '1rem', textAlign: 'right' }}>
+                                    <td className="hide-mobile" style={{ padding: '0.5rem', textAlign: 'right' }}>
                                         {estCostUsd !== 0 ? (
                                             <>
-                                                <div style={{ fontWeight: 'bold', color: estCostUsd > 0 ? '#4ade80' : estCostUsd < 0 ? '#f87171' : '#ccc' }}>
+                                                <div style={{ fontWeight: 'bold', color: estCostUsd > 0 ? '#4ade80' : estCostUsd < 0 ? '#f87171' : '#ccc', fontSize: '0.8rem' }}>
                                                     ${Math.abs(estCostUsd).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                                 </div>
-                                                <div style={{ fontSize: '0.75rem', color: '#888' }}>
+                                                <div style={{ fontSize: '0.65rem', color: '#888' }}>
                                                     ₩ {(Math.abs(estCostKrw) / 10000).toLocaleString(undefined, { maximumFractionDigits: 0 })}만
                                                 </div>
                                             </>
                                         ) : '-'}
                                     </td>
-                                    <td style={{ padding: '1rem', textAlign: 'right' }}>
-                                        <div style={{ color: '#fff' }}>${priceUsd.toFixed(2)}</div>
-                                        <div style={{ fontSize: '0.75rem', color: '#666' }}>₩ {(priceKrw).toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+                                    <td style={{ padding: '0.5rem', textAlign: 'right' }}>
+                                        <div style={{ color: '#fff', fontSize: '0.85rem' }}>${priceUsd.toFixed(2)}</div>
+                                        <div style={{ fontSize: '0.65rem', color: '#666' }}>₩ {(priceKrw).toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
                                     </td>
                                 </tr>
                             );

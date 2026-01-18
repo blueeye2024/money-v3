@@ -402,7 +402,7 @@ function Layout() {
                 <Link to="/daily-reports" className="nav-link" style={{
                     color: location.pathname === '/daily-reports' ? 'var(--accent-blue)' : 'var(--text-primary)',
                     fontWeight: location.pathname === '/daily-reports' ? 'bold' : 'normal',
-                }}>📅 Daily Reports</Link>
+                }}>Daily Reports</Link>
                 < Link to="/trading-journal" className="nav-link" style={{
                     color: location.pathname === '/trading-journal' ? 'var(--accent-blue)' : 'var(--text-primary)',
                     fontWeight: location.pathname === '/trading-journal' ? 'bold' : 'normal',
@@ -418,15 +418,12 @@ function Layout() {
                 <Link to="/asset-dashboard" className="nav-link" style={{
                     color: location.pathname === '/asset-dashboard' ? 'var(--accent-blue)' : 'var(--text-primary)',
                     fontWeight: location.pathname === '/asset-dashboard' ? 'bold' : 'normal',
-                }}>💰 자산현황</Link>
+                }}>자산현황</Link>
                 <Link to="/managed-stocks" className="nav-link" style={{
                     color: location.pathname === '/managed-stocks' ? 'var(--accent-blue)' : 'var(--text-primary)',
                     fontWeight: location.pathname === '/managed-stocks' ? 'bold' : 'normal',
                 }}>거래 종목</Link>
-                <Link to="/backtest" className="nav-link" style={{
-                    color: location.pathname === '/backtest' ? 'var(--accent-blue)' : 'var(--text-primary)',
-                    fontWeight: location.pathname === '/backtest' ? 'bold' : 'normal',
-                }}>백테스트</Link>
+                {/* Backtest Menu Removed */}
                 <Link to="/requests" className="nav-link" style={{
                     color: location.pathname === '/requests' ? 'var(--accent-blue)' : 'var(--text-primary)',
                     fontWeight: location.pathname === '/requests' ? 'bold' : 'normal',
@@ -437,12 +434,12 @@ function Layout() {
                         onClick={handleLogout}
                         className="nav-link"
                         style={{
-                            background: 'rgba(255, 99, 71, 0.1)',
-                            border: '1px solid rgba(255, 99, 71, 0.2)',
+                            background: 'transparent',
+                            border: 'none',
                             cursor: 'pointer',
-                            color: '#ff6347',
+                            color: '#94a3b8',
                             padding: '0.5rem 1rem',
-                            borderRadius: '6px',
+                            fontSize: '0.9rem',
                             marginLeft: '10px'
                         }}
                     >
@@ -481,7 +478,7 @@ function Layout() {
                 borderTop: '1px solid var(--glass-border)', color: 'var(--text-secondary)'
             }}>
                 <div style={{ textAlign: 'center', padding: '20px', color: '#64748b', fontSize: '0.8rem', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                    <p>&copy; 2026 BlueEye AI. All rights reserved. | System Status: <span style={{ color: '#4ade80' }}>Operational</span> | Ver 5.9.2 (Updated: 2026-01-17 05:01)</p>
+                    <p>&copy; 2026 BlueEye AI. All rights reserved. | System Status: <span style={{ color: '#4ade80' }}>Operational</span> | Ver 6.2.0 (Updated: 2026-01-19 06:08)</p>
                 </div>
             </footer>
         </div>

@@ -335,31 +335,31 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
     };
 
     return (
-        <div className="glass-panel" style={{ padding: '2rem', marginBottom: '3rem', display: 'flex', flexDirection: 'column', gap: '2.5rem' }}>
+        <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '2rem', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
 
             {/* 1. Status Bar with Events */}
             <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', fontSize: '0.85rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', fontSize: '0.85rem', flexWrap: 'wrap', gap: '8px' }}>
                     {/* Left: Today Events */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', flex: '1 1 auto' }}>
                         {todayEvents.length > 0 && (
                             <>
-                                <span style={{ color: '#f87171', fontWeight: 'bold', fontSize: '0.8rem' }}>📅 오늘</span>
-                                {todayEvents.slice(0, 3).map((evt, i) => (
+                                <span style={{ color: '#f87171', fontWeight: 'bold', fontSize: '0.75rem' }}>📅</span>
+                                {todayEvents.slice(0, 2).map((evt, i) => (
                                     <span key={i} style={{
                                         background: evt.importance === 'HIGH' ? 'rgba(239,68,68,0.15)' : 'rgba(59,130,246,0.1)',
                                         color: evt.importance === 'HIGH' ? '#fca5a5' : '#93c5fd',
-                                        padding: '2px 8px', borderRadius: '10px', fontSize: '0.75rem', fontWeight: '500'
+                                        padding: '2px 6px', borderRadius: '10px', fontSize: '0.7rem', fontWeight: '500'
                                     }}>
-                                        {evt.event_time?.slice(0, 5)} {evt.title}
+                                        {evt.event_time?.slice(0, 5)} {evt.title.length > 10 ? evt.title.slice(0, 10) + '..' : evt.title}
                                     </span>
                                 ))}
-                                {todayEvents.length > 3 && <span style={{ color: '#64748b', fontSize: '0.75rem' }}>+{todayEvents.length - 3}</span>}
+                                {todayEvents.length > 2 && <span style={{ color: '#64748b', fontSize: '0.7rem' }}>+{todayEvents.length - 2}</span>}
                             </>
                         )}
                     </div>
                     {/* Right: Status */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                         <span style={{
                             color: market_regime?.regime?.includes('Bull') ? '#16a34a' : market_regime?.regime?.includes('Bear') ? '#dc2626' : '#9ca3af',
                             fontWeight: 'bold'
@@ -436,7 +436,7 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                     const soxlPrice = soxlData ? Number(soxlData.current_price || soxlData.price) : 0;
                     const soxsPrice = soxsData ? Number(soxsData.current_price || soxsData.price) : 0;
                     return (
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '2rem' }}>
+                        <div className="responsive-grid-2" style={{ marginBottom: '1.5rem' }}>
                             <PriceLevelAlerts ticker="SOXL" currentPrice={soxlPrice} />
                             <PriceLevelAlerts ticker="SOXS" currentPrice={soxsPrice} />
                         </div>

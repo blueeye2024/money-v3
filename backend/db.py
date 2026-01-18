@@ -168,15 +168,39 @@ def init_db():
             """
             cursor.execute(sql_signals)
             
+
             # 2. Stocks Table (Master Data)
+            # [Updated Ver 6.5] Added is_active column
             sql_stocks = """
             CREATE TABLE IF NOT EXISTS stocks (
                 code VARCHAR(10) PRIMARY KEY,
                 name VARCHAR(100) NOT NULL,
+                is_active BOOLEAN DEFAULT TRUE,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
             """
             cursor.execute(sql_stocks)
+            
+            # Migration: Ensure is_active column exists if table already existed
+            try:
+                cursor.execute("DESCRIBE stocks")
+                cols = [row['Field'] for row in cursor.fetchall()]
+                if 'is_active' not in cols:
+                    cursor.execute("ALTER TABLE stocks ADD COLUMN is_active BOOLEAN DEFAULT TRUE")
+            except Exception as e:
+                print(f"Migration add column error: {e}")
+
+            # Migration: Sync from managed_stocks to stocks (One-time)
+            # Insert any missing stocks from managed_stocks into stocks
+            try:
+                cursor.execute("""
+                    INSERT IGNORE INTO stocks (code, name, is_active)
+                    SELECT ticker, name, is_active FROM managed_stocks
+                """)
+                conn.commit()
+            except Exception as e:
+                 print(f"Migration sync error: {e}")
+
 
             # 3. Journal Transactions Table (Ledger Style)
             sql_journal = """
@@ -188,11 +212,26 @@ def init_db():
                 price DECIMAL(15, 2) NOT NULL,
                 trade_date DATETIME NOT NULL,
                 memo TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (ticker) REFERENCES stocks(code) ON DELETE CASCADE
+                category VARCHAR(20) DEFAULT '기타',
+                group_name VARCHAR(50) DEFAULT '',
+                expected_sell_date DATE,
+                target_sell_price DECIMAL(15, 2),
+                strategy_memo TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
             """
             cursor.execute(sql_journal)
+            
+            # Migration: Add group_name, category to journal_transactions if missing
+            try:
+                cursor.execute("DESCRIBE journal_transactions")
+                cols = [row['Field'] for row in cursor.fetchall()]
+                if 'group_name' not in cols:
+                    cursor.execute("ALTER TABLE journal_transactions ADD COLUMN group_name VARCHAR(50) DEFAULT ''")
+                if 'category' not in cols:
+                    cursor.execute("ALTER TABLE journal_transactions ADD COLUMN category VARCHAR(20) DEFAULT '기타'")
+            except Exception as e:
+                print(f"Migration journal schema error: {e}")
 
             # 4. Market Candles Table (Historical Data)
             sql_candles = """
@@ -593,31 +632,6 @@ def init_db():
 
             # --- Seed Initial Data ---
             # Seed Managed Stocks
-            initial_stocks = [
-                ('SOXL', '초고성장/레버리지', 'SMA 10/30 골든크로스 + 박스권 10% 돌파 + 거래량 250%↑', '(5분봉) EMA 9/21 데드크로스 시 70% 익절, 30분봉 데드크로스 시 전량 매도', 25),
-                ('IONQ', '초고성장/레버리지', 'SMA 10/30 골든크로스 + 박스권 15% 돌파 + 거래량 300%↑', '고점 대비 10% 하락 시 즉시 매도 (Chandelier Exit), 손절 -8%', 15),
-                ('TSLA', '초고성장/레버리지', 'SMA 10/30 골든크로스 + 박스권 5% 돌파 + RSI 60 이상', '30분봉 SMA 10선 종가 이탈 시 매도, 손절 -4%', 15),
-                ('UPRO', '지수 및 헷지', 'EMA 15/50 골든크로스 + 박스권 8% 돌파 + EMA 200 필터', '30분봉 EMA 15/50 데드크로스 또는 손절 -6%', 25),
-                ('TMF', '지수 및 헷지', 'EMA 15/50 골든크로스 + 박스권 4% 돌파 (UPRO 하락 시 비중 2배)', '30분봉 EMA 15/50 데드크로스 또는 손절 -4.5%', 5),
-                ('SOXS', '지수 및 헷지', 'UPRO < 일봉 EMA 200일 때만 가동 + 30분봉 골든크로스', '수익 5% 도달 시 전량 익절, 24시간 내 미수익 시 타임컷 종료', 0),
-                ('GOOGL', '안정성/우량주', 'EMA 15/50 골든크로스 + RSI 50 이상 유지', '5분봉 SMA 20선 추격 매도 (Trailing Stop), 손절 -4%', 5),
-                ('AAAU', '안정성/우량주', 'EMA 10/40 골든크로스 (반응성 강화)', '30분봉 EMA 10/40 데드크로스 또는 손절 -3%', 10),
-                ('UFO', '안정성/우량주', '일봉 SMA 200 위에서만 가동 + 30분봉 SMA 10/30 골든크로스', '30분봉 SMA 30선 이탈 시 매도, 손절 -5%', 5)
-            ]
-            
-            for stock in initial_stocks:
-                # Upsert
-                sql_seed = """
-                INSERT INTO managed_stocks (ticker, group_name, buy_strategy, sell_strategy, target_ratio)
-                VALUES (%s, %s, %s, %s, %s)
-                ON DUPLICATE KEY UPDATE 
-                    group_name=VALUES(group_name), 
-                    buy_strategy=VALUES(buy_strategy), 
-                    sell_strategy=VALUES(sell_strategy),
-                    target_ratio=VALUES(target_ratio)
-                """
-                cursor.execute(sql_seed, stock)
-
             # Seed Global Config (Rules)
             import json
             rules = {
@@ -827,33 +841,43 @@ def check_recent_sms_log(stock_name, signal_type, timeframe_minutes=30):
 
 # --- Stock Management ---
 def get_stocks():
-    """종목 목록 조회 (관리용, 모든 상태 반환)"""
+    """종목 목록 조회 (Master List from active `stocks` table)"""
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
+            # [Updated Ver 6.5] Use `stocks` table as master
             cursor.execute("""
-                SELECT ticker as code, name, current_price, price_updated_at, is_market_open, is_active
-                FROM managed_stocks 
-                ORDER BY ticker ASC
+                SELECT code, name, is_active
+                FROM stocks 
+                ORDER BY code ASC
             """)
             rows = cursor.fetchall()
             return rows
+    except Exception as e:
+        print(f"Get Stocks Error: {e}")
+        return []
     finally:
         conn.close()
 
 def add_stock(code, name, is_active=True):
+    """종목 추가 (Master List)"""
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
-            # managed_stocks에 추가 (이미 존재하면 is_active 업데이트)
+            # 1. Insert into stocks (Master)
             sql = """
-            INSERT INTO managed_stocks (ticker, name, is_active) 
+            INSERT INTO stocks (code, name, is_active) 
             VALUES (%s, %s, %s)
-            ON DUPLICATE KEY UPDATE 
-                name = VALUES(name),
-                is_active = VALUES(is_active)
+            ON DUPLICATE KEY UPDATE name=VALUES(name), is_active=VALUES(is_active)
             """
             cursor.execute(sql, (code, name, is_active))
+            
+            # 2. Also ensure it exists in managed_stocks for legacy compatibility (optional but safe)
+            # Only if it doesn't exist? Or just leave it to be created when transaction happens?
+            # User wants to separate them. But if we add to Master, it doesn't necessarily mean we have holdings.
+            # So we do NOT add to managed_stocks automatically unless user inputs transaction.
+            pass
+
         conn.commit()
         return True
     except Exception as e:
@@ -863,9 +887,13 @@ def add_stock(code, name, is_active=True):
         conn.close()
 
 def update_stock_status(code, is_active):
+    """종목 상태 변경 (Master List)"""
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
+            cursor.execute("UPDATE stocks SET is_active=%s WHERE code=%s", (is_active, code))
+            # Also sync managed_stocks active status if it exists, to keep UI consistent?
+            # Let's keep them in sync for now if the column exists there too.
             cursor.execute("UPDATE managed_stocks SET is_active=%s WHERE ticker=%s", (is_active, code))
         conn.commit()
         return True
@@ -876,10 +904,31 @@ def update_stock_status(code, is_active):
         conn.close()
 
 def delete_stock(code):
+    """종목 삭제 (Master List) - Cascade implies risks, so be careful"""
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
+            # User request: "If holding deleted, code shouldn't be deleted."
+            # Here: "If Master Code deleted, what happens?"
+            # Usually Master Delete should block if holdings exist OR cascade delete everything.
+            # Given user wants to manage them separately, Master Delete means "I don't want this stock in my system anymore".
+            # So we delete from stocks. 
+            
+            # Check if active holdings exist?
+            cursor.execute("SELECT quantity FROM managed_stocks WHERE ticker=%s AND quantity > 0", (code,))
+            row = cursor.fetchone()
+            if row:
+                # If active holdings exist, strictly maybe we shouldn't delete master?
+                # But user can delete if they really want to.
+                # Let's clean up everything.
+                pass
+
+            cursor.execute("DELETE FROM stocks WHERE code=%s", (code,))
+            # managed_stocks will NOT be automatically deleted unless we defined FK cascade manually or in DB.
+            # In init_db, managed_stocks table definition (lines 200+) did NOT show FK. 
+            # I should explicitly delete from managed_stocks if we want to clean up.
             cursor.execute("DELETE FROM managed_stocks WHERE ticker=%s", (code,))
+            
         conn.commit()
         return True
     except Exception as e:
@@ -903,9 +952,9 @@ def get_holdings():
         with conn.cursor() as cursor:
             # managed_stocks에서 수량, 평단가, 현재가 모두 조회
             sql = """
-            SELECT ticker, name, quantity as qty, avg_price, current_price, is_market_open, is_manual_price
+            SELECT ticker, name, quantity as qty, avg_price, current_price, is_market_open, is_manual_price,
+                   category, group_name, is_holding, expected_sell_date, target_sell_price, strategy_memo
             FROM managed_stocks 
-            WHERE quantity > 0
             ORDER BY ticker ASC
             """
             cursor.execute(sql)
@@ -931,49 +980,8 @@ def get_holdings():
     finally:
         conn.close()
 
-def update_holding(ticker, qty_change, price, memo=None):
-    """보유량 및 평단가 업데이트 (매수/매도)"""
-    conn = get_connection()
-    try:
-        with conn.cursor() as cursor:
-            # 기존 보유량 조회
-            cursor.execute("SELECT quantity, avg_price FROM managed_stocks WHERE ticker=%s", (ticker,))
-            row = cursor.fetchone()
-            
-            if not row:
-                # 종목이 없으면 먼저 생성 (add_stock 호출 권장하지만 여기서도 처리 가능)
-                return False, "Managed stock not found. Add stock first."
-            
-            current_qty = row['quantity'] or 0
-            current_avg = row['avg_price'] or 0.0
-            
-            new_qty = current_qty + qty_change
-            
-            # 매수(Increase)일 경우 평단가 갱신 (가중평균)
-            if qty_change > 0:
-                total_amt = (current_qty * current_avg) + (qty_change * price)
-                new_avg = total_amt / new_qty if new_qty > 0 else 0
-            else:
-                # 매도(Decrease)일 경우 평단가 불변 (단, 전량 매도 시 0 처리)
-                new_avg = current_avg if new_qty > 0 else 0
-            
-            if new_qty < 0:
-                print("Warning: Quantity cannot be negative.")
-                # new_qty = 0 # Or allow negative for short? prevent for now.
-            
-            cursor.execute("""
-                UPDATE managed_stocks 
-                SET quantity=%s, avg_price=%s
-                WHERE ticker=%s
-            """, (new_qty, new_avg, ticker))
-            
-            conn.commit()
-            return True, "Holding updated"
-    except Exception as e:
-        print(f"Update Holding Error: {e}")
-        return False, str(e)
-    finally:
-        conn.close()
+
+# Legacy update_holding removed - using v6.2 version with category support (line 1076+)
 
 # Legacy aliases for compatibility (if needed temporarily)
 def get_transactions():
@@ -993,10 +1001,27 @@ def add_transaction(ticker_or_data, trade_type=None, qty=None, price=None, trade
         price = float(data.get('price', 0))
         memo = data.get('memo', '')
         trade_date = data.get('trade_date')
+        # [Ver 6.2] New fields
+        category = data.get('category', '기타')
+        group_name = data.get('group_name', '')
+        # [Ver 6.3] is_holding (Boolean)
+        is_holding = data.get('is_holding', True)
+        if isinstance(is_holding, str):
+             is_holding = (is_holding.upper() == 'Y' or is_holding.lower() == 'true')
+        
+        expected_sell_date = data.get('expected_sell_date')
+        target_sell_price = data.get('target_sell_price')
+        strategy_memo = data.get('strategy_memo', '')
     else:
         ticker = ticker_or_data
         qty = int(qty) if qty else 0
         price = float(price) if price else 0
+        category = '기타'
+        group_name = ''
+        is_holding = True
+        expected_sell_date = None
+        target_sell_price = None
+        strategy_memo = ''
 
     # 1. Insert into journal_transactions (Source of Truth for Analysis)
     conn = get_connection()
@@ -1004,10 +1029,10 @@ def add_transaction(ticker_or_data, trade_type=None, qty=None, price=None, trade
         with conn.cursor() as cursor:
             sql = """
             INSERT INTO journal_transactions 
-            (ticker, trade_type, qty, price, trade_date, memo)
-            VALUES (%s, %s, %s, %s, COALESCE(%s, NOW()), %s)
+            (ticker, trade_type, qty, price, trade_date, memo, category, group_name, expected_sell_date, target_sell_price, strategy_memo)
+            VALUES (%s, %s, %s, %s, COALESCE(%s, NOW()), %s, %s, %s, %s, %s, %s)
             """
-            cursor.execute(sql, (ticker, trade_type, qty, price, trade_date, memo))
+            cursor.execute(sql, (ticker, trade_type, qty, price, trade_date, memo, category, group_name, expected_sell_date, target_sell_price, strategy_memo))
             conn.commit()
     except Exception as e:
         print(f"Insert Transaction Error: {e}")
@@ -1016,10 +1041,10 @@ def add_transaction(ticker_or_data, trade_type=None, qty=None, price=None, trade
 
     # 2. Update Managed Stocks (Snapshot for Frontend)
     if trade_type == 'RESET':
-        return update_holding(ticker, qty, price, memo, is_reset=True)
+        return update_holding(ticker, qty, price, memo, is_reset=True, category=category, group_name=group_name, is_holding=is_holding, expected_sell_date=expected_sell_date, target_sell_price=target_sell_price, strategy_memo=strategy_memo)
     else:
         qty_change = qty if trade_type == 'BUY' else -qty
-        return update_holding(ticker, qty_change, price, memo, is_reset=False)
+        return update_holding(ticker, qty_change, price, memo, is_reset=False, category=category, group_name=group_name, is_holding=is_holding, expected_sell_date=expected_sell_date, target_sell_price=target_sell_price, strategy_memo=strategy_memo)
 
 def update_transaction(id, data):
     # Backward compatibility: For now, we just update journal_transactions log.
@@ -1030,7 +1055,7 @@ def update_transaction(id, data):
         with conn.cursor() as cursor:
             sql = """
             UPDATE journal_transactions 
-            SET ticker=%s, trade_type=%s, qty=%s, price=%s, trade_date=%s, memo=%s
+            SET ticker=%s, trade_type=%s, qty=%s, price=%s, trade_date=%s, memo=%s, group_name=%s
             WHERE id=%s
             """
             cursor.execute(sql, (
@@ -1040,6 +1065,7 @@ def update_transaction(id, data):
                 data['price'],
                 data['trade_date'],
                 data.get('memo', ''),
+                data.get('group_name', ''),
                 id
             ))
         conn.commit()
@@ -1063,7 +1089,7 @@ def delete_transaction(id):
     finally:
         conn.close()
 
-def update_holding(ticker, qty_change_or_new_qty, price, memo=None, is_reset=False):
+def update_holding(ticker, qty_change_or_new_qty, price, memo=None, is_reset=False, category=None, group_name=None, is_holding=True, expected_sell_date=None, target_sell_price=None, strategy_memo=None):
     """보유량 및 평단가 업데이트 (매수/매도/RESET)"""
     conn = get_connection()
     try:
@@ -1099,11 +1125,12 @@ def update_holding(ticker, qty_change_or_new_qty, price, memo=None, is_reset=Fal
                 print("Warning: Quantity cannot be negative.")
                 # new_qty = 0 # Or allow negative for short? prevent for now.
             
+            # [Ver 6.2] Include category fields in update
             cursor.execute("""
                 UPDATE managed_stocks 
-                SET quantity=%s, avg_price=%s
+                SET quantity=%s, avg_price=%s, category=%s, group_name=%s, is_holding=%s, expected_sell_date=%s, target_sell_price=%s, strategy_memo=%s
                 WHERE ticker=%s
-            """, (new_qty, new_avg, ticker))
+            """, (new_qty, new_avg, category, group_name, is_holding, expected_sell_date, target_sell_price, strategy_memo, ticker))
             
             conn.commit()
             return True, "Holding updated"
@@ -1112,29 +1139,55 @@ def update_holding(ticker, qty_change_or_new_qty, price, memo=None, is_reset=Fal
         return False, str(e)
     finally:
         conn.close()
+
+def update_holding_info(ticker, data):
+    """
+    [Ver 6.5] Direct Update of Managed Stock Info (No Journal Transaction)
+    Updates: Qty, AvgPrice, Category, Group, Memo, Strategy, etc.
+    """
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
+            # Check if stock exists
+            cursor.execute("SELECT ticker FROM managed_stocks WHERE ticker=%s", (ticker,))
+            if not cursor.fetchone():
+                return False, "Stock not found"
+
             sql = """
-            UPDATE journal_transactions 
-            SET ticker=%s, trade_type=%s, qty=%s, price=%s, trade_date=%s, memo=%s
-            WHERE id=%s
+            UPDATE managed_stocks 
+            SET quantity=%s, avg_price=%s, category=%s, group_name=%s, 
+                is_holding=%s, expected_sell_date=%s, target_sell_price=%s, strategy_memo=%s
+            WHERE ticker=%s
             """
+            qty = int(data.get('qty', 0))
+            price = float(data.get('price', 0))
+            category = data.get('category', '기타')
+            group_name = data.get('group_name', '')
+            
+            is_holding = data.get('is_holding', True)
+            if isinstance(is_holding, str):
+                 is_holding = (is_holding.upper() == 'Y' or is_holding.lower() == 'true')
+
+            # Optional dates
+            expected_sell = data.get('expected_sell_date')
+            if not expected_sell: expected_sell = None
+            
+            target_sell = data.get('target_sell_price')
+            if not target_sell: target_sell = None
+
             cursor.execute(sql, (
-                data['ticker'],
-                data['trade_type'],
-                data['qty'],
-                data['price'],
-                data['trade_date'],
-                data.get('memo', ''),
-                id
+                qty, price, category, group_name,
+                is_holding, expected_sell, target_sell, data.get('strategy_memo', ''),
+                ticker
             ))
         conn.commit()
-        return True
+        return True, "Updated successfully"
+    except Exception as e:
+        print(f"Update Holding Info Error: {e}")
+        return False, str(e)
     finally:
-        conn.close()
-
-        conn.close()
+        try: conn.close()
+        except: pass
 
 def delete_transaction(id):
     conn = get_connection()
@@ -2892,3 +2945,238 @@ def update_manual_target(ticker, target_type, price):
         return False
     finally:
         conn.close()
+
+# [Ver 6.2] Add new columns to journal_transactions for category/strategy
+def migrate_journal_transactions_v62():
+    """Add category, expected_sell_date, target_sell_price, strategy_memo columns"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            # Check if columns exist
+            cursor.execute("SHOW COLUMNS FROM journal_transactions LIKE 'category'")
+            if not cursor.fetchone():
+                cursor.execute("""
+                    ALTER TABLE journal_transactions
+                    ADD COLUMN category VARCHAR(50) DEFAULT '기타',
+                    ADD COLUMN expected_sell_date DATE DEFAULT NULL,
+                    ADD COLUMN target_sell_price DECIMAL(15,4) DEFAULT NULL,
+                    ADD COLUMN strategy_memo TEXT DEFAULT NULL
+                """)
+                print("[Ver 6.2] journal_transactions columns added: category, expected_sell_date, target_sell_price, strategy_memo")
+            else:
+                print("[Ver 6.2] journal_transactions columns already exist")
+            
+            # Also add to managed_stocks for display
+            cursor.execute("SHOW COLUMNS FROM managed_stocks LIKE 'category'")
+            if not cursor.fetchone():
+                cursor.execute("""
+                    ALTER TABLE managed_stocks
+                    ADD COLUMN category VARCHAR(50) DEFAULT '기타',
+                    ADD COLUMN expected_sell_date DATE DEFAULT NULL,
+                    ADD COLUMN target_sell_price DECIMAL(15,4) DEFAULT NULL,
+                    ADD COLUMN strategy_memo TEXT DEFAULT NULL
+                """)
+                print("[Ver 6.2] managed_stocks columns added: category, expected_sell_date, target_sell_price, strategy_memo")
+            else:
+                print("[Ver 6.2] managed_stocks columns already exist")
+                
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Migration Error: {e}")
+        return False
+    finally:
+        conn.close()
+
+def delete_holding(ticker):
+    """완전 삭제 (Delete from managed_stocks)"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("DELETE FROM managed_stocks WHERE ticker=%s", (ticker,))
+        conn.commit()
+        return True, "Deleted"
+    except Exception as e:
+        print(f"Delete Holding Error: {e}")
+        return False, str(e)
+    finally:
+        conn.close()
+
+def migrate_v63_add_is_holding():
+    """[Ver 6.3] Add is_holding column to managed_stocks"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("SHOW COLUMNS FROM managed_stocks LIKE 'is_holding'")
+            if not cursor.fetchone():
+                cursor.execute("ALTER TABLE managed_stocks ADD COLUMN is_holding BOOLEAN DEFAULT TRUE")
+                print("✅ Migration(v63): Added is_holding column")
+    except Exception as e:
+        print(f"Migration(v63) Error: {e}")
+    finally:
+        conn.close()
+
+# [Ver 6.6] Migration: Add group_name to managed_stocks
+def migrate_v64_add_group_name_to_managed_stocks():
+    """Add group_name column to managed_stocks if missing"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("SHOW COLUMNS FROM managed_stocks LIKE 'group_name'")
+            if not cursor.fetchone():
+                cursor.execute("ALTER TABLE managed_stocks ADD COLUMN group_name VARCHAR(50) DEFAULT '기타'")
+                print("✅ Migration(v64): Added group_name column to managed_stocks")
+    except Exception as e:
+        print(f"Migration(v64) Error: {e}")
+    finally:
+        conn.close()
+
+# [Ver 6.6] Update Holding Info (Meta Data)
+def update_holding_info(ticker, category=None, group_name=None, is_holding=None, target_sell_price=None, expected_sell_date=None, strategy_memo=None, manual_qty=None, manual_price=None):
+    """Update metadata for a holding in managed_stocks"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            # Check if record exists
+            cursor.execute("SELECT ticker FROM managed_stocks WHERE ticker=%s", (ticker,))
+            if not cursor.fetchone():
+                # [Upsert Logic] Insert new record if not exists
+                c2 = conn.cursor()
+                c2.execute("SELECT name FROM stocks WHERE code=%s", (ticker,))
+                s_row = c2.fetchone()
+                c2.close()
+                name = s_row['name'] if s_row else ticker
+                
+                cols = ["ticker", "name", "group_name", "category", "is_holding"]
+                vals = ["%s", "%s", "%s", "%s", "%s"]
+                # Default values
+                p = [ticker, name, group_name or '기타', category or '기타', is_holding if is_holding is not None else True]
+                
+                if target_sell_price is not None:
+                    cols.append("target_sell_price"); vals.append("%s"); p.append(target_sell_price)
+                if expected_sell_date and expected_sell_date != '':
+                    cols.append("expected_sell_date"); vals.append("%s"); p.append(expected_sell_date)
+                if strategy_memo is not None:
+                    cols.append("strategy_memo"); vals.append("%s"); p.append(strategy_memo)
+                
+                # [Ver 6.8] Simulation Fields
+                if manual_qty is not None:
+                    cols.append("manual_qty"); vals.append("%s"); p.append(manual_qty)
+                if manual_price is not None:
+                    cols.append("manual_price"); vals.append("%s"); p.append(manual_price)
+                    
+                sql = f"INSERT INTO managed_stocks ({', '.join(cols)}) VALUES ({', '.join(vals)})"
+                cursor.execute(sql, p)
+                conn.commit()
+                return True, "Inserted successfully"
+
+            # Dynamic Update
+            fields = []
+            params = []
+            
+            if category is not None:
+                fields.append("category = %s")
+                params.append(category)
+            if group_name is not None:
+                fields.append("group_name = %s")
+                params.append(group_name)
+            if is_holding is not None:
+                fields.append("is_holding = %s")
+                params.append(is_holding)
+            
+            # [New] Strategy Fields
+            if target_sell_price is not None:
+                fields.append("target_sell_price = %s")
+                params.append(target_sell_price)
+                
+            if expected_sell_date is not None:
+                if expected_sell_date == '': 
+                    fields.append("expected_sell_date = NULL")
+                else:
+                    fields.append("expected_sell_date = %s")
+                    params.append(expected_sell_date)
+            
+            if strategy_memo is not None:
+                fields.append("strategy_memo = %s")
+                params.append(strategy_memo)
+
+            # [Ver 6.8] Simulation Fields
+            if manual_qty is not None:
+                fields.append("manual_qty = %s")
+                params.append(manual_qty)
+            if manual_price is not None:
+                fields.append("manual_price = %s")
+                params.append(manual_price)
+            
+            if not fields:
+                return True, "No changes"
+            
+            params.append(ticker)
+            sql = f"UPDATE managed_stocks SET {', '.join(fields)} WHERE ticker = %s"
+            cursor.execute(sql, params)
+        conn.commit()
+        return True, "Updated"
+    except Exception as e:
+        print(f"Update Holding Info Error: {e}")
+        return False, str(e)
+        conn.close()
+
+def migrate_v67_add_new_columns_to_managed_stocks():
+    """Add category, target_sell_price, expected_sell_date, strategy_memo to managed_stocks if missing"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            # Check and Add category
+            cursor.execute("SHOW COLUMNS FROM managed_stocks LIKE 'category'")
+            if not cursor.fetchone():
+                print("Migrating: Adding category to managed_stocks")
+                cursor.execute("ALTER TABLE managed_stocks ADD COLUMN category VARCHAR(50) DEFAULT '기타'")
+                
+            # Check and Add target_sell_price
+            cursor.execute("SHOW COLUMNS FROM managed_stocks LIKE 'target_sell_price'")
+            if not cursor.fetchone():
+                print("Migrating: Adding target_sell_price to managed_stocks")
+                cursor.execute("ALTER TABLE managed_stocks ADD COLUMN target_sell_price DECIMAL(18,2) NULL")
+                
+            # Check and Add expected_sell_date
+            cursor.execute("SHOW COLUMNS FROM managed_stocks LIKE 'expected_sell_date'")
+            if not cursor.fetchone():
+                print("Migrating: Adding expected_sell_date to managed_stocks")
+                cursor.execute("ALTER TABLE managed_stocks ADD COLUMN expected_sell_date DATE NULL")
+                
+            # Check and Add strategy_memo
+            cursor.execute("SHOW COLUMNS FROM managed_stocks LIKE 'strategy_memo'")
+            if not cursor.fetchone():
+                print("Migrating: Adding strategy_memo to managed_stocks")
+                cursor.execute("ALTER TABLE managed_stocks ADD COLUMN strategy_memo TEXT NULL")
+
+            conn.commit()
+    except Exception as e:
+        print(f"Migration V67 Error: {e}")
+    finally:
+        try: conn.close()
+        except: pass
+
+def migrate_v68_add_simulation_columns():
+    """Add manual_qty and manual_price to managed_stocks for Watchlist Simulation"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            # manual_qty
+            cursor.execute("SHOW COLUMNS FROM managed_stocks LIKE 'manual_qty'")
+            if not cursor.fetchone():
+                print("Migrating: Adding manual_qty to managed_stocks")
+                cursor.execute("ALTER TABLE managed_stocks ADD COLUMN manual_qty INT DEFAULT 0")
+            
+            # manual_price
+            cursor.execute("SHOW COLUMNS FROM managed_stocks LIKE 'manual_price'")
+            if not cursor.fetchone():
+                print("Migrating: Adding manual_price to managed_stocks")
+                cursor.execute("ALTER TABLE managed_stocks ADD COLUMN manual_price DECIMAL(18,2) DEFAULT 0")
+                
+            conn.commit()
+    except Exception as e:
+        print(f"Migration V68 Error: {e}")
+    finally:
+        try: conn.close()
+        except: pass

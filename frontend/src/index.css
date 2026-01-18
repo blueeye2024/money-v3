@@ -181,21 +181,39 @@ header h1 {
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 2rem;
-  padding: 1.5rem 0;
+  gap: 1.5rem;
+  padding: 1rem 0;
   border-bottom: 1px solid var(--glass-border);
-  margin-bottom: 2rem;
+  margin-bottom: 1.5rem;
   position: relative;
+  flex-wrap: wrap;
+}
+
+.nav-link {
+  font-size: 0.9rem;
+  text-decoration: none;
+  transition: color 0.2s;
 }
 
 .mobile-menu-btn {
   display: none;
-  background: none;
-  border: none;
+  background: var(--bg-secondary);
+  border: 1px solid var(--glass-border);
   color: var(--text-primary);
   font-size: 1.5rem;
   cursor: pointer;
   z-index: 1001;
+  width: 56px;
+  height: 56px;
+  /* Increased Touch Area */
+  border-radius: 0 0 0 12px;
+  /* Rounded only bottom-left */
+  position: fixed;
+  top: 0;
+  /* Flush Top */
+  right: 0;
+  /* Flush Right */
+  box-shadow: -2px 2px 10px rgba(0, 0, 0, 0.2);
 }
 
 /* Media Queries */
@@ -204,6 +222,16 @@ header h1 {
 @media (max-width: 1024px) {
   .grid-cards {
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  }
+
+  .main-nav {
+    gap: 1rem;
+    padding: 0.75rem 0;
+  }
+
+  .nav-link {
+    font-size: 0.85rem;
+    padding: 0.5rem 0.75rem;
   }
 }
 
@@ -221,17 +249,25 @@ header h1 {
     justify-content: flex-start;
     padding-top: 5rem;
     transition: 0.3s ease-in-out;
+    gap: 0.5rem;
   }
 
   .main-nav.active {
     right: 0;
   }
 
+  .main-nav .nav-link {
+    width: 100%;
+    text-align: left;
+    padding: 1rem 1.5rem;
+    font-size: 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
   .mobile-menu-btn {
-    display: block;
-    position: absolute;
-    top: 1.5rem;
-    right: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .grid-cards {
@@ -239,32 +275,73 @@ header h1 {
   }
 
   .container {
-    padding: 1.5rem 0.75rem;
+    padding: 1rem 0.5rem;
+    margin-top: 60px;
   }
 
   header {
     text-align: left;
+  }
+
+  /* Dashboard mobile improvements */
+  .glass-panel {
+    border-radius: 12px;
   }
 }
 
 /* Mobile (480px) */
 @media (max-width: 480px) {
   :root {
-    --glass-bg: rgba(30, 41, 59, 0.9);
+    --glass-bg: rgba(30, 41, 59, 0.95);
   }
 
   header h1 {
-    font-size: 1.5rem;
+    font-size: 1.25rem;
+  }
+
+  .container {
+    padding: 0.5rem 0.25rem;
+    /* Reduced Padding */
+    margin-top: 50px;
+  }
+
+  .app-container {
+    padding: 0 0.25rem;
+    /* Reduced Margins */
   }
 
   .glass-panel {
-    padding: 1rem !important;
+    padding: 0.5rem !important;
+    /* Reduced Padding */
+    margin: 0 !important;
+    border-radius: 10px;
   }
 
   th,
   td {
-    padding: 0.75rem 0.5rem;
-    font-size: 0.85rem;
+    padding: 0.4rem 0.2rem;
+    /* Compact Table */
+    font-size: 0.75rem;
+  }
+
+  /* Hide less important columns on small screens */
+  .hide-mobile {
+    display: none !important;
+  }
+
+  /* Improve touch targets */
+  button,
+  .nav-link,
+  input,
+  select {
+    min-height: 48px;
+    font-size: 1rem;
+  }
+
+  /* Stack horizontal layouts */
+  .flex-row-mobile {
+    flex-direction: column !important;
+    gap: 0.5rem !important;
   }
 }
 
