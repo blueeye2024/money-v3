@@ -24,6 +24,7 @@ const JournalPage = () => {
     const [activeIndexAsset, setActiveIndexAsset] = useState(null);
     const [showDashboard, setShowDashboard] = useState(true);
     const [activeTab, setActiveTab] = useState('HOLDING');
+    const [strategyMemo, setStrategyMemo] = useState('');
 
     useEffect(() => {
         const savedCostRate = localStorage.getItem('costRate');
@@ -54,7 +55,7 @@ const JournalPage = () => {
         try {
             // [OPTIMIZATION] Fast Initial Load
             // 1. Fetch fast data and render immediately
-            await Promise.all([fetchHoldings(), fetchStocks(), fetchCapital()]);
+            await Promise.all([fetchHoldings(), fetchStocks(), fetchCapital(), fetchStrategyMemo()]);
             setLoading(false); // Hide spinner ASAP based on fast data
 
             // 2. Fetch slow data (Exchange Rate) in background
@@ -178,6 +179,27 @@ const JournalPage = () => {
             setTotalCapitalKRW(cap);
             setTotalCapitalKRWInput(cap.toLocaleString()); // [Fixed] Sync Formatted Input
         } catch (e) { console.error(e); }
+    };
+
+    const fetchStrategyMemo = async () => {
+        try {
+            const res = await axios.get('/api/strategy_memo');
+            if (res.data.memo) setStrategyMemo(res.data.memo);
+        } catch (e) { console.error(e); }
+    };
+
+    const handleStrategyMemoChange = (e) => {
+        setStrategyMemo(e.target.value);
+    };
+
+    const handleSaveStrategyMemo = async () => {
+        try {
+            await axios.post('/api/strategy_memo', { memo: strategyMemo });
+            // alert('전략 지침이 저장되었습니다.'); // [Removed] Silent auto-save
+        } catch (e) {
+            console.error(e);
+            // alert('저장 실패'); // [Optional] Keep error alert or log only
+        }
     };
 
     const handleCapitalChange = (e) => {
@@ -359,86 +381,10 @@ const JournalPage = () => {
             {/* Summary Cards + Charts (toggleable) */}
             {showDashboard && (
                 <>
-                    {/* Summary Cards */}
-                    <div className="summary-grid">
-                        <div className="glass-card card-purple">
-                            <div className="card-label">총 자산 (Total Assets)</div>
-                            <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', marginBottom: '1rem' }}>
-                                <input
-                                    className="glass-input"
-                                    type="text"
-                                    value={totalCapitalKRWInput}
-                                    onChange={handleCapitalChange}
-                                    onBlur={handleCapitalBlur}
-                                    style={{ width: '180px', textAlign: 'right', fontWeight: 'bold' }}
-                                />
-                                <span style={{ fontSize: '1.2rem', fontWeight: '600' }}>원</span>
-                            </div>
-                            {/* Save button removed as onBlur handles it now, or keep it as backup */}
-                            <button className="glass-btn" style={{ width: '100%' }} onClick={handleCapitalBlur}>
-                                저장
-                            </button>
-                            <div style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.7)', marginTop: '1rem' }}>
-                                ≈ ${totalCapitalUSD.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                            </div>
-                        </div>
-
-                        <div className="glass-card card-blue">
-                            <div className="card-label" style={{ color: '#1e40af' }}>평가 금액 (Current Value)</div>
-                            <div className="card-value" style={{ color: '#1e3a8a' }}>
-                                ${totalValueUSD.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                            </div>
-                            <div style={{ fontSize: '1rem', color: '#3b82f6', marginBottom: '1.5rem' }}>
-                                {totalValueKRW.toLocaleString(undefined, { maximumFractionDigits: 0 })}원
-                            </div>
-                            <div style={{ borderTop: '1px solid rgba(59,130,246,0.2)', paddingTop: '1rem', marginTop: '1rem' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                                    <span style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: '500' }}>현금 비중</span>
-                                    <span style={{ fontSize: '1.1rem', color: '#1e3a8a', fontWeight: '700' }}>
-                                        {((totalCapitalUSD - totalValueUSD) / totalCapitalUSD * 100).toFixed(1)}%
-                                    </span>
-                                </div>
-                                <div style={{ fontSize: '0.85rem', color: '#64748b' }}>
-                                    ${(totalCapitalUSD - totalValueUSD).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                                    <span style={{ marginLeft: '0.5rem' }}>(
-                                        {((totalCapitalUSD - totalValueUSD) * exchangeRate).toLocaleString(undefined, { maximumFractionDigits: 0 })}원
-                                        )</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className={`glass-card ${totalProfit >= 0 ? 'card-success' : 'card-danger'}`}>
-                            <div className="card-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span>평가 손익 (P&L)</span>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.8rem', background: 'rgba(0,0,0,0.1)', padding: '2px 6px', borderRadius: '6px' }}>
-                                    <span>비용</span>
-                                    <input
-                                        className="glass-input"
-                                        type="number"
-                                        value={costRate}
-                                        onChange={handleCostRateChange}
-                                        step="0.01"
-                                        style={{ width: '45px', padding: '2px', textAlign: 'right', fontSize: '0.9rem' }}
-                                    />
-                                    <span>%</span>
-                                </div>
-                            </div>
-                            <div className="card-value">
-                                {totalProfit >= 0 ? '+' : ''}${totalProfit.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                            </div>
-                            <div style={{ fontSize: '1rem', color: 'rgba(255,255,255,0.7)', marginBottom: '0.2rem' }}>
-                                {(totalProfit * exchangeRate).toLocaleString(undefined, { maximumFractionDigits: 0 })}원
-                            </div>
-                            <div style={{ fontSize: '1.2rem', color: 'rgba(255,255,255,0.9)', fontWeight: '600' }}>
-                                {totalProfitPct >= 0 ? '+' : ''}{totalProfitPct.toFixed(2)}%
-                            </div>
-                        </div>
-                    </div>
-
                     {/* [Ver 6.6] Pie Charts Section */}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: '2rem', marginBottom: '2rem' }}>
                         {/* Chart 1: 그룹별 주식 비중 */}
-                        <div style={{ background: 'linear-gradient(135deg, rgba(30,58,138,0.15), rgba(59,130,246,0.08))', border: '2px solid rgba(59,130,246,0.3)', borderRadius: '16px', padding: '1.5rem' }}>
+                        <div style={{ background: 'linear-gradient(135deg, rgba(30,58,138,0.15), rgba(59,130,246,0.08))', border: '2px solid rgba(59,130,246,0.3)', borderRadius: '16px', padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
                             <h3 style={{ margin: '0 0 1rem 0', color: '#bfdbfe', fontSize: '1.1rem', fontWeight: '700' }}>그룹별 주식 비중</h3>
                             <div style={{ minHeight: '280px' }}>
                                 <ResponsiveContainer width="100%" height={280}>
@@ -521,6 +467,8 @@ const JournalPage = () => {
                                     <thead>
                                         <tr style={{ borderBottom: '1px solid rgba(59,130,246,0.4)' }}>
                                             <th style={{ textAlign: 'left', padding: '0.5rem', color: '#93c5fd', fontWeight: '700', fontSize: '0.75rem', textTransform: 'uppercase' }}>그룹</th>
+                                            <th style={{ textAlign: 'right', padding: '0.5rem', color: '#93c5fd', fontWeight: '700', fontSize: '0.75rem', textTransform: 'uppercase' }}>수익률</th>
+                                            <th style={{ textAlign: 'right', padding: '0.5rem', color: '#93c5fd', fontWeight: '700', fontSize: '0.75rem', textTransform: 'uppercase' }}>손익</th>
                                             <th style={{ textAlign: 'right', padding: '0.5rem', color: '#93c5fd', fontWeight: '700', fontSize: '0.75rem', textTransform: 'uppercase' }}>비율</th>
                                             <th style={{ textAlign: 'right', padding: '0.5rem', color: '#93c5fd', fontWeight: '700', fontSize: '0.75rem', textTransform: 'uppercase' }}>금액</th>
                                         </tr>
@@ -529,25 +477,60 @@ const JournalPage = () => {
                                         {(() => {
                                             const colors = ['#60a5fa', '#34d399', '#fbbf24', '#f472b6', '#a78bfa'];
                                             const groups = {};
+                                            const groupProfits = {};
                                             sortedHoldings.forEach(h => {
                                                 const g = h.group_name || '기타';
-                                                if (!groups[g]) groups[g] = 0;
+                                                if (!groups[g]) {
+                                                    groups[g] = 0;
+                                                    groupProfits[g] = 0;
+                                                }
                                                 groups[g] += h.currentValue;
+                                                groupProfits[g] += h.profit || 0;
                                             });
                                             const total = Object.values(groups).reduce((s, v) => s + v, 0);
-                                            return Object.entries(groups).map(([name, value], idx) => (
-                                                <tr key={name} style={{ borderBottom: '1px solid rgba(59,130,246,0.2)' }}>
-                                                    <td style={{ padding: '0.6rem 0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                        <span style={{ width: '12px', height: '12px', borderRadius: '50%', background: colors[idx % 5], boxShadow: `0 0 8px ${colors[idx % 5]}` }}></span>
-                                                        <span style={{ color: '#e0e7ff', fontWeight: '600' }}>{name}</span>
-                                                    </td>
-                                                    <td style={{ textAlign: 'right', padding: '0.6rem 0.5rem', color: '#93c5fd', fontWeight: '700' }}>{(total > 0 ? value / total * 100 : 0).toFixed(1)}%</td>
-                                                    <td style={{ textAlign: 'right', padding: '0.6rem 0.5rem', color: '#e0e7ff', fontWeight: '600' }}>${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
-                                                </tr>
-                                            ));
+                                            return Object.entries(groups).map(([name, value], idx) => {
+                                                const profit = groupProfits[name] || 0;
+                                                const profitPct = total > 0 ? (profit / total) * 100 : 0;
+                                                const profitKRW = profit * (exchangeRate || 1400);
+                                                return (
+                                                    <tr key={name} style={{ borderBottom: '1px solid rgba(59,130,246,0.2)' }}>
+                                                        <td style={{ padding: '0.6rem 0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                            <span style={{ width: '12px', height: '12px', borderRadius: '50%', background: colors[idx % 5], boxShadow: `0 0 8px ${colors[idx % 5]}` }}></span>
+                                                            <span style={{ color: '#e0e7ff', fontWeight: '600' }}>{name}</span>
+                                                        </td>
+                                                        <td style={{ textAlign: 'right', padding: '0.6rem 0.5rem', fontWeight: '700', color: profit >= 0 ? '#34d399' : '#f87171' }}>
+                                                            {profit >= 0 ? '+' : ''}{profitPct.toFixed(1)}%
+                                                        </td>
+                                                        <td style={{ textAlign: 'right', padding: '0.6rem 0.5rem', fontWeight: '600', color: profit >= 0 ? '#34d399' : '#f87171', fontSize: '0.75rem' }}>
+                                                            {profit >= 0 ? '+' : ''}₩{profitKRW.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                        </td>
+                                                        <td style={{ textAlign: 'right', padding: '0.6rem 0.5rem', color: '#93c5fd', fontWeight: '700' }}>{(total > 0 ? value / total * 100 : 0).toFixed(1)}%</td>
+                                                        <td style={{ textAlign: 'right', padding: '0.6rem 0.5rem', color: '#e0e7ff', fontWeight: '600' }}>${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                                                    </tr>
+                                                );
+                                            });
                                         })()}
                                     </tbody>
                                 </table>
+
+                                {/* Strategy Guideline Memo */}
+                                <div style={{ marginTop: '1rem', flexGrow: 1, display: 'flex', flexDirection: 'column', minHeight: '0' }}>
+                                    {/* minHeight: 0 is important for flex child scrolling/sizing */}
+                                    <div style={{ marginBottom: '0.5rem' }}>
+                                        <div style={{ color: '#fbbf24', fontWeight: '700', fontSize: '0.85rem' }}>⚠️ 전략 지침 (Strategy Guidelines)</div>
+                                    </div>
+                                    <textarea
+                                        value={strategyMemo}
+                                        onChange={handleStrategyMemoChange}
+                                        onBlur={handleSaveStrategyMemo}
+                                        placeholder="이 그룹에 대한 비중 조절 계획이나 매매 원칙을 입력하세요..."
+                                        style={{
+                                            width: '100%', height: '100%', minHeight: '120px', flexGrow: 1,
+                                            background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(251, 191, 36, 0.3)', borderRadius: '8px',
+                                            color: '#e2e8f0', padding: '0.8rem', fontSize: '0.85rem', resize: 'none', lineHeight: '1.4'
+                                        }}
+                                    />
+                                </div>
                             </div>
                         </div>
 
@@ -625,6 +608,7 @@ const JournalPage = () => {
                                             { name: '현금 (Cash)', value: Math.max(0, totalCapitalUSD - totalValueUSD), color: '#c084fc', grad: 'grad_asset_2' }
                                         ].map((item, idx) => {
                                             const total = totalValueUSD + Math.max(0, totalCapitalUSD - totalValueUSD);
+                                            const valueKRW = item.value * (exchangeRate || 1400);
                                             return (
                                                 <tr key={item.name} style={{ borderBottom: '1px solid rgba(59,130,246,0.2)' }}>
                                                     <td style={{ padding: '0.6rem 0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -632,12 +616,68 @@ const JournalPage = () => {
                                                         <span style={{ color: '#e0e7ff', fontWeight: '600' }}>{item.name}</span>
                                                     </td>
                                                     <td style={{ textAlign: 'right', padding: '0.6rem 0.5rem', color: '#93c5fd', fontWeight: '700' }}>{(total > 0 ? item.value / total * 100 : 0).toFixed(1)}%</td>
-                                                    <td style={{ textAlign: 'right', padding: '0.6rem 0.5rem', color: '#e0e7ff', fontWeight: '600' }}>${item.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                                                    <td style={{ textAlign: 'right', padding: '0.6rem 0.5rem' }}>
+                                                        <div style={{ color: '#e0e7ff', fontWeight: '600' }}>${item.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+                                                        <div style={{ color: '#94a3b8', fontSize: '0.75rem' }}>₩{valueKRW.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+                                                    </td>
                                                 </tr>
                                             );
                                         })}
                                     </tbody>
                                 </table>
+                                {/* 전체 주식 수익률 요약 + 비용 설정 */}
+                                <div style={{ marginTop: '1rem', padding: '0.8rem', background: totalProfit >= 0 ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)', borderRadius: '8px', border: `1px solid ${totalProfit >= 0 ? 'rgba(34,197,94,0.4)' : 'rgba(239,68,68,0.4)'}` }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                        <span style={{ color: '#93c5fd', fontWeight: '700', fontSize: '0.85rem' }}>📊 전체 주식 손익</span>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.75rem', background: 'rgba(0,0,0,0.2)', padding: '3px 8px', borderRadius: '6px' }}>
+                                            <span style={{ color: '#94a3b8' }}>비용</span>
+                                            <input
+                                                type="number"
+                                                value={costRate}
+                                                onChange={handleCostRateChange}
+                                                step="0.01"
+                                                style={{ width: '45px', padding: '2px', textAlign: 'right', fontSize: '0.8rem', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(59,130,246,0.4)', borderRadius: '4px', color: '#e0e7ff' }}
+                                            />
+                                            <span style={{ color: '#94a3b8' }}>%</span>
+                                        </div>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <div style={{ fontSize: '0.85rem', color: totalProfit >= 0 ? '#34d399' : '#f87171' }}>
+                                            {totalProfit >= 0 ? '+' : ''}${totalProfit.toLocaleString(undefined, { maximumFractionDigits: 0 })} / ₩{(totalProfit * exchangeRate).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                        </div>
+                                        <div style={{ fontWeight: '800', fontSize: '1.1rem', color: totalProfit >= 0 ? '#34d399' : '#f87171' }}>
+                                            {totalProfit >= 0 ? '+' : ''}{totalProfitPct.toFixed(2)}%
+                                        </div>
+                                    </div>
+                                </div>
+                                {/* 총자산 등록 + 평가금액 요약 */}
+                                <div style={{ marginTop: '0.8rem', padding: '0.8rem', background: 'rgba(59,130,246,0.1)', borderRadius: '8px', border: '1px solid rgba(59,130,246,0.3)' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
+                                        <span style={{ color: '#93c5fd', fontWeight: '700', fontSize: '0.85rem' }}>💰 총자산 설정</span>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                            <input
+                                                type="text"
+                                                value={totalCapitalKRWInput}
+                                                onChange={handleCapitalChange}
+                                                onBlur={handleCapitalBlur}
+                                                style={{ width: '120px', padding: '4px 8px', textAlign: 'right', fontSize: '0.85rem', fontWeight: '700', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(59,130,246,0.4)', borderRadius: '4px', color: '#e0e7ff' }}
+                                            />
+                                            <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>원</span>
+                                        </div>
+                                    </div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', fontSize: '0.8rem' }}>
+                                        <div>
+                                            <div style={{ color: '#94a3b8', marginBottom: '0.2rem' }}>평가액</div>
+                                            <div style={{ color: '#60a5fa', fontWeight: '700' }}>${totalValueUSD.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+                                            <div style={{ color: '#94a3b8', fontSize: '0.75rem' }}>₩{totalValueKRW.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+                                        </div>
+                                        <div>
+                                            <div style={{ color: '#94a3b8', marginBottom: '0.2rem' }}>현금 비중</div>
+                                            <div style={{ color: '#c084fc', fontWeight: '700' }}>{totalCapitalUSD > 0 ? ((totalCapitalUSD - totalValueUSD) / totalCapitalUSD * 100).toFixed(1) : 0}%</div>
+                                            <div style={{ color: '#94a3b8', fontSize: '0.75rem' }}>${(totalCapitalUSD - totalValueUSD).toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -871,94 +911,172 @@ const JournalPage = () => {
                             borderBottom: activeTab === 'WATCH' ? '2px solid #166534' : '2px solid rgba(59,130,246,0.2)'
                         }}>
                             <tr>
-                                <th style={{ padding: '0.8rem', textAlign: 'left', color: '#64748b', fontSize: '0.8rem', fontWeight: '700', whiteSpace: 'nowrap', minWidth: '80px' }}>종목</th>
+                                <th style={{ padding: '0.8rem', textAlign: 'left', color: '#64748b', fontSize: '0.8rem', fontWeight: '700', whiteSpace: 'nowrap', minWidth: '100px' }}>종목</th>
                                 <th style={{ padding: '0.8rem', textAlign: 'left', color: '#64748b', fontSize: '0.8rem', fontWeight: '700', whiteSpace: 'nowrap', minWidth: '100px' }}>이름</th>
-                                <th style={{ padding: '0.8rem', textAlign: 'center', color: '#64748b', fontSize: '0.8rem', fontWeight: '700', whiteSpace: 'nowrap', minWidth: '70px' }}>분류</th>
-                                <th style={{ padding: '0.8rem', textAlign: 'right', color: '#64748b', fontSize: '0.8rem', fontWeight: '700', whiteSpace: 'nowrap', minWidth: '60px' }}>수량</th>
-                                <th style={{ padding: '0.8rem', textAlign: 'right', color: '#64748b', fontSize: '0.8rem', fontWeight: '700', whiteSpace: 'nowrap', minWidth: '80px' }}>평단</th>
                                 <th style={{ padding: '0.8rem', textAlign: 'right', color: '#64748b', fontSize: '0.8rem', fontWeight: '700', whiteSpace: 'nowrap', minWidth: '80px' }}>현재가</th>
-                                <th style={{ padding: '0.8rem', textAlign: 'right', color: '#64748b', fontSize: '0.8rem', fontWeight: '700', whiteSpace: 'nowrap', minWidth: '80px' }}>손익</th>
+                                <th style={{ padding: '0.8rem', textAlign: 'right', color: '#64748b', fontSize: '0.8rem', fontWeight: '700', whiteSpace: 'nowrap', minWidth: '80px' }}>평단</th>
+                                <th style={{ padding: '0.8rem', textAlign: 'right', color: '#64748b', fontSize: '0.8rem', fontWeight: '700', whiteSpace: 'nowrap', minWidth: '60px' }}>수량</th>
                                 <th style={{ padding: '0.8rem', textAlign: 'right', color: '#64748b', fontSize: '0.8rem', fontWeight: '700', whiteSpace: 'nowrap', minWidth: '100px' }}>평가액</th>
-                                <th style={{ padding: '0.8rem', textAlign: 'center', color: '#64748b', fontSize: '0.8rem', fontWeight: '700', whiteSpace: 'nowrap', minWidth: '110px' }}>관리</th>
+                                <th style={{ padding: '0.8rem', textAlign: 'right', color: '#64748b', fontSize: '0.8rem', fontWeight: '700', whiteSpace: 'nowrap', minWidth: '90px' }}>손익</th>
+                                <th style={{ padding: '0.8rem', textAlign: 'center', color: '#64748b', fontSize: '0.8rem', fontWeight: '700', whiteSpace: 'nowrap', minWidth: '90px' }}>관리</th>
                             </tr>
                         </thead>
                         <tbody style={{ fontSize: '0.9rem', color: '#334155' }}>
                             {loading ? (
-                                <tr><td colSpan="9" style={{ textAlign: 'center', padding: '4rem', color: '#64748b' }}>로딩 중...</td></tr>
+                                <tr><td colSpan="8" style={{ textAlign: 'center', padding: '4rem', color: '#64748b' }}>로딩 중...</td></tr>
                             ) : activeTab === 'HOLDING' && Object.keys(holdingsByGroup).length === 0 ? (
-                                <tr><td colSpan="9" style={{ textAlign: 'center', padding: '4rem', color: '#64748b' }}>보유 종목이 없습니다.</td></tr>
+                                <tr><td colSpan="8" style={{ textAlign: 'center', padding: '4rem', color: '#64748b' }}>보유 종목이 없습니다.</td></tr>
                             ) : activeTab === 'WATCH' && watchHoldings.length === 0 ? (
-                                <tr><td colSpan="9" style={{ textAlign: 'center', padding: '4rem', color: '#64748b' }}>관심 종목이 없습니다.</td></tr>
+                                <tr><td colSpan="8" style={{ textAlign: 'center', padding: '4rem', color: '#64748b' }}>관심 종목이 없습니다.</td></tr>
                             ) : (
                                 <>
                                     {/* Holdings List */}
                                     {activeTab === 'HOLDING' && holdingsByGroup && Object.entries(holdingsByGroup).map(([groupName, groupStocks]) => (
                                         <React.Fragment key={groupName}>
-                                            {/* Group Header - Same as before */}
-                                            <tr style={{ background: '#eff6ff', borderTop: '2px solid #bfdbfe', borderBottom: '1px solid #dbeafe' }}>
-                                                <td colSpan="9" style={{ padding: '0.6rem 1rem' }}>
-                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                        <span style={{ fontWeight: '800', color: '#1e40af', fontSize: '0.95rem' }}>📂 {groupName || '미분류'} ({groupStocks.length})</span>
-                                                        <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column' }}>
-                                                            <span style={{ fontSize: '0.9rem', fontWeight: '800', color: '#1e3a8a' }}>${groupStocks.reduce((sum, s) => sum + (s.currentValue || 0), 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
-                                                            <span style={{ fontSize: '0.75rem', color: '#64748b' }}>₩{(groupStocks.reduce((sum, s) => sum + (s.currentValue || 0), 0) * (exchangeRate || 1400)).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                            {/* Stock Rows */}
-                                            {groupStocks.map(stock => (
-                                                <tr key={stock.ticker} style={{ borderBottom: '1px solid #f1f5f9', background: 'white' }}>
-                                                    <td style={{ padding: '0.8rem', fontWeight: '700', color: '#0f172a' }}>{stock.ticker}</td>
-                                                    <td style={{ padding: '0.8rem', color: '#64748b' }}>{stock.name_kr || stock.name}</td>
-                                                    <td style={{ padding: '0.8rem', textAlign: 'center' }}>
-                                                        <span style={{ padding: '0.2rem 0.5rem', borderRadius: '9999px', fontSize: '0.75rem', fontWeight: '600', background: stock.category === '전략' ? '#dbeafe' : '#f1f5f9', color: stock.category === '전략' ? '#1e40af' : '#64748b' }}>
-                                                            {stock.category}
-                                                        </span>
-                                                    </td>
-                                                    <td style={{ padding: '0.8rem', textAlign: 'right', fontWeight: '600' }}>{stock.qty}</td>
-                                                    <td style={{ padding: '0.8rem', textAlign: 'right', color: '#64748b' }}>${stock.avgPrice?.toLocaleString()}</td>
-                                                    <td style={{ padding: '0.8rem', textAlign: 'right', fontWeight: '600' }}>${stock.currentPrice?.toLocaleString()}</td>
-                                                    <td style={{ padding: '0.8rem', textAlign: 'right', fontWeight: '700', color: stock.profit >= 0 ? '#16a34a' : '#dc2626' }}>
-                                                        {stock.profit >= 0 ? '+' : ''}{stock.profitPct.toFixed(1)}%
-                                                    </td>
-                                                    <td style={{ padding: '0.8rem', textAlign: 'right', fontWeight: '800', color: '#1e293b' }}>${stock.currentValue?.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
-                                                    <td style={{ padding: '0.8rem', textAlign: 'center' }}>
-                                                        <div style={{ display: 'flex', gap: '0.3rem', justifyContent: 'center' }}>
-                                                            <button onClick={() => handleEdit(stock)} style={{ padding: '0.2rem 0.5rem', borderRadius: '4px', border: '1px solid #cbd5e1', background: 'white', color: '#334155', fontSize: '0.75rem', cursor: 'pointer', fontWeight: '600' }}>편집</button>
-                                                            <button onClick={() => handleDelete(stock.ticker)} style={{ padding: '0.2rem 0.5rem', borderRadius: '4px', border: '1px solid #cbd5e1', background: 'white', color: '#dc2626', fontSize: '0.75rem', cursor: 'pointer', fontWeight: '600' }}>삭제</button>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            ))}
+                                            {/* Group Header - With Profit Summary */}
+                                            {(() => {
+                                                const groupTotalValue = groupStocks.reduce((sum, s) => sum + (s.currentValue || 0), 0);
+                                                const groupTotalCost = groupStocks.reduce((sum, s) => sum + ((s.avgPrice || 0) * (s.qty || 0)), 0);
+                                                // 각 종목의 profit을 직접 합산 (정확한 손익)
+                                                const groupTotalProfit = groupStocks.reduce((sum, s) => sum + (s.profit || 0), 0);
+                                                // 종목 기준 수익률 (그룹 손익 / 그룹 취득가)
+                                                const groupCostPct = groupTotalCost > 0 ? ((groupTotalProfit / groupTotalCost) * 100) : 0;
+                                                // 총자산 기준 수익률 (그룹 손익 / 전체 주식 평가액)
+                                                const groupTotalPct = totalValueUSD > 0 ? ((groupTotalProfit / totalValueUSD) * 100) : 0;
+                                                const groupValueKRW = groupTotalValue * (exchangeRate || 1400);
+                                                const groupProfitKRW = groupTotalProfit * (exchangeRate || 1400);
+                                                return (
+                                                    <tr style={{ background: '#eff6ff', borderTop: '2px solid #bfdbfe', borderBottom: '1px solid #dbeafe' }}>
+                                                        <td colSpan="8" style={{ padding: '0.6rem 1rem' }}>
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                                <span style={{ fontWeight: '800', color: '#1e40af', fontSize: '0.95rem' }}>📂 {groupName || '미분류'} ({groupStocks.length})</span>
+                                                                <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
+                                                                    {/* 손익 (종목/전체 %) */}
+                                                                    <div style={{ textAlign: 'right' }}>
+                                                                        <div style={{ fontSize: '0.8rem', fontWeight: '700', color: groupTotalProfit >= 0 ? '#16a34a' : '#dc2626' }}>
+                                                                            {groupTotalProfit >= 0 ? '+' : ''}{groupCostPct.toFixed(1)} / {groupTotalPct.toFixed(1)}%
+                                                                        </div>
+                                                                        <div style={{ fontSize: '0.7rem', color: groupTotalProfit >= 0 ? '#16a34a' : '#dc2626' }}>
+                                                                            {groupTotalProfit >= 0 ? '+' : ''}₩{groupProfitKRW.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                                        </div>
+                                                                    </div>
+                                                                    {/* 평가액 */}
+                                                                    <div style={{ textAlign: 'right' }}>
+                                                                        <div style={{ fontSize: '0.9rem', fontWeight: '800', color: '#1e3a8a' }}>${groupTotalValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+                                                                        <div style={{ fontSize: '0.7rem', color: '#64748b' }}>₩{groupValueKRW.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })()}
+                                            {groupStocks.map(stock => {
+                                                // Check if expected_sell_date is today
+                                                const isToday = stock.expected_sell_date && (() => {
+                                                    const sellDate = new Date(stock.expected_sell_date);
+                                                    const today = new Date();
+                                                    return sellDate.getFullYear() === today.getFullYear() &&
+                                                        sellDate.getMonth() === today.getMonth() &&
+                                                        sellDate.getDate() === today.getDate();
+                                                })();
+                                                const profitKRW = (stock.profit || 0) * exchangeRate;
+                                                const valueKRW = (stock.currentValue || 0) * exchangeRate;
+                                                return (
+                                                    <tr key={stock.ticker} style={{ borderBottom: '1px solid #f1f5f9', background: isToday ? '#fef2f2' : 'white' }}>
+                                                        {/* 종목 (Ticker + Category Badge) */}
+                                                        <td style={{ padding: '0.8rem' }}>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                                                <span style={{ padding: '0.1rem 0.35rem', borderRadius: '4px', fontSize: '0.65rem', fontWeight: '600', background: stock.category === '전략' ? '#dbeafe' : '#f1f5f9', color: stock.category === '전략' ? '#1e40af' : '#64748b' }}>
+                                                                    {stock.category?.substring(0, 2) || '기타'}
+                                                                </span>
+                                                                <span style={{ fontWeight: '700', color: isToday ? '#dc2626' : '#0f172a' }}>{stock.ticker}</span>
+                                                            </div>
+                                                        </td>
+                                                        {/* 이름 (Name + Expected Sell Date) */}
+                                                        <td style={{ padding: '0.8rem', color: '#64748b' }}>
+                                                            <div>{stock.name_kr || stock.name}</div>
+                                                            {stock.expected_sell_date && (
+                                                                <div style={{ fontSize: '0.7rem', fontWeight: '700', color: isToday ? '#dc2626' : '#f97316', marginTop: '2px' }}>
+                                                                    {(() => {
+                                                                        const d = new Date(stock.expected_sell_date);
+                                                                        return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
+                                                                    })()}
+                                                                </div>
+                                                            )}
+                                                        </td>
+                                                        {/* 현재가 */}
+                                                        <td style={{ padding: '0.8rem', textAlign: 'right', fontWeight: '600' }}>${stock.currentPrice?.toLocaleString()}</td>
+                                                        {/* 평단 */}
+                                                        <td style={{ padding: '0.8rem', textAlign: 'right', color: '#64748b' }}>${stock.avgPrice?.toLocaleString()}</td>
+                                                        {/* 수량 */}
+                                                        <td style={{ padding: '0.8rem', textAlign: 'right', fontWeight: '600' }}>{stock.qty}</td>
+                                                        {/* 평가액 (USD + KRW) */}
+                                                        <td style={{ padding: '0.8rem', textAlign: 'right' }}>
+                                                            <div style={{ fontWeight: '800', color: '#1e293b' }}>${stock.currentValue?.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+                                                            <div style={{ fontSize: '0.7rem', color: '#64748b' }}>₩{valueKRW.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+                                                        </td>
+                                                        {/* 손익 (% + KRW) */}
+                                                        <td style={{ padding: '0.8rem', textAlign: 'right' }}>
+                                                            <div style={{ fontWeight: '700', color: stock.profit >= 0 ? '#16a34a' : '#dc2626' }}>
+                                                                {stock.profit >= 0 ? '+' : ''}{stock.profitPct?.toFixed(1)}%
+                                                            </div>
+                                                            <div style={{ fontSize: '0.7rem', color: stock.profit >= 0 ? '#16a34a' : '#dc2626' }}>
+                                                                {stock.profit >= 0 ? '+' : ''}₩{profitKRW.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                            </div>
+                                                        </td>
+                                                        {/* 관리 */}
+                                                        <td style={{ padding: '0.8rem', textAlign: 'center' }}>
+                                                            <div style={{ display: 'flex', gap: '0.3rem', justifyContent: 'center' }}>
+                                                                <button onClick={() => handleEdit(stock)} style={{ padding: '0.2rem 0.5rem', borderRadius: '4px', border: '1px solid #cbd5e1', background: 'white', color: '#334155', fontSize: '0.75rem', cursor: 'pointer', fontWeight: '600' }}>편집</button>
+                                                                <button onClick={() => handleDelete(stock.ticker)} style={{ padding: '0.2rem 0.5rem', borderRadius: '4px', border: '1px solid #cbd5e1', background: 'white', color: '#dc2626', fontSize: '0.75rem', cursor: 'pointer', fontWeight: '600' }}>삭제</button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
                                         </React.Fragment>
                                     ))}
 
                                     {/* Watchlist List - Unified Style */}
-                                    {activeTab === 'WATCH' && watchHoldings.map(stock => (
-                                        <tr key={stock.ticker} style={{ borderBottom: '1px solid #f1f5f9', background: 'white' }}>
-                                            <td style={{ padding: '0.8rem', fontWeight: '700', color: '#0f172a' }}>{stock.ticker}</td>
-                                            <td style={{ padding: '0.8rem', color: '#64748b' }}>{stock.name_kr || stock.name}</td>
-                                            <td style={{ padding: '0.8rem', textAlign: 'center' }}>
-                                                <span style={{ padding: '0.2rem 0.5rem', borderRadius: '9999px', fontSize: '0.75rem', fontWeight: '600', background: stock.category === '전략' ? '#dbeafe' : '#f1f5f9', color: stock.category === '전략' ? '#1e40af' : '#64748b' }}>
-                                                    {stock.category}
-                                                </span>
-                                            </td>
-                                            <td style={{ padding: '0.8rem', textAlign: 'right', fontWeight: '600' }}>{stock.qty > 0 ? stock.qty : '-'}</td>
-                                            <td style={{ padding: '0.8rem', textAlign: 'right', color: '#64748b' }}>${stock.price > 0 ? stock.price?.toLocaleString() : '-'}</td>
-                                            <td style={{ padding: '0.8rem', textAlign: 'right', fontWeight: '600' }}>${stock.currentPrice?.toLocaleString()}</td>
-                                            <td style={{ padding: '0.8rem', textAlign: 'right', fontWeight: '700', color: '#64748b' }}>
-                                                -
-                                            </td>
-                                            <td style={{ padding: '0.8rem', textAlign: 'right', fontWeight: '800', color: '#1e293b' }}>${stock.currentValue?.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
-                                            <td style={{ padding: '0.8rem', textAlign: 'center' }}>
-                                                <div style={{ display: 'flex', gap: '0.3rem', justifyContent: 'center' }}>
-                                                    <button onClick={() => handleEdit(stock)} style={{ padding: '0.2rem 0.5rem', borderRadius: '4px', border: '1px solid #cbd5e1', background: 'white', color: '#334155', fontSize: '0.75rem', cursor: 'pointer', fontWeight: '600' }}>편집</button>
-                                                    <button onClick={() => handleDelete(stock.ticker)} style={{ padding: '0.2rem 0.5rem', borderRadius: '4px', border: '1px solid #cbd5e1', background: 'white', color: '#dc2626', fontSize: '0.75rem', cursor: 'pointer', fontWeight: '600' }}>삭제</button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))}
+                                    {activeTab === 'WATCH' && watchHoldings.map(stock => {
+                                        const valueKRW = (stock.currentValue || 0) * exchangeRate;
+                                        return (
+                                            <tr key={stock.ticker} style={{ borderBottom: '1px solid #f1f5f9', background: 'white' }}>
+                                                {/* 종목 (Ticker + Category Badge) */}
+                                                <td style={{ padding: '0.8rem' }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                                        <span style={{ padding: '0.1rem 0.35rem', borderRadius: '4px', fontSize: '0.65rem', fontWeight: '600', background: stock.category === '전략' ? '#dbeafe' : '#f1f5f9', color: stock.category === '전략' ? '#1e40af' : '#64748b' }}>
+                                                            {stock.category?.substring(0, 2) || '기타'}
+                                                        </span>
+                                                        <span style={{ fontWeight: '700', color: '#0f172a' }}>{stock.ticker}</span>
+                                                    </div>
+                                                </td>
+                                                {/* 이름 */}
+                                                <td style={{ padding: '0.8rem', color: '#64748b' }}>{stock.name_kr || stock.name}</td>
+                                                {/* 현재가 */}
+                                                <td style={{ padding: '0.8rem', textAlign: 'right', fontWeight: '600' }}>${stock.currentPrice?.toLocaleString()}</td>
+                                                {/* 평단 */}
+                                                <td style={{ padding: '0.8rem', textAlign: 'right', color: '#64748b' }}>{stock.price > 0 ? `$${stock.price?.toLocaleString()}` : '-'}</td>
+                                                {/* 수량 */}
+                                                <td style={{ padding: '0.8rem', textAlign: 'right', fontWeight: '600' }}>{stock.qty > 0 ? stock.qty : '-'}</td>
+                                                {/* 평가액 (USD + KRW) */}
+                                                <td style={{ padding: '0.8rem', textAlign: 'right' }}>
+                                                    <div style={{ fontWeight: '800', color: '#1e293b' }}>{stock.currentValue > 0 ? `$${stock.currentValue?.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '-'}</div>
+                                                    {stock.currentValue > 0 && <div style={{ fontSize: '0.7rem', color: '#64748b' }}>₩{valueKRW.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>}
+                                                </td>
+                                                {/* 손익 */}
+                                                <td style={{ padding: '0.8rem', textAlign: 'right', fontWeight: '700', color: '#64748b' }}>-</td>
+                                                {/* 관리 */}
+                                                <td style={{ padding: '0.8rem', textAlign: 'center' }}>
+                                                    <div style={{ display: 'flex', gap: '0.3rem', justifyContent: 'center' }}>
+                                                        <button onClick={() => handleEdit(stock)} style={{ padding: '0.2rem 0.5rem', borderRadius: '4px', border: '1px solid #cbd5e1', background: 'white', color: '#334155', fontSize: '0.75rem', cursor: 'pointer', fontWeight: '600' }}>편집</button>
+                                                        <button onClick={() => handleDelete(stock.ticker)} style={{ padding: '0.2rem 0.5rem', borderRadius: '4px', border: '1px solid #cbd5e1', background: 'white', color: '#dc2626', fontSize: '0.75rem', cursor: 'pointer', fontWeight: '600' }}>삭제</button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
                                 </>
                             )}
                         </tbody>

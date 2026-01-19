@@ -403,14 +403,6 @@ function Layout() {
                     color: location.pathname === '/daily-reports' ? 'var(--accent-blue)' : 'var(--text-primary)',
                     fontWeight: location.pathname === '/daily-reports' ? 'bold' : 'normal',
                 }}>Daily Reports</Link>
-                < Link to="/trading-journal" className="nav-link" style={{
-                    color: location.pathname === '/trading-journal' ? 'var(--accent-blue)' : 'var(--text-primary)',
-                    fontWeight: location.pathname === '/trading-journal' ? 'bold' : 'normal',
-                }}>매매일지</Link>
-                <Link to="/signals" className="nav-link" style={{
-                    color: location.pathname === '/signals' ? 'var(--accent-blue)' : 'var(--text-primary)',
-                    fontWeight: location.pathname === '/signals' ? 'bold' : 'normal',
-                }}>신호 포착</Link>
                 <Link to="/journal" className="nav-link" style={{
                     color: location.pathname === '/journal' ? 'var(--accent-blue)' : 'var(--text-primary)',
                     fontWeight: location.pathname === '/journal' ? 'bold' : 'normal',
@@ -418,16 +410,15 @@ function Layout() {
                 <Link to="/asset-dashboard" className="nav-link" style={{
                     color: location.pathname === '/asset-dashboard' ? 'var(--accent-blue)' : 'var(--text-primary)',
                     fontWeight: location.pathname === '/asset-dashboard' ? 'bold' : 'normal',
-                }}>자산현황</Link>
-                <Link to="/managed-stocks" className="nav-link" style={{
-                    color: location.pathname === '/managed-stocks' ? 'var(--accent-blue)' : 'var(--text-primary)',
-                    fontWeight: location.pathname === '/managed-stocks' ? 'bold' : 'normal',
-                }}>거래 종목</Link>
-                {/* Backtest Menu Removed */}
-                <Link to="/requests" className="nav-link" style={{
-                    color: location.pathname === '/requests' ? 'var(--accent-blue)' : 'var(--text-primary)',
-                    fontWeight: location.pathname === '/requests' ? 'bold' : 'normal',
-                }}>요청사항</Link>
+                }}>목표관리</Link>
+                <Link to="/signals" className="nav-link" style={{
+                    color: location.pathname === '/signals' ? 'var(--accent-blue)' : 'var(--text-primary)',
+                    fontWeight: location.pathname === '/signals' ? 'bold' : 'normal',
+                }}>신호 포착</Link>
+                < Link to="/trading-journal" className="nav-link" style={{
+                    color: location.pathname === '/trading-journal' ? 'var(--accent-blue)' : 'var(--text-primary)',
+                    fontWeight: location.pathname === '/trading-journal' ? 'bold' : 'normal',
+                }}>매매일지</Link>
 
                 {isAuthenticated ? (
                     <button

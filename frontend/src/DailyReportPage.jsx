@@ -105,17 +105,17 @@ const DailyReportPage = () => {
 
     // 리포트 저장
     const handleSaveReport = async () => {
-        // 필수 입력 검증: 전일 수익률, 손익, 매도금액
+        // 필수 입력 검증: 마감 수익률, 손익, 매도금액
         if (!editForm.profit_rate || editForm.profit_rate === '') {
-            Swal.fire('입력 필요', '전일 수익률을 입력해 주세요.', 'warning');
+            Swal.fire('입력 필요', '마감 수익률을 입력해 주세요.', 'warning');
             return;
         }
         if (!editForm.profit_amount || editForm.profit_amount === '') {
-            Swal.fire('입력 필요', '전일 손익 금액을 입력해 주세요.', 'warning');
+            Swal.fire('입력 필요', '마감 손익 금액을 입력해 주세요.', 'warning');
             return;
         }
         if (!editForm.prev_total_asset || editForm.prev_total_asset === '') {
-            Swal.fire('입력 필요', '전일 매도 금액을 입력해 주세요.', 'warning');
+            Swal.fire('입력 필요', '마감 매도 금액을 입력해 주세요.', 'warning');
             return;
         }
 
@@ -483,21 +483,21 @@ const DailyReportPage = () => {
                     {/* 수익률 & 자산 정보 */}
                     <div style={{ background: 'rgba(15, 23, 42, 0.5)', padding: '20px', borderRadius: '16px', display: 'flex', justifyContent: 'space-around', alignItems: 'center', flexWrap: 'wrap', gap: '20px' }}>
                         <div style={{ textAlign: 'center' }}>
-                            <div style={{ fontSize: '0.85rem', color: '#94a3b8', marginBottom: '8px' }}>전일 수익률</div>
+                            <div style={{ fontSize: '0.85rem', color: '#94a3b8', marginBottom: '8px' }}>마감 수익률</div>
                             <div style={{ fontSize: '1.8rem', fontWeight: 'bold', color: profitColor }}>
                                 {profitRate > 0 ? '+' : ''}{profitRate.toFixed(2)}%
                             </div>
                         </div>
                         <div style={{ width: '1px', height: '40px', background: 'rgba(255,255,255,0.1)' }}></div>
                         <div style={{ textAlign: 'center' }}>
-                            <div style={{ fontSize: '0.85rem', color: '#94a3b8', marginBottom: '8px' }}>전일 손익</div>
+                            <div style={{ fontSize: '0.85rem', color: '#94a3b8', marginBottom: '8px' }}>마감 손익</div>
                             <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: (viewingReport.profit_amount || 0) > 0 ? '#f87171' : (viewingReport.profit_amount || 0) < 0 ? '#60a5fa' : '#e2e8f0' }}>
                                 {new Intl.NumberFormat('ko-KR').format(viewingReport.profit_amount || 0)}원
                             </div>
                         </div>
                         <div style={{ width: '1px', height: '40px', background: 'rgba(255,255,255,0.1)' }}></div>
                         <div style={{ textAlign: 'center' }}>
-                            <div style={{ fontSize: '0.85rem', color: '#94a3b8', marginBottom: '8px' }}>전일 매도 금액</div>
+                            <div style={{ fontSize: '0.85rem', color: '#94a3b8', marginBottom: '8px' }}>마감 매도 금액</div>
                             <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#e2e8f0' }}>
                                 {new Intl.NumberFormat('ko-KR').format(viewingReport.prev_total_asset || 0)}원
                             </div>
@@ -608,17 +608,17 @@ const DailyReportPage = () => {
                         />
                     </div>
 
-                    {/* 전일 수익률 / 손익 / 자산 */}
+                    {/* 마감 수익률 / 손익 / 자산 */}{/* Title comment updated */}
                     <div>
                         <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 'bold', color: '#60a5fa', marginBottom: '8px' }}>
-                            💰 전일 수익률 / 손익
+                            💰 마감 수익률 / 손익
                         </label>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
                             <div style={{ position: 'relative' }}>
                                 <input
                                     type="number"
                                     step="0.01"
-                                    placeholder="전일 수익률 (%)"
+                                    placeholder="마감 수익률 (%)"
                                     value={editForm.profit_rate}
                                     onChange={(e) => setEditForm(prev => ({ ...prev, profit_rate: e.target.value }))}
                                     style={{
@@ -633,7 +633,7 @@ const DailyReportPage = () => {
                             <div style={{ position: 'relative' }}>
                                 <input
                                     type="number"
-                                    placeholder="전일 손익 (원)"
+                                    placeholder="마감 손익 (원)"
                                     value={editForm.profit_amount}
                                     onChange={(e) => setEditForm(prev => ({ ...prev, profit_amount: e.target.value }))}
                                     style={{
@@ -651,12 +651,12 @@ const DailyReportPage = () => {
                     {/* 전일 매도 금액 */}
                     <div>
                         <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 'bold', color: '#94a3b8', marginBottom: '8px' }}>
-                            🏦 전일 매도 금액
+                            🏦 마감 매도 금액
                         </label>
                         <div style={{ position: 'relative' }}>
                             <input
                                 type="number"
-                                placeholder="전일 매도 금액 (원)"
+                                placeholder="마감 매도 금액 (원)"
                                 value={editForm.prev_total_asset}
                                 onChange={(e) => setEditForm(prev => ({ ...prev, prev_total_asset: e.target.value }))}
                                 style={{
@@ -770,7 +770,7 @@ const DailyReportPage = () => {
                 {/* 자산 추이 차트 */}
                 <div className="glass-panel" style={{ padding: '20px', marginBottom: '24px', borderRadius: '16px' }}>
                     <h3 style={{ margin: '0 0 16px 0', fontSize: '1.1rem', color: '#93c5fd', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        📈 전일 손익 추이
+                        📈 마감 손익 추이
                         <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 'normal' }}>
                             ({viewMonth.year}년 {viewMonth.month + 1}월)
                         </span>
@@ -803,7 +803,7 @@ const DailyReportPage = () => {
                                         <YAxis stroke="#60a5fa" tick={{ fill: '#60a5fa', fontSize: 10 }} domain={['auto', 'auto']} tickFormatter={(val) => `${new Intl.NumberFormat('ko-KR').format(val)}`} />
                                         <Tooltip
                                             contentStyle={{ background: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(59, 130, 246, 0.3)', borderRadius: '8px', color: '#e2e8f0' }}
-                                            formatter={(value, name) => [`${new Intl.NumberFormat('ko-KR').format(value)}원`, name === 'profit_amount' ? '전일 손익' : '매도 금액']}
+                                            formatter={(value, name) => [`${new Intl.NumberFormat('ko-KR').format(value)}원`, name === 'profit_amount' ? '마감 손익' : '매도 금액']}
                                             labelFormatter={(label) => `날짜: ${label}`}
                                         />
                                         <Area type="monotone" dataKey="profit_amount" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorProfitBlue)" />

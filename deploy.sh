@@ -34,6 +34,9 @@ echo "📅 빌드 시간 설정: $BUILD_TIME"
 npm install
 npm run build
 
+echo "🔄 Nginx 재시작..."
+echo "blueeye0037!" | sudo -S systemctl restart nginx
+
 echo "---"
 echo "✅ 현재 폴더의 소스로 배포가 완료되었습니다!"
 echo "🌐 Nginx가 최신 빌드 파일을 서빙하기 시작했습니다."

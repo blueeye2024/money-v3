@@ -1335,6 +1335,40 @@ def set_total_capital(amount):
     finally:
         conn.close()
 
+def get_strategy_memo():
+    """전략 지침 메모 조회"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT value_json FROM global_config WHERE key_name='strategy_memo'")
+            row = cursor.fetchone()
+            if row and row['value_json']:
+                import json
+                return json.loads(row['value_json'])
+            return ""  # Default empty
+    except Exception as e:
+        print(f"Error getting strategy memo: {e}")
+        return ""
+    finally:
+        conn.close()
+
+def set_strategy_memo(memo):
+    """전략 지침 메모 저장"""
+    conn = get_connection()
+    try:
+        import json
+        with conn.cursor() as cursor:
+            val = json.dumps(memo)
+            sql = "INSERT INTO global_config (key_name, value_json) VALUES ('strategy_memo', %s) ON DUPLICATE KEY UPDATE value_json=%s"
+            cursor.execute(sql, (val, val))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Error setting strategy memo: {e}")
+        return False
+    finally:
+        conn.close()
+
 def update_market_status(regime, details):
     conn = get_connection()
     try:

@@ -201,6 +201,28 @@ def set_capital_api(data: CapitalModel):
     except Exception as e:
         return {"error": str(e)}
 
+class StrategyMemoModel(BaseModel):
+    memo: str
+
+@app.get("/api/strategy_memo")
+def get_strategy_memo_api():
+    try:
+        from db import get_strategy_memo
+        return {"memo": get_strategy_memo()}
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.post("/api/strategy_memo")
+def set_strategy_memo_api(data: StrategyMemoModel):
+    try:
+        from db import set_strategy_memo
+        if set_strategy_memo(data.memo):
+            return {"status": "success"}
+        return {"status": "error"}
+    except Exception as e:
+        return {"error": str(e)}
+
+
 # 2. Monitor Logic (Runs every 1 min)
 def update_prices_job():
     """5분마다 종목 현재가 업데이트"""
