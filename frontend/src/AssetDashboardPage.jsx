@@ -364,7 +364,15 @@ const AssetDashboardPage = () => {
                     <div className="glass-card" style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%)', color: 'white', border: '1px solid rgba(255,255,255,0.1)' }}>
                         <div className="card-label" style={{ color: 'rgba(255,255,255,0.8)' }}>현재 자산</div>
                         <div className="card-value" style={{ color: 'white', fontSize: '1.4rem' }}>{latestAsset ? formatKRW(latestAsset.total_assets) : '0원'}</div>
-                        <div style={{ fontSize: '0.9rem', color: 'rgba(255,255,255,0.7)' }}>{latestAsset?.record_date || '-'}</div>
+                        <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem' }}>
+                            <span style={{ color: (summary.monthly_change_pct || 0) >= 0 ? '#4ade80' : '#ef4444', fontWeight: 'bold' }}>
+                                {(summary.monthly_change_pct || 0) >= 0 ? '▲' : '▼'} {Math.abs(summary.monthly_change_pct || 0).toFixed(2)}%
+                            </span>
+                            <span style={{ color: 'rgba(255,255,255,0.6)' }}>(월간 수익)</span>
+                        </div>
+                        <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)', marginTop: '0.2rem' }}>
+                            {formatKRW(summary.monthly_change || 0)} 변동
+                        </div>
                     </div>
 
                     <div className="glass-card" style={{ background: activeGoal ? 'linear-gradient(135deg, #d4af37 0%, #a67c00 100%)' : 'linear-gradient(135deg, #64748b 0%, #475569 100%)', color: 'white' }}>
@@ -388,11 +396,7 @@ const AssetDashboardPage = () => {
                         )}
                     </div>
 
-                    <div className="glass-card" style={{ background: (summary.monthly_change_pct || 0) >= 0 ? 'linear-gradient(135deg, #059669 0%, #10b981 100%)' : 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)', color: 'white' }}>
-                        <div className="card-label">월간 수익률 (당월)</div>
-                        <div className="card-value">{(summary.monthly_change_pct || 0) >= 0 ? '+' : ''}{(summary.monthly_change_pct || 0).toFixed(2)}%</div>
-                        <div style={{ fontSize: '0.9rem', color: 'rgba(255,255,255,0.8)' }}>{(summary.monthly_change || 0) >= 0 ? '+' : ''}{formatKRW(summary.monthly_change || 0)}</div>
-                    </div>
+
                 </div>
 
                 {/* Action Buttons */}
@@ -603,14 +607,22 @@ const AssetDashboardPage = () => {
                                         const currentReturnPct = (currentPnl / parseFloat(s.initial_assets) * 100);
                                         const isProfit = currentPnl >= 0;
                                         return (
-                                            <div style={{ marginTop: '0.75rem', padding: '0.75rem', background: isProfit ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)', borderRadius: '8px', display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
+                                            <div style={{ marginTop: '0.75rem', padding: '0.75rem', background: isProfit ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)', borderRadius: '8px', display: 'flex', gap: '1.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
                                                 <span style={{ color: isProfit ? '#22c55e' : '#ef4444', fontWeight: '600' }}>
                                                     💰 현재 손익: {isProfit ? '+' : ''}{formatKRW(currentPnl)}
                                                 </span>
                                                 <span style={{ color: isProfit ? '#22c55e' : '#ef4444', fontWeight: '600' }}>
                                                     📊 수익률: {isProfit ? '+' : ''}{currentReturnPct.toFixed(2)}%
                                                 </span>
-                                                <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>
+                                                {s.target_assets && (
+                                                    <span style={{ color: '#60a5fa', fontWeight: '600', paddingLeft: '1rem', borderLeft: '1px solid rgba(255,255,255,0.1)' }}>
+                                                        🏃 남은 목표: {(() => {
+                                                            const remain = parseFloat(s.target_assets) - parseFloat(latestAsset.total_assets);
+                                                            return remain <= 0 ? '🎉 달성!' : formatKRW(remain);
+                                                        })()}
+                                                    </span>
+                                                )}
+                                                <span style={{ color: '#94a3b8', fontSize: '0.8rem', marginLeft: 'auto' }}>
                                                     ({latestAsset.record_date} 기준)
                                                 </span>
                                             </div>

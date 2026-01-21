@@ -95,37 +95,51 @@ def delete_daily_asset(record_date):
 
 
 def get_asset_summary():
-
     """자산 요약 통계"""
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
             summary = {}
             
-            # 최신 자산
-            cursor.execute("SELECT * FROM daily_assets ORDER BY record_date DESC LIMIT 1")
-            latest = cursor.fetchone()
-            summary['latest'] = latest
+            # 1. 최신 자산 (Source: global_config.total_capital)
+            # [Updated] Use total_capital from config instead of daily_assets log
+            # Need to fetch total_capital logic here or import (but circular import risk if importing db.py functions that use this file)
+            # Safe to raw query here
+            cursor.execute("SELECT value_json FROM global_config WHERE key_name='total_capital'")
+            row = cursor.fetchone()
+            current_total = 0.0
+            if row and row['value_json']:
+                import json
+                current_total = float(json.loads(row['value_json']))
             
-            # 월간 변동 (당월 1일 기준)
+            # Find closest date for display? Just use "Current"
+            summary['latest'] = {
+                'record_date': 'Current',
+                'total_assets': current_total
+            }
+            
+            # 2. 월간 변동 (당월 1일 기준 daily_assets)
             cursor.execute("""
                 SELECT total_assets FROM daily_assets 
                 WHERE record_date >= DATE_FORMAT(CURDATE(), '%Y-%m-01')
                 ORDER BY record_date ASC LIMIT 1
             """)
             month_start = cursor.fetchone()
-            if latest and month_start:
-                monthly_change = float(latest['total_assets']) - float(month_start['total_assets'])
-                monthly_pct = (monthly_change / float(month_start['total_assets'])) * 100 if month_start['total_assets'] else 0
+            
+            if month_start and month_start.get('total_assets'):
+                start_val = float(month_start['total_assets'])
+                monthly_change = current_total - start_val
+                monthly_pct = (monthly_change / start_val) * 100 if start_val > 0 else 0
+                
                 summary['monthly_change'] = monthly_change
                 summary['monthly_change_pct'] = monthly_pct
                 summary['month_start_date'] = datetime.now().strftime('%Y-%m-01')
             else:
+                # No start of month data found
                 summary['monthly_change'] = 0
                 summary['monthly_change_pct'] = 0
 
-            
-            # 활성 목표
+            # 3. 활성 목표
             cursor.execute("SELECT * FROM asset_goals WHERE is_active = TRUE ORDER BY id DESC LIMIT 1")
             summary['active_goal'] = cursor.fetchone()
             

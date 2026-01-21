@@ -258,7 +258,22 @@ class KisApi:
         if not exchange:
             exchange = get_exchange_code(symbol)
             
-        return self._fetch_minute_candles_request(exchange, symbol, str(interval_min), next_key)
+            # [Ver 5.8] Daytime Logic for Candles (Class Method Fix)
+            import datetime
+            utc_now = datetime.datetime.utcnow()
+            kst_now = utc_now + datetime.timedelta(hours=9)
+            is_daytime = 8 <= kst_now.hour < 18
+            
+            if is_daytime:
+                 daytime_map = {'NAS': 'BAQ', 'NYS': 'BAY', 'AMS': 'BAA'}
+                 if exchange in daytime_map:
+                     exchange = daytime_map[exchange]
+                     print(f"    🌞 Daytime Candle Mode (Class): Switching {symbol} to {exchange} (KST {kst_now.strftime('%H:%M')})")
+
+        result = self._fetch_minute_candles_request(exchange, symbol, str(interval_min), next_key)
+        if result:
+             print(f"    🔎 DEBUG FETCH {symbol}: Exch={exchange} Count={len(result)} Last={result[0]['khms'] if result else 'None'}")
+        return result
 
     def _fetch_minute_candles_request(self, exchange, symbol, interval, next_key=""):
         headers = {
@@ -352,6 +367,25 @@ def get_minute_candles(ticker, interval, exchange=None):
     """
     if not exchange:
         exchange = get_exchange_code(ticker)
+        
+        # [Ver 5.8] Daytime Logic for Candles
+        # If currently in KST Daytime (08:00 ~ 18:00), we must use Daytime Exchange Code (BAA, BAQ)
+        # Extended to 18:00 to cover the gap before Pre-Market triggers.
+        import datetime
+        utc_now = datetime.datetime.utcnow()
+        kst_now = utc_now + datetime.timedelta(hours=9)
+        is_daytime = 8 <= kst_now.hour < 18
+        
+        if is_daytime:
+             # DEBUG PRINT
+             # print(f"DEBUG DAYTIME: Hour={kst_now.hour} Exch={exchange} Map={exchange in daytime_map}")
+             daytime_map = {'NAS': 'BAQ', 'NYS': 'BAY', 'AMS': 'BAA'}
+             if exchange in daytime_map:
+                 exchange = daytime_map[exchange]
+                 print(f"    🌞 Daytime Candle Mode: Switching {ticker} to {exchange} (KST {kst_now.strftime('%H:%M')})")
+        else:
+             print(f"DEBUG: Not Daytime (Hour={kst_now.hour})")
+
     return kis_client.get_minute_candles(ticker, interval, exchange)
 
 # Final Singleton

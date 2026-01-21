@@ -1665,12 +1665,97 @@ def get_last_candle_time(ticker, timeframe):
 
 def save_market_candles(ticker, timeframe, df, source='yfinance'):
     """Save DataFrame to market_candles table (Upsert)"""
-    import pandas as pd
-    import pandas as pd
+    print(f"DEBUG SAVE ENTERED {ticker} {timeframe}")
+    import pytz
     if df is None or df.empty: return False
     
-    # [DEPRECATED] Ver 5.1.0
-    return True
+    # [Re-Active] Ver 5.1.0 -> 5.8 (Restored for Frontend Support)
+    # The frontend reads from {ticker}_candle_data table, so we MUST save data.
+    table_name = f"{ticker.lower()}_candle_data"
+    conn = get_connection()
+    try:
+        data_to_insert = []
+        is_30m = 'Y' if timeframe == '30m' else None
+        
+        # [Ver 5.8] Timezone Correction: Ensure KST for Legacy Display
+        kst = pytz.timezone('Asia/Seoul')
+        
+        # DataFrame iteration
+        for index, row in df.iterrows():
+            dt = index # DatetimeIndex
+            
+            # Convert to KST
+            if dt.tzinfo is not None:
+                dt_kst = dt.astimezone(kst)
+            else:
+                # If naive, assume UTC (safe default for YF new versions) or handle accordingly
+                # For now, localized to UTC then KST
+                dt_kst = pytz.utc.localize(dt).astimezone(kst)
+                
+            d_date = dt_kst.strftime("%Y%m%d")
+            d_hour = dt_kst.hour
+            d_min = dt_kst.minute
+            
+            # Debug: Print first row or match
+            if index == df.index[-1] or d_hour == 4:
+                 print(f"DEBUG SAVE ROW: dt={dt} -> KST={dt_kst} H={d_hour} M={d_min}")
+            
+            # Safe handling for NaN/None
+            vol = 0
+            try:
+                if pd.notna(row['Volume']):
+                    vol = int(row['Volume'])
+            except: pass
+
+            o = float(row['Open']) if pd.notna(row['Open']) else 0.0
+            h = float(row['High']) if pd.notna(row['High']) else 0.0
+            l = float(row['Low']) if pd.notna(row['Low']) else 0.0
+            c = float(row['Close']) if pd.notna(row['Close']) else 0.0
+
+            data_to_insert.append((
+                d_date, d_hour, d_min,
+                o, h, l, c, vol,
+                is_30m,
+                o, h, l, c, vol # ON DUPLICATE UPDATE
+            ))
+
+        # Row-by-Row Insert (Safer than executemany for complex params)
+        # Note: Legacy table {ticker}_candle_data only has close_price, volume columns.
+        with conn.cursor() as cursor:
+            sql = f"""
+                INSERT INTO {table_name} 
+                (candle_date, hour, minute, close_price, volume, is_30m)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE
+                close_price=%s, volume=%s
+            """
+            
+            for item in data_to_insert:
+                # item schema: (d_date, d_hour, d_min, o, h, l, c, vol, is_30m, ...)
+                # We need: (d_date, d_hour, d_min, c, vol, is_30m) for INSERT
+                # and (c, vol) for UPDATE
+                
+                # Extract correct indices from 'item' tuple constructed above
+                # item structure is: 
+                # 0:date, 1:hour, 2:min, 3:open, 4:high, 5:low, 6:close, 7:vol, 8:is_30m
+                # 9:open, 10:high, 11:low, 12:close, 13:vol (for update - unused now)
+                
+                d_date = item[0]
+                d_hour = item[1]
+                d_min = item[2]
+                close_p = item[6]
+                vol_p = item[7]
+                is_30m_flag = item[8]
+                
+                cursor.execute(sql, (d_date, d_hour, d_min, close_p, vol_p, is_30m_flag, close_p, vol_p))
+            
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Save Candle Error ({ticker}): {e}")
+        return False
+    finally:
+        conn.close()
 
 def load_market_candles(ticker, timeframe, limit=300):
     """Load candles from DB as DataFrame"""
@@ -2077,7 +2162,7 @@ def log_history(manage_id, ticker, event_type, msg=None, price=None):
             check_sql = """
                 SELECT event_dt FROM history 
                 WHERE ticker=%s AND event_type=%s AND short_msg=%s 
-                AND event_dt > NOW() - INTERVAL '30 minutes'
+                AND event_dt > NOW() - INTERVAL 30 MINUTE
                 LIMIT 1
             """
             cursor.execute(check_sql, (ticker, event_type, msg))

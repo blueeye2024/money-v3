@@ -694,12 +694,27 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
             {(alertLevels.length > 0 || chartData5m.length > 0) && current_price && (() => {
                 // 최근 30분 데이터 (6개 캔들) + 현재가 포인트
                 // If no 5m data, create minimal data points with current price
-                const now = new Date();
-                const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+                // [FIX Ver 6.3.3] Enhanced Safety for Timezone & Array Operations
+                let currentTime = '00:00';
+                try {
+                    const now = new Date();
+                    currentTime = new Intl.DateTimeFormat('en-US', {
+                        timeZone: 'America/New_York',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: false
+                    }).format(now);
+                } catch (e) {
+                    console.error("Time Format Error:", e);
+                    const now = new Date();
+                    currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+                }
 
                 let recentData;
+                let baseData = [];
+
                 if (chartData5m.length > 0) {
-                    const baseData = chartData5m.slice(-6);
+                    baseData = chartData5m.slice(-6);
                     recentData = [...baseData, { time: currentTime, price: current_price }];
                 } else {
                     // Fallback: create simple data points around current price for visualization
@@ -710,6 +725,35 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
                     }));
                 }
 
+                // [FIX Ver 6.3.2] Inject Missing 5-Min Intervals (e.g. 10:00 -> 10:07 => Insert 10:05)
+                const lastCandle = baseData.length > 0 ? baseData[baseData.length - 1] : null;
+
+                if (lastCandle && lastCandle.time && currentTime) {
+                    try {
+                        const [lh, lm] = lastCandle.time.split(':').map(Number);
+                        const [ch, cm] = currentTime.split(':').map(Number);
+
+                        // Simple check for same hour gap
+                        if (lh === ch && cm - lm >= 5) {
+                            const nextMin = lm + (5 - (lm % 5));
+                            if (nextMin < cm) {
+                                // Inject synthetic point
+                                const syntheticTime = `${String(lh).padStart(2, '0')}:${String(nextMin).padStart(2, '0')}`;
+                                // Check duplicate
+                                if (syntheticTime !== lastCandle.time && syntheticTime !== currentTime) {
+                                    // Insert safely before current time
+                                    recentData.splice(recentData.length - 1, 0, {
+                                        time: syntheticTime,
+                                        price: current_price, // Use current price as best estimation
+                                        is_synthetic: true
+                                    });
+                                }
+                            }
+                        }
+                    } catch (e) { console.error("Interval Injection Error:", e); }
+                }
+
+                // [Refactor] Define prices after injection to include synthetic points
                 const prices = recentData.map(d => d.price);
                 const alertPrices = alertLevels.map(a => parseFloat(a.price));
                 const allPrices = [...prices, ...alertPrices, current_price || 0].filter(p => p > 0);

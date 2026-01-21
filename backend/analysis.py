@@ -289,10 +289,34 @@ def update_market_data(tickers=None, override_period=None):
                 df = None
                 if isinstance(new_30m.columns, pd.MultiIndex) and ticker in new_30m.columns: df = new_30m[ticker]
                 elif not isinstance(new_30m.columns, pd.MultiIndex) and len(target_list) == 1: df = new_30m
+                
+                # [STITCH KIS CANDLES for 30m] (Fix Daytime Gap)
+                if df is not None and not df.empty:
+                     df = stitch_kis_candles(ticker, df, 30)
+
                 if df is not None and not df.empty: 
+                    # [Ver 5.8] Regression Protection
+                    # Check against GLOBAL cache to avoid overwriting recent data with old data (if KIS fails)
+                    if "30m" in _DATA_CACHE and _DATA_CACHE["30m"] is not None and ticker in _DATA_CACHE["30m"]:
+                         try:
+                             last_old = _DATA_CACHE["30m"][ticker].index[-1]
+                             last_new = df.index[-1]
+                             # Ensure Timezone compatibility before comparing
+                             if last_old.tzinfo is not None and last_new.tzinfo is None:
+                                 last_new = last_new.tz_localize(last_old.tzinfo)
+                             
+                             if last_new < last_old:
+                                  print(f"    🛡️ Protected {ticker}: New {last_new} < Old {last_old}. Keeping Cache.")
+                                  df = _DATA_CACHE["30m"][ticker]
+                         except Exception as e:
+                             print(f"    ⚠️ Protection Check Error: {e}")
+
                     # Mem Cache
                     temp_30m[ticker] = df
                     # DB Save (Deprecated No-op but kept for interface)
+                    # Note: If we reverted to Old Cache, we probably shouldn't re-save?
+                    # Or saving is harmless (ON DUPLICATE UPDATE).
+                    print(f"    💾 DEBUG: Calling save_market_candles for {ticker} 30m. Len={len(df)}")
                     save_market_candles(ticker, '30m', df, 'yfinance')
             except Exception as e: print(f"Save 30m Error {ticker}: {e}")
 
@@ -307,6 +331,19 @@ def update_market_data(tickers=None, override_period=None):
                      df = stitch_kis_candles(ticker, df, 5)
 
                 if df is not None and not df.empty: 
+                    # [Ver 5.8] Regression Protection (5m)
+                    if "5m" in _DATA_CACHE and _DATA_CACHE["5m"] is not None and ticker in _DATA_CACHE["5m"]:
+                         try:
+                             last_old = _DATA_CACHE["5m"][ticker].index[-1]
+                             last_new = df.index[-1]
+                             if last_old.tzinfo is not None and last_new.tzinfo is None:
+                                 last_new = last_new.tz_localize(last_old.tzinfo)
+                             
+                             if last_new < last_old:
+                                  print(f"    🛡️ Protected {ticker} (5m): New {last_new} < Old {last_old}. Keeping Cache.")
+                                  df = _DATA_CACHE["5m"][ticker]
+                         except Exception as e: print(f"Protection Error 5m: {e}")
+
                     # Mem Cache
                     temp_5m[ticker] = df
                     # DB Save
@@ -3042,10 +3079,13 @@ def stitch_kis_candles(ticker, yf_df, interval_min):
     """
     from kis_api_v2 import kis_client
     try:
-        # Fetch recent candles from KIS (Default returns 30 candles)
-        print(f"    🧵 Stitching {ticker} (Interval {interval_min}m)...")
+        # Fetch recent candles from KIS
         candles = kis_client.get_minute_candles(ticker, interval_min=interval_min)
-        if not candles: return yf_df
+        if not candles: 
+            print(f"    ⚠️ Stitch: No KIS candles for {ticker} (Interval {interval_min}m)")
+            return yf_df
+        
+        print(f"    🧵 Stitch {ticker} ({interval_min}m): Fetched {len(candles)} candles. Last: {candles[0]['khms']} (KST)")
         
         # Convert to DataFrame
         new_data = []

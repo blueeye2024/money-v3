@@ -542,9 +542,10 @@ def monitor_signals():
                                 # Check if already sent for this specific timestamp
                                 last_sent_dt = SOUND_SENT_LOG.get(code)
                                 if str(last_sent_dt) != str(dt):
-                                    if code not in PENDING_SOUNDS: PENDING_SOUNDS.append(code)
+                                    # [FIX Ver 6.3.5] Disable V2 Algo Sounds (User wants to manage alerts manually only)
+                                    # if code not in PENDING_SOUNDS: PENDING_SOUNDS.append(code)
                                     SOUND_SENT_LOG[code] = dt
-                                    print(f"🔊 Queued Sound: {code} (Signal: {dt})")
+                                    print(f"🔊 [Muted] V2 Algo Sound: {code} (Signal: {dt})")
 
                     # Check Steps
                     if v2_buy.get('buy_sig1_yn') == 'Y': try_enqueue_sound("1", v2_buy.get('buy_sig1_dt'), prefix)
@@ -564,9 +565,10 @@ def monitor_signals():
                                 code = f"{code_prefix}{suffix}"
                                 last_sent_dt = SOUND_SENT_LOG.get(code)
                                 if str(last_sent_dt) != str(dt):
-                                    if code not in PENDING_SOUNDS: PENDING_SOUNDS.append(code)
+                                    # [FIX Ver 6.3.5] Disable V2 Algo Sounds (User wants to manage alerts manually only)
+                                    # if code not in PENDING_SOUNDS: PENDING_SOUNDS.append(code)
                                     SOUND_SENT_LOG[code] = dt
-                                    print(f"🔊 Queued Sound: {code} (Signal: {dt})")
+                                    print(f"🔊 [Muted] V2 Algo Sound: {code} (Signal: {dt})")
 
                     if v2_sell.get('sell_sig1_yn') == 'Y': try_enqueue_sound_sell("1", v2_sell.get('sell_sig1_dt'), prefix)
                     if v2_sell.get('sell_sig2_yn') == 'Y': try_enqueue_sound_sell("2", v2_sell.get('sell_sig2_dt'), prefix)
@@ -583,6 +585,9 @@ def monitor_signals():
                     recent_sell_triggers = []
                     
                     for lvl in active_levels:
+                        # [FIX] Check Active Status
+                        if lvl.get('is_active') != 'Y': continue
+
                         if lvl['triggered'] == 'Y' and lvl.get('triggered_at'):
                             # Calculate age of trigger
                             trig_dt = lvl['triggered_at']
@@ -596,7 +601,6 @@ def monitor_signals():
                                 elif lvl['level_type'] == 'SELL':
                                     recent_sell_triggers.append(lvl['stage'])
 
-                    # Enqueue Highest Stage Sound Only
                     # [Ver 5.8] Use Distinct Sounds for Manual Alerts (LB/LS/SB/SS)
                     # SOXL -> L, SOXS -> S
                     # Buy -> B, Sell -> S
