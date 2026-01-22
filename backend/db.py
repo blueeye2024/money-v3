@@ -653,6 +653,30 @@ def init_db():
         conn.close()
 
 
+
+def migrate_add_change_pct_to_managed_stocks():
+    """[Ver 6.9] managed_stocks 테이블에 change_pct 컬럼 추가"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            # Check if column exists
+            cursor.execute("DESCRIBE managed_stocks")
+            columns = [row['Field'] for row in cursor.fetchall()]
+            
+            if 'change_pct' not in columns:
+                print("Migration: Adding change_pct to managed_stocks...")
+                cursor.execute("ALTER TABLE managed_stocks ADD COLUMN change_pct DECIMAL(10, 2) DEFAULT 0.0")
+                conn.commit()
+                print("Migration: Success.")
+            else:
+                pass # Already exists
+                
+    except Exception as e:
+        print(f"Migration add_change_pct Error: {e}")
+    finally:
+        conn.close()
+
+
 def add_user_request(request_text, interpretation, details):
     conn = get_connection()
     try:
@@ -1582,7 +1606,7 @@ def get_mini_chart_data(ticker, limit=50):
         def calc_ma(data, period, idx):
             if idx < period - 1:
                 return None
-            vals = [float(data[i]['close_price']) for i in range(idx - period + 1, idx + 1)]
+            vals = [float(data[i]['close_price'] or 0) for i in range(idx - period + 1, idx + 1)]
             return sum(vals) / period
         
         # [Ver 6.5] Timezone Conversion Helper
@@ -1645,9 +1669,9 @@ def get_mini_chart_data(ticker, limit=50):
                 'cross': cross
             })
         
-        # 마지막 N개만 반환
-        result['candles_5m'] = result['candles_5m'][-limit:]
-        result['candles_30m'] = result['candles_30m'][-limit:]
+        # [Ver 6.9] Limit display data (5m: 3h=36, 30m: 6h=12)
+        result['candles_5m'] = result['candles_5m'][-36:]
+        result['candles_30m'] = result['candles_30m'][-12:]
         
         return result
     except Exception as e:
@@ -1981,7 +2005,13 @@ def update_stock_prices():
                                 if not df.empty:
                                     last_price = float(df['Close'].iloc[-1])
                                     source = "YF(Ext)"
-                                    # Try to calc change pct if possible or use 0
+                                    # Try to calc change pct
+                                    try:
+                                        prev_close = float(fast_info.previous_close)
+                                        if prev_close > 0:
+                                            change_pct = ((last_price - prev_close) / prev_close) * 100
+                                    except:
+                                        pass
                                 else:
                                     source = "YF(Fast)" # Fallback to last close
                                     
@@ -1996,11 +2026,12 @@ def update_stock_prices():
                             update_sql = """
                                 UPDATE managed_stocks 
                                 SET current_price = %s, 
+                                    change_pct = %s,
                                     price_updated_at = NOW(),
                                     is_market_open = %s
                                 WHERE ticker = %s
                             """
-                            cursor.execute(update_sql, (current_price, is_market_open, ticker))
+                            cursor.execute(update_sql, (current_price, change_pct, is_market_open, ticker))
                             
                             # [Ver 5.7] Sync removed as per user request (Keep market_indices clean)
                             # sync_sql = ...
@@ -2033,7 +2064,7 @@ def get_stock_current_price(ticker):
         with get_connection() as conn:
             with conn.cursor() as cursor:
                 sql = """
-                    SELECT current_price, price_updated_at, is_market_open 
+                    SELECT current_price, price_updated_at, is_market_open, change_pct
                     FROM managed_stocks 
                     WHERE ticker = %s AND is_active = TRUE
                 """
@@ -2044,7 +2075,8 @@ def get_stock_current_price(ticker):
                     return {
                         'price': row[0],
                         'updated_at': row[1],
-                        'is_market_open': row[2]
+                        'is_market_open': row[2],
+                        'change_pct': row[3] if row[3] is not None else 0.0
                     }
                 return None
     except Exception as e:

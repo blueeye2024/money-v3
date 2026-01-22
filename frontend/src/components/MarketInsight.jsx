@@ -1,6 +1,7 @@
 import React from 'react';
 import V2SignalStatus from './V2SignalStatus';
 import PriceLevelAlerts from './PriceLevelAlerts';
+import PriceAlertChart from './PriceAlertChart';
 import TodayEventsWidget from './TodayEventsWidget';
 
 
@@ -208,7 +209,7 @@ const ManualTestPanel = ({ onRefresh, marketData, v2Status }) => {
     );
 };
 
-const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, setPollingMode, marketStatus, lastUpdateTime }) => {
+const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, setPollingMode, marketStatus, lastUpdateTime, isMuted, toggleMute }) => {
     if (!market) return <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>데이터 로딩 중...</div>;
 
     const { market_regime } = market;
@@ -400,6 +401,18 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                         >
                             매매일지
                         </span>
+                        <span style={{ width: '1px', height: '12px', background: '#334155', margin: '0 8px' }}></span>
+                        <span
+                            onClick={toggleMute}
+                            style={{
+                                color: isMuted ? '#f87171' : '#4ade80',
+                                cursor: 'pointer', fontWeight: '500', fontSize: '1.1rem',
+                                opacity: isMuted ? 0.7 : 1
+                            }}
+                            title={isMuted ? "음소거 해제" : "음소거"}
+                        >
+                            {isMuted ? '🔇' : '🔊'}
+                        </span>
                     </div>
                 </div>
 
@@ -433,12 +446,24 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                     const indices = Array.isArray(market?.indices) ? market.indices : [];
                     const soxlData = indices.find(m => m.ticker === 'SOXL');
                     const soxsData = indices.find(m => m.ticker === 'SOXS');
+                    const uproData = indices.find(m => m.ticker === 'UPRO');
+
                     const soxlPrice = soxlData ? Number(soxlData.current_price || soxlData.price) : 0;
                     const soxsPrice = soxsData ? Number(soxsData.current_price || soxsData.price) : 0;
+                    const uproPrice = uproData ? Number(uproData.current_price || uproData.price) : 0;
+                    const uproChange = uproData ? Number(uproData.change_pct || uproData.change_rate || 0) : 0;
+
                     return (
-                        <div className="responsive-grid-2" style={{ marginBottom: '1.5rem' }}>
-                            <PriceLevelAlerts ticker="SOXL" currentPrice={soxlPrice} />
-                            <PriceLevelAlerts ticker="SOXS" currentPrice={soxsPrice} />
+                        <div style={{ marginBottom: '1.5rem' }}>
+                            {/* UPRO Chart (Requested) */}
+                            <div style={{ marginBottom: '1rem' }}>
+                                <PriceAlertChart ticker="UPRO" currentPrice={uproPrice} changePct={uproChange} />
+                            </div>
+
+                            <div className="responsive-grid-2">
+                                <PriceLevelAlerts ticker="SOXL" currentPrice={soxlPrice} />
+                                <PriceLevelAlerts ticker="SOXS" currentPrice={soxsPrice} />
+                            </div>
                         </div>
                     );
                 })()}

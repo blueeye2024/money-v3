@@ -41,13 +41,14 @@ app.include_router(events.router)
 # 1. Initialize DB & Scheduler
 @app.on_event("startup")
 def on_startup():
-    from db import init_db, get_global_config, update_stock_prices, migrate_journal_transactions_v62, migrate_v63_add_is_holding, migrate_v64_add_group_name_to_managed_stocks, migrate_v67_add_new_columns_to_managed_stocks, migrate_v68_add_simulation_columns
+    from db import init_db, get_global_config, update_stock_prices, migrate_journal_transactions_v62, migrate_v63_add_is_holding, migrate_v64_add_group_name_to_managed_stocks, migrate_v67_add_new_columns_to_managed_stocks, migrate_v68_add_simulation_columns, migrate_add_change_pct_to_managed_stocks
     init_db()
     migrate_journal_transactions_v62()  # [Ver 6.2] Add new columns
     migrate_v63_add_is_holding()        # [Ver 6.3] Add is_holding column
     migrate_v64_add_group_name_to_managed_stocks() # [Ver 6.6] Add group_name
     migrate_v67_add_new_columns_to_managed_stocks() # [Ver 6.7] Add strategy columns
     migrate_v68_add_simulation_columns() # [Ver 6.8] Add simulation columns
+    migrate_add_change_pct_to_managed_stocks() # [Ver 6.9] Add change_pct
     
     # Load SMS Setting from DB
     global SMS_ENABLED
@@ -1186,8 +1187,8 @@ def get_v2_status(ticker: str):
         
         if price_info:
              current_price = float(price_info['price'])
-             # Calculate change if needed, or get from somewhere else.
-             change_pct = 0.0 
+             # [Ver 6.9] Use retrieved change_pct
+             change_pct = float(price_info.get('change_pct', 0.0))
         else:
              # Fallback to market_indices (Old Logic / For pure indices)
              market_data = get_market_indices()

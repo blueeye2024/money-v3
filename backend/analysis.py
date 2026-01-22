@@ -1543,6 +1543,7 @@ def run_analysis(holdings=None, force_update=False):
         "stocks": final_results,
         "holdings": holdings,
         "market": final_indicators, # [Ver 5.3 FIX] Renamed 'indices' to 'market' for Frontend
+        "indices": clean_nan(market_data), # [Ver 6.9.1] Provide raw list for MarketInsight (UPRO etc)
         "insight": insight_text,
         "strategy_list": clean_nan(strategy_list),
         "total_assets": clean_nan(total_assets),

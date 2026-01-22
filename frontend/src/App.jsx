@@ -32,7 +32,10 @@ const getMarketStatus = () => {
 };
 
 
-function Dashboard() {
+// ═══════════════════════════════════════════════════════════════════
+// [Dashboard Component]
+// ═══════════════════════════════════════════════════════════════════
+function Dashboard({ isMuted, toggleMute }) {
     const [data, setData] = useState(null);
     const [signalHistory, setSignalHistory] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -62,6 +65,13 @@ function Dashboard() {
 
     const processQueue = () => {
         if (isPlayingRef.current || soundQueueRef.current.length === 0) return;
+
+        // Mute Check
+        if (isMuted) {
+            console.log("🔇 Dashboard Sound Muted. Skipping queue.");
+            soundQueueRef.current = []; // Clear queue
+            return;
+        }
 
         const nextSound = soundQueueRef.current.shift(); // Dequeue
         isPlayingRef.current = true;
@@ -256,6 +266,8 @@ function Dashboard() {
                 setPollingMode={setPollingMode}
                 marketStatus={marketStatus}
                 lastUpdateTime={lastUpdateTime}
+                isMuted={isMuted}
+                toggleMute={toggleMute}
             />}
 
             {data?.stocks && <FinalSignal stocks={visibleStocks} total_assets={data.total_assets} />}
@@ -269,7 +281,7 @@ import LoginPage from './LoginPage';
 // ═══════════════════════════════════════════════════════════════════
 // [Ver 5.9.1] GlobalAlertSounds - 전역 알림 사운드 (모든 페이지에서 동작)
 // ═══════════════════════════════════════════════════════════════════
-const GlobalAlertSounds = () => {
+const GlobalAlertSounds = ({ isMuted }) => {
     const prevTriggeredRef = useRef(new Set());  // 이전 트리거 상태
     const lastPlayedRef = useRef({});  // 쓰로틀링용
     const isPlayingRef = useRef(false);
@@ -278,6 +290,13 @@ const GlobalAlertSounds = () => {
     // 순차 재생 처리
     const processQueue = () => {
         if (isPlayingRef.current || queueRef.current.length === 0) return;
+
+        // Mute Check
+        if (isMuted) {
+            console.log("🔇 GlobalAlertSounds Muted. Skipping queue.");
+            queueRef.current = []; // Clear queue or just skip? Clear is safer to avoid accumulation.
+            return;
+        }
 
         const sound = queueRef.current.shift();
         isPlayingRef.current = true;
@@ -289,6 +308,11 @@ const GlobalAlertSounds = () => {
 
         console.log(`🔔 GlobalAlert Sound: ${sound}`);
     };
+
+    // Re-process queue if unmuted (optional, but good UX)
+    useEffect(() => {
+        if (!isMuted) processQueue();
+    }, [isMuted]);
 
     useEffect(() => {
         const checkAlerts = async () => {
@@ -349,6 +373,19 @@ function Layout() {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [isAuthenticated, setIsAuthenticated] = useState(false);
 
+    // [Sound Control]
+    const [isMuted, setIsMuted] = useState(() => {
+        return localStorage.getItem('isMuted') === 'true';
+    });
+
+    const toggleMute = () => {
+        setIsMuted(prev => {
+            const next = !prev;
+            localStorage.setItem('isMuted', next);
+            return next;
+        });
+    };
+
     // Check authentication and Protect Routes
     useEffect(() => {
         const checkAuth = () => {
@@ -385,7 +422,7 @@ function Layout() {
     return (
         <div className="app-container">
             {/* 전역 알림 사운드 (항상 실행) */}
-            <GlobalAlertSounds />
+            <GlobalAlertSounds isMuted={isMuted} />
 
             <button
                 className="mobile-menu-btn"
@@ -395,6 +432,7 @@ function Layout() {
                 {isMenuOpen ? '✕' : '☰'}
             </button>
             <nav className={`main-nav ${isMenuOpen ? 'active' : ''}`}>
+
                 <Link to="/" className="nav-link" style={{
                     color: location.pathname === '/' ? 'var(--accent-blue)' : 'var(--text-primary)',
                     fontWeight: location.pathname === '/' ? 'bold' : 'normal',
@@ -415,10 +453,11 @@ function Layout() {
                     color: location.pathname === '/signals' ? 'var(--accent-blue)' : 'var(--text-primary)',
                     fontWeight: location.pathname === '/signals' ? 'bold' : 'normal',
                 }}>신호 포착</Link>
-                < Link to="/trading-journal" className="nav-link" style={{
+                <Link to="/trading-journal" className="nav-link" style={{
                     color: location.pathname === '/trading-journal' ? 'var(--accent-blue)' : 'var(--text-primary)',
                     fontWeight: location.pathname === '/trading-journal' ? 'bold' : 'normal',
                 }}>매매일지</Link>
+
 
                 {isAuthenticated ? (
                     <button
@@ -450,7 +489,7 @@ function Layout() {
             </nav>
 
             <Routes>
-                <Route path="/" element={<Dashboard />} />
+                <Route path="/" element={<Dashboard isMuted={isMuted} toggleMute={toggleMute} />} />
                 <Route path="/signals" element={<SignalPage />} />
                 <Route path="/journal" element={<JournalPage />} />
                 <Route path="/trading-journal" element={<TradingJournalPage />} />
