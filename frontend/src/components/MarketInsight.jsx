@@ -462,10 +462,16 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                                         if (Math.abs(uproChange) > 0.05) {
                                             relationIndex = (soxlChange / uproChange) * 100;
                                         }
-                                        // Energy: SOXL = +relationIndex/10, SOXS = -relationIndex/10 (truncated)
-                                        const energyScore = isSoxl
-                                            ? Math.trunc(relationIndex / 10)
-                                            : Math.trunc((relationIndex * -1) / 10);
+                                        // Energy Score Logic (Ver 6.4.10)
+                                        // 연관지수 >= 100%: SOXL=+, SOXS=-
+                                        // 연관지수 < 100%: SOXL=-, SOXS=+
+                                        const baseEnergy = Math.trunc(relationIndex / 10);
+                                        let energyScore;
+                                        if (relationIndex >= 100) {
+                                            energyScore = isSoxl ? baseEnergy : -baseEnergy;
+                                        } else {
+                                            energyScore = isSoxl ? -baseEnergy : baseEnergy;
+                                        }
 
                                         // Recalculate cheongan total with energy
                                         const baseCheongan = scoreObj.breakdown?.cheongan || 0;
