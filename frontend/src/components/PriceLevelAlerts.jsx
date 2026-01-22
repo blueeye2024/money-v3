@@ -248,7 +248,7 @@ const PriceLevelAlerts = ({ ticker, currentPrice }) => {
 
         const label = LABELS[type][stage - 1];
         const typeCode = type === 'BUY' ? 'B' : 'S';
-        const soundCode = `${tickerCode}${typeCode}${stage}`;
+        const soundCode = `U${tickerCode}${typeCode}${stage}`;
 
         return (
             <div key={key} style={styles.row(isTriggered)}>

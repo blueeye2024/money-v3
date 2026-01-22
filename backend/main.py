@@ -531,8 +531,8 @@ def monitor_signals():
                 # Check V2 Buy Status
                 v2_buy = stock_res.get('v2_buy') # injected in determine_market_regime_v2
                 if v2_buy:
-                    # SOXL: ULB, SOXS: USB
-                    prefix = "ULB" if t == 'SOXL' else "USB"
+                    # SOXL: LB, SOXS: SB (System Auto)
+                    prefix = "LB" if t == 'SOXL' else "SB"
                     
                     # Helper to enqueue sound
                     def try_enqueue_sound(suffix, dt_str, code_prefix):
@@ -556,8 +556,8 @@ def monitor_signals():
                 # Check V2 Sell Status
                 v2_sell = stock_res.get('v2_sell')
                 if v2_sell:
-                    # SOXL: ULS, SOXS: USS
-                    prefix = "ULS" if t == 'SOXL' else "USS"
+                    # SOXL: LS, SOXS: SS (System Auto)
+                    prefix = "LS" if t == 'SOXL' else "SS"
                     
                     def try_enqueue_sound_sell(suffix, dt_str, code_prefix):
                         if dt_str:
@@ -605,12 +605,12 @@ def monitor_signals():
                     # [Ver 5.8] Use Distinct Sounds for Manual Alerts (LB/LS/SB/SS)
                     # SOXL -> L, SOXS -> S
                     # Buy -> B, Sell -> S
-                    # Ex: SOXL Buy 1 -> LB1, SOXS Buy 3 -> SB3
+                    # User Manual -> Prefix 'U' (ULB1, USB2...)
                     ticker_code = "L" if t == 'SOXL' else "S"
                     
                     if recent_buy_triggers:
                         max_stage = max(recent_buy_triggers)
-                        sound_code = f"{ticker_code}B{max_stage}"
+                        sound_code = f"U{ticker_code}B{max_stage}"
                         
                         last_sent = SOUND_SENT_LOG.get(sound_code)
                         # Throttle check
@@ -622,7 +622,7 @@ def monitor_signals():
                     
                     if recent_sell_triggers:
                         max_stage = max(recent_sell_triggers)
-                        sound_code = f"{ticker_code}S{max_stage}"
+                        sound_code = f"U{ticker_code}S{max_stage}"
                         
                         last_sent = SOUND_SENT_LOG.get(sound_code)
                         if str(last_sent) != str(trig_dt):
