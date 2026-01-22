@@ -456,10 +456,8 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                                     {/* Score Breakdown 2-Column Layout (V6.4.9) */}
                                     {(() => {
                                         // Calculate Energy Score from UPRO relationIndex
-                                        const soxlData = indices?.find(s => s.ticker === 'SOXL');
-                                        const uproData = indices?.find(s => s.ticker === 'UPRO');
-                                        const soxlChange = soxlData ? Number(soxlData.change_pct || soxlData.change_rate || 0) : 0;
-                                        const uproChange = uproData ? Number(uproData.change_pct || uproData.change_rate || 0) : 0;
+                                        const soxlChange = regimeDetails?.soxl?.daily_change || 0;
+                                        const uproChange = regimeDetails?.upro?.daily_change || 0;
                                         let relationIndex = 0;
                                         if (Math.abs(uproChange) > 0.05) {
                                             relationIndex = (soxlChange / uproChange) * 100;
