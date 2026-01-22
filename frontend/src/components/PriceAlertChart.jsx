@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { ComposedChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, ReferenceDot } from 'recharts';
 
-const PriceAlertChart = ({ ticker, currentPrice, changePct = 0 }) => {
+const PriceAlertChart = ({ ticker, currentPrice, changePct = 0, relationIndex = null }) => {
     const [chartData5m, setChartData5m] = useState([]);
     const [alertLevels, setAlertLevels] = useState([]);
 
@@ -38,13 +38,13 @@ const PriceAlertChart = ({ ticker, currentPrice, changePct = 0 }) => {
         return () => { clearInterval(chInt); clearInterval(alInt); };
     }, [cleanTicker]);
 
-    // Prepare Data (Recent 30m = Last 6 of 5m candles)
+    // Prepare Data (Recent 1h = Last 12 of 5m candles)
     const recentData = useMemo(() => {
         let currentTime;
         try {
             const now = new Date();
             currentTime = new Intl.DateTimeFormat('en-US', {
-                timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hour12: false
+                timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit', hour12: false
             }).format(now);
         } catch (e) {
             const now = new Date();
@@ -53,7 +53,23 @@ const PriceAlertChart = ({ ticker, currentPrice, changePct = 0 }) => {
 
         let data = [];
         if (chartData5m.length > 0) {
-            data = chartData5m.slice(-6); // Last 6 candles = 30 mins
+            // [Fix] Zero Price Handling (Apply to FULL dataset before slicing)
+            let validData = [...chartData5m];
+
+            // 1. Forward Fill
+            for (let i = 1; i < validData.length; i++) {
+                if (validData[i].price === 0 && validData[i - 1].price > 0) {
+                    validData[i] = { ...validData[i], price: validData[i - 1].price };
+                }
+            }
+            // 2. Backward Fill
+            for (let i = validData.length - 2; i >= 0; i--) {
+                if (validData[i].price === 0 && validData[i + 1].price > 0) {
+                    validData[i] = { ...validData[i], price: validData[i + 1].price };
+                }
+            }
+
+            data = validData.slice(-12); // Last 12 candles = 60 mins
             const lastTime = data[data.length - 1].time;
 
             // Gap Check
@@ -68,7 +84,7 @@ const PriceAlertChart = ({ ticker, currentPrice, changePct = 0 }) => {
             };
 
             const diff = getMinutesDiff(lastTime, currentTime);
-            if (diff <= 30 && diff >= 0 && currentPrice > 0) {
+            if (diff <= 60 && diff >= 0 && currentPrice > 0) {
                 data = [...data, { time: currentTime, price: currentPrice }];
             }
         } else if (currentPrice > 0) {
@@ -81,17 +97,10 @@ const PriceAlertChart = ({ ticker, currentPrice, changePct = 0 }) => {
     if (recentData.length === 0) return null;
 
     // YAxis Domain
-    const prices = recentData.map(d => d.price);
+    const prices = recentData.map(d => d.price).filter(p => p > 0); // Filter out any remaining 0s
+    if (prices.length === 0) return null; // Safety check
+
     const alertPrices = alertLevels.map(a => parseFloat(a.price));
-    // Filter alerts close to price range to avoid zoomed out view? 
-    // Usually we include all alerts, but if they are far off it squashes the chart.
-    // For now, include all alerts in domain calculation to ensure lines are visible if reasonable.
-    // Or stick to V2 logic:
-    // V2SignalStatus uses:
-    // const allValues = [...prices, ...displayAlerts.map(a => parseFloat(a.price))];
-    // const minVal = Math.min(...allValues);
-    // const maxVal = Math.max(...allValues);
-    // padding...
 
     // Simplified Domain
     const allValues = [...prices, ...alertPrices];
@@ -105,7 +114,7 @@ const PriceAlertChart = ({ ticker, currentPrice, changePct = 0 }) => {
         <div style={{ background: 'rgba(30, 41, 59, 0.4)', borderRadius: '12px', padding: '12px', border: `1px solid ${themeColor}22` }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                 <h4 style={{ margin: 0, fontSize: '0.85rem', color: themeColor, fontWeight: '700' }}>
-                    📢 {ticker} Price Alerts (Recent 30m)
+                    📢 {ticker} Price Alerts (Recent 1h)
                 </h4>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#fff' }}>
@@ -121,6 +130,19 @@ const PriceAlertChart = ({ ticker, currentPrice, changePct = 0 }) => {
                     }}>
                         {changePct > 0 ? '+' : ''}{changePct.toFixed(2)}%
                     </span>
+                    {relationIndex !== null && relationIndex !== undefined && (
+                        <span style={{
+                            fontSize: '0.7rem',
+                            color: '#fbbf24',
+                            marginLeft: '4px',
+                            background: 'rgba(251, 191, 36, 0.1)',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            fontWeight: 'bold'
+                        }}>
+                            연관지수: {relationIndex.toFixed(0)}%
+                        </span>
+                    )}
                 </div>
             </div>
 
@@ -171,7 +193,7 @@ const PriceAlertChart = ({ ticker, currentPrice, changePct = 0 }) => {
                     )}
                 </ComposedChart>
             </ResponsiveContainer>
-        </div>
+        </div >
     );
 };
 

@@ -420,57 +420,6 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                 {showJournal && <TodayEventsWidget />}
 
 
-                <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', marginBottom: '2.5rem' }}>
-                    <V2SignalStatus
-                        title="SOXL (BULL TOWER)"
-                        buyStatus={v2Status.SOXL?.buy || regimeDetails?.soxl?.v2_buy}
-                        sellStatus={v2Status.SOXL?.sell || regimeDetails?.soxl?.v2_sell}
-                        renderInfo={v2Status.SOXL?.market_info || regimeDetails?.soxl}
-                        metrics={v2Status.SOXL?.metrics}
-                        isBear={false}
-                        onRefresh={onRefresh}
-                    />
-                    <V2SignalStatus
-                        title="SOXS (BEAR TOWER)"
-                        buyStatus={v2Status.SOXS?.buy || regimeDetails?.soxs?.v2_buy}
-                        sellStatus={v2Status.SOXS?.sell || regimeDetails?.soxs?.v2_sell}
-                        renderInfo={v2Status.SOXS?.market_info || regimeDetails?.soxs}
-                        metrics={v2Status.SOXS?.metrics}
-                        isBear={true}
-                        onRefresh={onRefresh}
-                    />
-                </div>
-
-                {/* [Ver 5.4] Independent Price Level Alert Panel */}
-                {(() => {
-                    const indices = Array.isArray(market?.indices) ? market.indices : [];
-                    const soxlData = indices.find(m => m.ticker === 'SOXL');
-                    const soxsData = indices.find(m => m.ticker === 'SOXS');
-                    const uproData = indices.find(m => m.ticker === 'UPRO');
-
-                    const soxlPrice = soxlData ? Number(soxlData.current_price || soxlData.price) : 0;
-                    const soxsPrice = soxsData ? Number(soxsData.current_price || soxsData.price) : 0;
-                    const uproPrice = uproData ? Number(uproData.current_price || uproData.price) : 0;
-                    const uproChange = uproData ? Number(uproData.change_pct || uproData.change_rate || 0) : 0;
-
-                    return (
-                        <div style={{ marginBottom: '1.5rem' }}>
-                            {/* UPRO Chart (Requested) */}
-                            <div style={{ marginBottom: '1rem' }}>
-                                <PriceAlertChart ticker="UPRO" currentPrice={uproPrice} changePct={uproChange} />
-                            </div>
-
-                            <div className="responsive-grid-2">
-                                <PriceLevelAlerts ticker="SOXL" currentPrice={soxlPrice} />
-                                <PriceLevelAlerts ticker="SOXS" currentPrice={soxsPrice} />
-                            </div>
-                        </div>
-                    );
-                })()}
-
-                {/* 수동 테스트 패널 (Params 전달) */}
-                <ManualTestPanel onRefresh={onRefresh} marketData={market?.indices} v2Status={v2Status} />
-
                 {/* 2. Prime Guide : Action Plan (V3.5 Comprehensive Score) */}
                 <div style={{ background: 'rgba(15, 23, 42, 0.9)', padding: '1.5rem', borderRadius: '20px', border: '1px solid rgba(56, 189, 248, 0.5)', boxShadow: '0 0 30px rgba(56, 189, 248, 0.1)', marginBottom: '24px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '1rem', flexWrap: 'wrap', gap: '10px' }}>
@@ -527,6 +476,64 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                         })}
                     </div>
                 </div>
+
+                <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', marginBottom: '2.5rem' }}>
+                    <V2SignalStatus
+                        title="SOXL (BULL TOWER)"
+                        buyStatus={v2Status.SOXL?.buy || regimeDetails?.soxl?.v2_buy}
+                        sellStatus={v2Status.SOXL?.sell || regimeDetails?.soxl?.v2_sell}
+                        renderInfo={v2Status.SOXL?.market_info || regimeDetails?.soxl}
+                        metrics={v2Status.SOXL?.metrics}
+                        isBear={false}
+                        onRefresh={onRefresh}
+                    />
+                    <V2SignalStatus
+                        title="SOXS (BEAR TOWER)"
+                        buyStatus={v2Status.SOXS?.buy || regimeDetails?.soxs?.v2_buy}
+                        sellStatus={v2Status.SOXS?.sell || regimeDetails?.soxs?.v2_sell}
+                        renderInfo={v2Status.SOXS?.market_info || regimeDetails?.soxs}
+                        metrics={v2Status.SOXS?.metrics}
+                        isBear={true}
+                        onRefresh={onRefresh}
+                    />
+                </div>
+
+                {/* [Ver 5.4] Independent Price Level Alert Panel */}
+                {(() => {
+                    const indices = Array.isArray(market?.indices) ? market.indices : [];
+                    const soxlData = indices.find(m => m.ticker === 'SOXL');
+                    const soxsData = indices.find(m => m.ticker === 'SOXS');
+                    const uproData = indices.find(m => m.ticker === 'UPRO');
+
+                    const soxlPrice = soxlData ? Number(soxlData.current_price || soxlData.price) : 0;
+                    const soxsPrice = soxsData ? Number(soxsData.current_price || soxsData.price) : 0;
+                    const uproPrice = uproData ? Number(uproData.current_price || uproData.price) : 0;
+                    const soxlChange = soxlData ? Number(soxlData.change_pct || soxlData.change_rate || 0) : 0;
+                    const uproChange = uproData ? Number(uproData.change_pct || uproData.change_rate || 0) : 0;
+
+                    let relationIndex = null;
+                    if (Math.abs(uproChange) > 0.05) { // Minimum threshold to avoid noise
+                        relationIndex = (soxlChange / uproChange) * 100;
+                    }
+
+                    return (
+                        <div style={{ marginBottom: '1.5rem' }}>
+                            {/* UPRO Chart (Requested) */}
+                            <div style={{ marginBottom: '1rem' }}>
+                                <PriceAlertChart ticker="UPRO" currentPrice={uproPrice} changePct={uproChange} relationIndex={relationIndex} />
+                            </div>
+
+                            <div className="responsive-grid-2">
+                                <PriceLevelAlerts ticker="SOXL" currentPrice={soxlPrice} />
+                                <PriceLevelAlerts ticker="SOXS" currentPrice={soxsPrice} />
+                            </div>
+                        </div>
+                    );
+                })()}
+
+                {/* 수동 테스트 패널 (Params 전달) */}
+                <ManualTestPanel onRefresh={onRefresh} marketData={market?.indices} v2Status={v2Status} />
+
 
                 {/* 3. Bottom Grid: Intelligence & History */}
                 <div className="responsive-grid-2-1">

@@ -699,7 +699,7 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
                 try {
                     const now = new Date();
                     currentTime = new Intl.DateTimeFormat('en-US', {
-                        timeZone: 'America/New_York',
+                        timeZone: 'Asia/Seoul',
                         hour: '2-digit',
                         minute: '2-digit',
                         hour12: false
@@ -725,11 +725,27 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
                 };
 
                 if (chartData5m.length > 0) {
-                    baseData = chartData5m.slice(-6);
+                    // [Fix Ver 6.4.3] Zero Price Handling (Apply to FULL dataset before slicing)
+                    let validData = [...chartData5m];
+
+                    // 1. Forward Fill
+                    for (let i = 1; i < validData.length; i++) {
+                        if (validData[i].price === 0 && validData[i - 1].price > 0) {
+                            validData[i] = { ...validData[i], price: validData[i - 1].price };
+                        }
+                    }
+                    // 2. Backward Fill
+                    for (let i = validData.length - 2; i >= 0; i--) {
+                        if (validData[i].price === 0 && validData[i + 1].price > 0) {
+                            validData[i] = { ...validData[i], price: validData[i + 1].price };
+                        }
+                    }
+
+                    baseData = validData.slice(-12); // Last 12 candles = 60 mins
                     const lastTime = baseData[baseData.length - 1].time;
                     const diff = getMinutesDiff(lastTime, currentTime);
 
-                    if (diff <= 30 && diff >= 0) {
+                    if (diff <= 60 && diff >= 0) {
                         recentData = [...baseData, { time: currentTime, price: current_price }];
                     } else {
                         // Market Closed or Large Gap -> Show only historical data
@@ -794,7 +810,7 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
                         border: '1px solid rgba(255,255,255,0.05)'
                     }}>
                         <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span>🎯 가격 알림 기준선 (최근 30분)</span>
+                            <span>🎯 가격 알림 기준선 (최근 1시간)</span>
                             <span style={{ fontSize: '0.7rem' }}>
                                 {alertLevels.filter(a => a.level_type === 'BUY').length > 0 && <span style={{ color: '#f87171', marginRight: '8px' }}>● 매수 {alertLevels.filter(a => a.level_type === 'BUY').length}개</span>}
                                 {alertLevels.filter(a => a.level_type === 'SELL').length > 0 && <span style={{ color: '#c084fc' }}>● 매도 {alertLevels.filter(a => a.level_type === 'SELL').length}개</span>}
