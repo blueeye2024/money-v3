@@ -171,21 +171,48 @@ def refresh_market_indices():
                     print(f"  ✅ KIS: {ticker} = ${price:.2f} ({rate:+.2f}%)")
                 else:
                     # KIS 실패 시 YFinance Fallback
-                    t = yf.Ticker(ticker)
-                    hist = t.history(period="2d")
-                    if not hist.empty:
-                        val = hist['Close'].iloc[-1]
-                        change = 0.0
-                        if len(hist) >= 2:
-                            prev = hist['Close'].iloc[-2]
-                            change = ((val - prev) / prev) * 100
-                        data_list.append({
-                            'ticker': ticker,
-                            'name': name,
-                            'price': float(val),
-                            'change': float(change)
-                        })
-                        print(f"  ⚠️ YF Fallback: {ticker} = ${val:.2f}")
+                    # [Fix Ver 6.4.3] Prevent Stale Data Flicker (Yesterday's Close)
+                    try:
+                        t = yf.Ticker(ticker)
+                        # Fetch today's data roughly
+                        hist = t.history(period="1d", interval="1m", prepost=True)
+                        
+                        if not hist.empty:
+                            last_row = hist.iloc[-1]
+                            val = float(last_row['Close'])
+                            
+                            # Valid Time Check (NY Time)
+                            ny_now = datetime.now(pytz.timezone('America/New_York'))
+                            data_time = hist.index[-1]
+                            if data_time.tzinfo is None:
+                                data_time = pytz.utc.localize(data_time).astimezone(pytz.timezone('America/New_York'))
+                            else:
+                                data_time = data_time.astimezone(pytz.timezone('America/New_York'))
+
+                            # If data is from today (or very recent if crossing midnight), accept it
+                            # If date mismatch (e.g. yesterday's close), SKIP update to avoid dip
+                            if data_time.date() == ny_now.date():
+                                change = 0.0
+                                # Try to get prev close from info or history calc
+                                try: 
+                                    prev_close = float(t.info.get('previousClose', 0))
+                                    if prev_close > 0:
+                                        change = ((val - prev_close) / prev_close) * 100
+                                except: pass
+
+                                data_list.append({
+                                    'ticker': ticker,
+                                    'name': name,
+                                    'price': val,
+                                    'change': change
+                                })
+                                print(f"  ⚠️ YF Fallback (Active): {ticker} = ${val:.2f}")
+                            else:
+                                print(f"  🛑 YF Fallback Stale (Skipped): {ticker} (Data: {data_time.strftime('%H:%M')} vs Now: {ny_now.strftime('%H:%M')})")
+                        else:
+                             print(f"  ❌ YF Fallback Empty: {ticker}")
+                    except Exception as yf_e:
+                        print(f"  ❌ YF Fallback Error: {yf_e}")
             except Exception as e:
                 print(f"  ❌ Error {ticker}: {e}")
         

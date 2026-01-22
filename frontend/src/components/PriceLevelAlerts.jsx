@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 import Swal from 'sweetalert2';
 
@@ -137,6 +137,9 @@ const PriceLevelAlerts = ({ ticker, currentPrice }) => {
     const themeColor = THEME_COLORS[ticker] || '#38bdf8';
     const tickerCode = ticker === 'SOXL' ? 'L' : 'S';
 
+    // [Fix Ver 6.4.4] Input Focus Tracking
+    const focusedInputRef = useRef(null);
+
     // Fetch levels from API
     const fetchLevels = useCallback(async () => {
         try {
@@ -151,7 +154,14 @@ const PriceLevelAlerts = ({ ticker, currentPrice }) => {
                     const key = `${lvl.level_type}-${lvl.stage}`;
                     inputs[key] = lvl.price || '';
                 });
-                setPriceInputs(prev => ({ ...prev, ...inputs }));
+
+                setPriceInputs(prev => {
+                    const next = { ...prev, ...inputs };
+                    if (focusedInputRef.current) {
+                        next[focusedInputRef.current] = prev[focusedInputRef.current];
+                    }
+                    return next;
+                });
             }
         } catch (error) {
             console.error("Fetch Alerts Error:", error);
@@ -254,6 +264,8 @@ const PriceLevelAlerts = ({ ticker, currentPrice }) => {
                     placeholder="$"
                     value={priceInputs[key] || ''}
                     onChange={(e) => handleInputChange(key, e.target.value)}
+                    onFocus={() => { focusedInputRef.current = key; }}
+                    onBlur={() => { focusedInputRef.current = null; }}
                     style={styles.input}
                 />
 
