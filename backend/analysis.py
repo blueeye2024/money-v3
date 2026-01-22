@@ -2150,66 +2150,66 @@ def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None):
     current_price = res.get('current_price', 0)
     daily_change = res.get('daily_change', 0)
     
-    # ---- A. RSI 채점 (+10 ~ -10) [Ver 6.4.9 범위 조정] ----
+    # ---- A. RSI 채점 (+8 ~ -8) [Ver 6.4.11] ----
     rsi_score = 0
     if 55 <= rsi < 70:
-        rsi_score = 10   # 상승 추세
+        rsi_score = 8    # 상승 추세
     elif 70 <= rsi < 80:
-        rsi_score = 5    # 경계 구간
+        rsi_score = 4    # 경계 구간
     elif 45 <= rsi < 55:
         rsi_score = 0    # 중립
     elif 30 <= rsi < 45:
-        rsi_score = -5   # 하락 추세
+        rsi_score = -4   # 하락 추세
     elif rsi >= 80:
-        rsi_score = -10  # 과열
+        rsi_score = -8   # 과열
     elif rsi < 30:
-        rsi_score = -10  # 과매도
+        rsi_score = -8   # 과매도
     breakdown['rsi'] = rsi_score
     
-    # ---- B. MACD 채점 (+10 ~ -10) [Ver 6.4.9 범위 조정] ----
+    # ---- B. MACD 채점 (+8 ~ -8) [Ver 6.4.11] ----
     macd_score = 0
     macd_hist = macd - macd_sig
     
     if macd > macd_sig and macd > 0:
-        macd_score = 10   # 골든크로스 + 양수
+        macd_score = 8    # 골든크로스 + 양수
     elif macd > macd_sig:
-        macd_score = 5    # 골든크로스
+        macd_score = 4    # 골든크로스
     elif macd < macd_sig and macd >= 0:
-        macd_score = -5   # 데드크로스 시작
+        macd_score = -4   # 데드크로스 시작
     elif macd < 0 and macd < macd_sig:
-        macd_score = -10  # 강력 하락
+        macd_score = -8   # 강력 하락
     breakdown['macd'] = macd_score
     
-    # ---- C. Vol Ratio 채점 (+10 ~ -10) [Ver 6.4.9 범위 조정] ----
+    # ---- C. Vol Ratio 채점 (+5 ~ -5) [Ver 6.4.11] ----
     vol_score = 0
     if vol_ratio > 2.5 and daily_change < 0:
-        vol_score = -10   # 투매
+        vol_score = -5    # 투매
     elif vol_ratio > 2.0 and daily_change < 0:
-        vol_score = -10   # 투매
+        vol_score = -5    # 투매
     elif vol_ratio > 2.0 and daily_change > 0 and rsi > 70:
         vol_score = 0     # 경계
     elif vol_ratio > 2.0 and daily_change > 0:
-        vol_score = 10    # 강력 매수세
+        vol_score = 5     # 강력 매수세
     elif vol_ratio > 1.5 and daily_change > 0:
-        vol_score = 5     # 평균 이상
+        vol_score = 3     # 평균 이상
     elif vol_ratio > 1.0:
         vol_score = 0     # 중립
     elif 0.5 < vol_ratio <= 0.8:
-        vol_score = -5    # 매수세 부족
+        vol_score = -3    # 매수세 부족
     breakdown['vol'] = vol_score
     
-    # ---- D. ATR 채점 (+10 ~ -20) ----
+    # ---- D. ATR 채점 (+8 ~ -8) [Ver 6.4.11] ----
     atr_score = 0
     atr_ratio = (atr / current_price) if current_price > 0 else 0
     
     if daily_change > 1 and atr_ratio > 0.02:
-        atr_score = 10    # 강한 추세적 돌파
+        atr_score = 8     # 강한 추세적 돌파
     elif daily_change > 0:
-        atr_score = 5     # 완만한 우상향
+        atr_score = 4     # 완만한 우상향
     elif daily_change < 0 and atr_ratio > 0.02:
-        atr_score = -10   # 공포 섞인 하락
+        atr_score = -4    # 공포 섞인 하락
     elif daily_change < -3 and atr_ratio > 0.03:
-        atr_score = -20   # 패닉셀 구간
+        atr_score = -8    # 패닉셀 구간
     breakdown['atr'] = atr_score
     
     # ================================================

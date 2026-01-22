@@ -462,10 +462,10 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                                         if (Math.abs(uproChange) > 0.05) {
                                             relationIndex = (soxlChange / uproChange) * 100;
                                         }
-                                        // Energy Score Logic (Ver 6.4.10)
+                                        // Energy Score Logic (Ver 6.4.11) - 2x multiplier
                                         // 연관지수 >= 100%: SOXL=+, SOXS=-
                                         // 연관지수 < 100%: SOXL=-, SOXS=+
-                                        const baseEnergy = Math.trunc(relationIndex / 10);
+                                        const baseEnergy = Math.trunc(relationIndex / 10) * 2;  // 2배 적용
                                         let energyScore;
                                         if (relationIndex >= 100) {
                                             energyScore = isSoxl ? baseEnergy : -baseEnergy;
