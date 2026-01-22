@@ -2123,14 +2123,19 @@ def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None):
     if sig2: cheongan_score += 20
     if sig3: cheongan_score += 30
     
-    # [Relaxed] If Step 3 is ON but Step 2 is OFF (Gap), we allow Step 3 to imply Step 2?
-    # User Request "Each occurs". So if Step 2 is OFF, it's OFF. 
-    # Current State: Step 1(20) + Step 3(30) = 50.
-    # If user wants 70, Step 2 must be ON.
-    # However, Step 3 (Trend Confirmed) is stronger. 
-    # Let's stick to strict cumulative for transparency.
-    
+    # [Ver 6.4.7] Strict cumulative scoring
     breakdown['cheongan'] = cheongan_score
+    
+    # ================================================
+    # 1-B. 매도 신호 감점 (Sell Signal Penalty)
+    # ================================================
+    sell_penalty = 0
+    if v2_sell:
+        if v2_sell.get('sell_sig3_yn') == 'Y':
+            sell_penalty = -30  # 추세 이탈 확정
+        elif v2_sell.get('sell_sig1_yn') == 'Y':
+            sell_penalty = -15  # 경고
+    breakdown['sell_penalty'] = sell_penalty
     
     # ================================================
     # 2. 안티그래비티 보조지표 (+40 ~ -80점)
@@ -2145,22 +2150,27 @@ def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None):
     current_price = res.get('current_price', 0)
     daily_change = res.get('daily_change', 0)
     
-    # ---- A. RSI 채점 (+10 ~ -20) ----
+    # ---- A. RSI 채점 (+10 ~ -20) [Ver 6.4.7 개선] ----
     rsi_score = 0
-    if 55 < rsi < 65:
-        rsi_score = 10   # 상승 추세 안정적 진입
-    elif 45 < rsi <= 55:
-        rsi_score = 5    # 추세 전환 시도
-    elif 30 < rsi <= 45:
+    if 55 <= rsi < 70:
+        rsi_score = 10   # 상승 추세 (확장된 구간)
+    elif 70 <= rsi < 80:
+        rsi_score = 5    # 경계 구간 (아직 과열 아님)
+    elif 45 <= rsi < 55:
+        rsi_score = 0    # 중립
+    elif 30 <= rsi < 45:
         rsi_score = -10  # 하락 추세 지속
-    elif rsi <= 30 or rsi >= 75:
-        rsi_score = -20  # 과매도/단기 상투 위험
+    elif rsi >= 80:
+        rsi_score = -10  # 과열 (완화된 패널티)
+    elif rsi < 30:
+        rsi_score = -20  # 과매도
     breakdown['rsi'] = rsi_score
     
-    # ---- B. MACD 채점 (+10 ~ -20) ----
+    # ---- B. MACD 채점 (+15 ~ -25) [Ver 6.4.7 히스토그램 추가] ----
     macd_score = 0
-    macd_diff = macd - macd_sig if macd_sig else macd
+    macd_hist = macd - macd_sig  # 히스토그램
     
+    # 기본 점수
     if macd > macd_sig and macd > 0:
         macd_score = 10   # 골든크로스 + 양수 = 강세
     elif macd > macd_sig:
@@ -2169,19 +2179,28 @@ def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None):
         macd_score = -10  # 데드크로스 시작
     elif macd < 0 and macd < macd_sig:
         macd_score = -20  # 강력한 하락 추세
+    
+    # 히스토그램 추세 보너스/패널티 (가속도 반영)
+    if macd_hist > 0 and macd > 0:
+        macd_score += 5   # 상승 가속
+    elif macd_hist < 0 and macd < 0:
+        macd_score -= 5   # 하락 가속
     breakdown['macd'] = macd_score
     
-    # ---- C. Vol Ratio 채점 (+10 ~ -20) ----
-    # [V4.0.1] 상승 + 고VR + 고RSI 조합 시 경계 신호 추가
+    # ---- C. Vol Ratio 채점 (+10 ~ -25) [Ver 6.4.7 레버리지 반영] ----
     vol_score = 0
-    if vol_ratio > 2.0 and daily_change < 0:
-        vol_score = -20   # 투매 발생 (최우선 판단)
+    if vol_ratio > 2.5 and daily_change < 0:
+        vol_score = -25   # 레버리지 ETF 투매 강화
+    elif vol_ratio > 2.0 and daily_change < 0:
+        vol_score = -20   # 투매 발생
     elif vol_ratio > 2.0 and daily_change > 0 and rsi > 70:
-        vol_score = 0     # 경계: 폭등이지만 과열 위험 (가점 없음)
+        vol_score = 0     # 경계: 폭등이지만 과열 위험
+    elif vol_ratio > 2.0 and daily_change > 0:
+        vol_score = 10    # 강력 매수세
     elif vol_ratio > 1.5 and daily_change > 0:
-        vol_score = 10    # 강력한 매수세 유입
+        vol_score = 5     # 평균 이상 매수세
     elif vol_ratio > 1.0:
-        vol_score = 5     # 평균 이상 관심
+        vol_score = 0     # 중립
     elif 0.5 < vol_ratio <= 0.8:
         vol_score = -10   # 매수세 실종
     breakdown['vol'] = vol_score
@@ -2204,7 +2223,8 @@ def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None):
     # 3. 총점 계산
     # ================================================
     indicator_total = breakdown['rsi'] + breakdown['macd'] + breakdown['vol'] + breakdown['atr']
-    total_score = breakdown['cheongan'] + indicator_total
+    sell_penalty = breakdown.get('sell_penalty', 0)
+    total_score = breakdown['cheongan'] + indicator_total + sell_penalty
     
     # 범위 제한: -80 ~ 100
     total_score = max(-80, min(100, total_score))
