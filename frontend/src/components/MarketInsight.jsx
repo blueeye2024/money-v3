@@ -453,99 +453,90 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                                         </div>
                                     </div>
 
-                                    {/* Score Breakdown Table (V6.4.7 Enhanced) */}
-                                    <div style={{ background: 'rgba(0,0,0,0.25)', padding: '12px', borderRadius: '8px', marginBottom: '15px', fontSize: '0.75rem' }}>
-                                        <table style={{ width: '100%', borderCollapse: 'collapse', color: '#ccc' }}>
-                                            <thead>
-                                                <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                                                    <th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>구분</th>
-                                                    <th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>항목</th>
-                                                    <th style={{ textAlign: 'right', padding: '4px 8px', color: '#94a3b8' }}>점수</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {/* 청안 지수 (V2 Signals) */}
-                                                <tr style={{ background: 'rgba(255,255,255,0.03)' }}>
-                                                    <td rowSpan="4" style={{ padding: '4px 8px', fontWeight: 'bold', color: color, verticalAlign: 'top' }}>🔥 청안지수</td>
-                                                    <td style={{ padding: '4px 8px' }}>1차 (5분 GC)</td>
-                                                    <td style={{ textAlign: 'right', padding: '4px 8px', color: v2Status?.[ticker]?.buy?.buy_sig1_yn === 'Y' ? '#4ade80' : '#64748b' }}>
+                                    {/* Score Breakdown 2-Column Layout (V6.4.8) */}
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '15px', fontSize: '0.75rem' }}>
+                                        {/* 좌측: 청안 지수 */}
+                                        <div style={{ background: 'rgba(0,0,0,0.25)', padding: '10px', borderRadius: '8px' }}>
+                                            <div style={{ fontWeight: 'bold', color: color, marginBottom: '8px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '4px' }}>
+                                                🔥 청안지수 <span style={{ fontWeight: 'normal', color: '#94a3b8' }}>(최대 70점)</span>
+                                            </div>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                                                    <span style={{ color: '#ccc' }}>1차 (5분 GC)</span>
+                                                    <span style={{ color: v2Status?.[ticker]?.buy?.buy_sig1_yn === 'Y' ? '#4ade80' : '#64748b', fontWeight: 'bold' }}>
                                                         {v2Status?.[ticker]?.buy?.buy_sig1_yn === 'Y' ? '+20' : '0'}
-                                                    </td>
-                                                </tr>
-                                                <tr style={{ background: 'rgba(255,255,255,0.03)' }}>
-                                                    <td style={{ padding: '4px 8px' }}>2차 (+1% 상승)</td>
-                                                    <td style={{ textAlign: 'right', padding: '4px 8px', color: v2Status?.[ticker]?.buy?.buy_sig2_yn === 'Y' ? '#4ade80' : '#64748b' }}>
+                                                    </span>
+                                                </div>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                                                    <span style={{ color: '#ccc' }}>2차 (+1%)</span>
+                                                    <span style={{ color: v2Status?.[ticker]?.buy?.buy_sig2_yn === 'Y' ? '#4ade80' : '#64748b', fontWeight: 'bold' }}>
                                                         {v2Status?.[ticker]?.buy?.buy_sig2_yn === 'Y' ? '+20' : '0'}
-                                                    </td>
-                                                </tr>
-                                                <tr style={{ background: 'rgba(255,255,255,0.03)' }}>
-                                                    <td style={{ padding: '4px 8px' }}>3차 (30분 GC)</td>
-                                                    <td style={{ textAlign: 'right', padding: '4px 8px', color: v2Status?.[ticker]?.buy?.buy_sig3_yn === 'Y' ? '#4ade80' : '#64748b' }}>
+                                                    </span>
+                                                </div>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                                                    <span style={{ color: '#ccc' }}>3차 (30분 GC)</span>
+                                                    <span style={{ color: v2Status?.[ticker]?.buy?.buy_sig3_yn === 'Y' ? '#4ade80' : '#64748b', fontWeight: 'bold' }}>
                                                         {v2Status?.[ticker]?.buy?.buy_sig3_yn === 'Y' ? '+30' : '0'}
-                                                    </td>
-                                                </tr>
-                                                <tr style={{ background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                                                    <td style={{ padding: '4px 8px', fontWeight: 'bold' }}>소계</td>
-                                                    <td style={{ textAlign: 'right', padding: '4px 8px', fontWeight: 'bold', color: color }}>
-                                                        {scoreObj.breakdown?.cheongan || 0}
-                                                    </td>
-                                                </tr>
+                                                    </span>
+                                                </div>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: '4px' }}>
+                                                    <span style={{ fontWeight: 'bold', color: '#fff' }}>소계</span>
+                                                    <span style={{ fontWeight: '900', color: color }}>{scoreObj.breakdown?.cheongan || 0}</span>
+                                                </div>
+                                            </div>
+                                        </div>
 
-                                                {/* 보조지표 */}
-                                                <tr>
-                                                    <td rowSpan="5" style={{ padding: '4px 8px', fontWeight: 'bold', color: '#94a3b8', verticalAlign: 'top' }}>📊 보조지표</td>
-                                                    <td style={{ padding: '4px 8px' }}>RSI <span style={{ color: '#64748b', fontSize: '0.65rem' }}>(55~70 가점)</span></td>
-                                                    <td style={{ textAlign: 'right', padding: '4px 8px', color: (scoreObj.breakdown?.rsi || 0) > 0 ? '#4ade80' : (scoreObj.breakdown?.rsi || 0) < 0 ? '#f87171' : '#ccc' }}>
+                                        {/* 우측: 보조지표 */}
+                                        <div style={{ background: 'rgba(0,0,0,0.25)', padding: '10px', borderRadius: '8px' }}>
+                                            <div style={{ fontWeight: 'bold', color: '#94a3b8', marginBottom: '8px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '4px' }}>
+                                                📊 보조지표 <span style={{ fontWeight: 'normal', color: '#64748b' }}>(±40점)</span>
+                                            </div>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                                                    <span style={{ color: '#ccc' }}>RSI</span>
+                                                    <span style={{ color: (scoreObj.breakdown?.rsi || 0) > 0 ? '#4ade80' : (scoreObj.breakdown?.rsi || 0) < 0 ? '#f87171' : '#ccc', fontWeight: 'bold' }}>
                                                         {scoreObj.breakdown?.rsi > 0 ? '+' : ''}{scoreObj.breakdown?.rsi || 0}
-                                                    </td>
-                                                </tr>
-                                                <tr>
-                                                    <td style={{ padding: '4px 8px' }}>MACD <span style={{ color: '#64748b', fontSize: '0.65rem' }}>(GC+양수 가점)</span></td>
-                                                    <td style={{ textAlign: 'right', padding: '4px 8px', color: (scoreObj.breakdown?.macd || 0) > 0 ? '#4ade80' : (scoreObj.breakdown?.macd || 0) < 0 ? '#f87171' : '#ccc' }}>
+                                                    </span>
+                                                </div>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                                                    <span style={{ color: '#ccc' }}>MACD</span>
+                                                    <span style={{ color: (scoreObj.breakdown?.macd || 0) > 0 ? '#4ade80' : (scoreObj.breakdown?.macd || 0) < 0 ? '#f87171' : '#ccc', fontWeight: 'bold' }}>
                                                         {scoreObj.breakdown?.macd > 0 ? '+' : ''}{scoreObj.breakdown?.macd || 0}
-                                                    </td>
-                                                </tr>
-                                                <tr>
-                                                    <td style={{ padding: '4px 8px' }}>Volume <span style={{ color: '#64748b', fontSize: '0.65rem' }}>(VR≥2.0 가점)</span></td>
-                                                    <td style={{ textAlign: 'right', padding: '4px 8px', color: (scoreObj.breakdown?.vol || 0) > 0 ? '#4ade80' : (scoreObj.breakdown?.vol || 0) < 0 ? '#f87171' : '#ccc' }}>
+                                                    </span>
+                                                </div>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                                                    <span style={{ color: '#ccc' }}>Volume</span>
+                                                    <span style={{ color: (scoreObj.breakdown?.vol || 0) > 0 ? '#4ade80' : (scoreObj.breakdown?.vol || 0) < 0 ? '#f87171' : '#ccc', fontWeight: 'bold' }}>
                                                         {scoreObj.breakdown?.vol > 0 ? '+' : ''}{scoreObj.breakdown?.vol || 0}
-                                                    </td>
-                                                </tr>
-                                                <tr>
-                                                    <td style={{ padding: '4px 8px' }}>ATR <span style={{ color: '#64748b', fontSize: '0.65rem' }}>(변동성 방향)</span></td>
-                                                    <td style={{ textAlign: 'right', padding: '4px 8px', color: (scoreObj.breakdown?.atr || 0) > 0 ? '#4ade80' : (scoreObj.breakdown?.atr || 0) < 0 ? '#f87171' : '#ccc' }}>
+                                                    </span>
+                                                </div>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                                                    <span style={{ color: '#ccc' }}>ATR</span>
+                                                    <span style={{ color: (scoreObj.breakdown?.atr || 0) > 0 ? '#4ade80' : (scoreObj.breakdown?.atr || 0) < 0 ? '#f87171' : '#ccc', fontWeight: 'bold' }}>
                                                         {scoreObj.breakdown?.atr > 0 ? '+' : ''}{scoreObj.breakdown?.atr || 0}
-                                                    </td>
-                                                </tr>
-                                                <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                                                    <td style={{ padding: '4px 8px', fontWeight: 'bold' }}>소계</td>
-                                                    <td style={{ textAlign: 'right', padding: '4px 8px', fontWeight: 'bold', color: '#94a3b8' }}>
+                                                    </span>
+                                                </div>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: '4px' }}>
+                                                    <span style={{ fontWeight: 'bold', color: '#fff' }}>소계</span>
+                                                    <span style={{ fontWeight: '900', color: '#94a3b8' }}>
                                                         {(scoreObj.breakdown?.rsi || 0) + (scoreObj.breakdown?.macd || 0) + (scoreObj.breakdown?.vol || 0) + (scoreObj.breakdown?.atr || 0)}
-                                                    </td>
-                                                </tr>
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
 
-                                                {/* 매도 감점 */}
-                                                {(scoreObj.breakdown?.sell_penalty || 0) !== 0 && (
-                                                    <tr style={{ background: 'rgba(239, 68, 68, 0.1)' }}>
-                                                        <td style={{ padding: '4px 8px', fontWeight: 'bold', color: '#f87171' }}>⚠️ 매도경고</td>
-                                                        <td style={{ padding: '4px 8px', color: '#f87171' }}>
-                                                            {v2Status?.[ticker]?.sell?.sell_sig3_yn === 'Y' ? '추세이탈' : '5분DC'}
-                                                        </td>
-                                                        <td style={{ textAlign: 'right', padding: '4px 8px', fontWeight: 'bold', color: '#f87171' }}>
-                                                            {scoreObj.breakdown?.sell_penalty || 0}
-                                                        </td>
-                                                    </tr>
-                                                )}
-
-                                                {/* 총점 */}
-                                                <tr style={{ background: 'rgba(255,255,255,0.05)' }}>
-                                                    <td colSpan="2" style={{ padding: '6px 8px', fontWeight: 'bold', color: '#fff' }}>📌 총점</td>
-                                                    <td style={{ textAlign: 'right', padding: '6px 8px', fontWeight: '900', fontSize: '1rem', color: color }}>
-                                                        {scoreObj.score}점
-                                                    </td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
+                                    {/* 총점 + 매도경고 */}
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.3)', padding: '10px 12px', borderRadius: '8px', marginBottom: '15px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                            <span style={{ fontWeight: 'bold', color: '#fff', fontSize: '0.85rem' }}>📌 총점</span>
+                                            {(scoreObj.breakdown?.sell_penalty || 0) !== 0 && (
+                                                <span style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#f87171', padding: '2px 8px', borderRadius: '10px', fontSize: '0.7rem', fontWeight: 'bold' }}>
+                                                    ⚠️ 매도경고 {scoreObj.breakdown?.sell_penalty}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <span style={{ fontWeight: '900', fontSize: '1.2rem', color: color }}>{scoreObj.score}점</span>
                                     </div>
 
                                     {/* Guide Commentary */}
