@@ -2150,59 +2150,52 @@ def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None):
     current_price = res.get('current_price', 0)
     daily_change = res.get('daily_change', 0)
     
-    # ---- A. RSI 채점 (+10 ~ -20) [Ver 6.4.7 개선] ----
+    # ---- A. RSI 채점 (+10 ~ -10) [Ver 6.4.9 범위 조정] ----
     rsi_score = 0
     if 55 <= rsi < 70:
-        rsi_score = 10   # 상승 추세 (확장된 구간)
+        rsi_score = 10   # 상승 추세
     elif 70 <= rsi < 80:
-        rsi_score = 5    # 경계 구간 (아직 과열 아님)
+        rsi_score = 5    # 경계 구간
     elif 45 <= rsi < 55:
         rsi_score = 0    # 중립
     elif 30 <= rsi < 45:
-        rsi_score = -10  # 하락 추세 지속
+        rsi_score = -5   # 하락 추세
     elif rsi >= 80:
-        rsi_score = -10  # 과열 (완화된 패널티)
+        rsi_score = -10  # 과열
     elif rsi < 30:
-        rsi_score = -20  # 과매도
+        rsi_score = -10  # 과매도
     breakdown['rsi'] = rsi_score
     
-    # ---- B. MACD 채점 (+15 ~ -25) [Ver 6.4.7 히스토그램 추가] ----
+    # ---- B. MACD 채점 (+10 ~ -10) [Ver 6.4.9 범위 조정] ----
     macd_score = 0
-    macd_hist = macd - macd_sig  # 히스토그램
+    macd_hist = macd - macd_sig
     
-    # 기본 점수
     if macd > macd_sig and macd > 0:
-        macd_score = 10   # 골든크로스 + 양수 = 강세
+        macd_score = 10   # 골든크로스 + 양수
     elif macd > macd_sig:
-        macd_score = 5    # 골든크로스 (조정 중)
+        macd_score = 5    # 골든크로스
     elif macd < macd_sig and macd >= 0:
-        macd_score = -10  # 데드크로스 시작
+        macd_score = -5   # 데드크로스 시작
     elif macd < 0 and macd < macd_sig:
-        macd_score = -20  # 강력한 하락 추세
-    
-    # 히스토그램 추세 보너스/패널티 (가속도 반영)
-    if macd_hist > 0 and macd > 0:
-        macd_score += 5   # 상승 가속
-    elif macd_hist < 0 and macd < 0:
-        macd_score -= 5   # 하락 가속
+        macd_score = -10  # 강력 하락
     breakdown['macd'] = macd_score
     
-    # ---- C. Vol Ratio 채점 (+10 ~ -25) [Ver 6.4.7 레버리지 반영] ----
+    # ---- C. Vol Ratio 채점 (+10 ~ -10) [Ver 6.4.9 범위 조정] ----
     vol_score = 0
     if vol_ratio > 2.5 and daily_change < 0:
-        vol_score = -25   # 레버리지 ETF 투매 강화
+        vol_score = -10   # 투매
     elif vol_ratio > 2.0 and daily_change < 0:
-        vol_score = -20   # 투매 발생
+        vol_score = -10   # 투매
     elif vol_ratio > 2.0 and daily_change > 0 and rsi > 70:
-        vol_score = 0     # 경계: 폭등이지만 과열 위험
+        vol_score = 0     # 경계
     elif vol_ratio > 2.0 and daily_change > 0:
         vol_score = 10    # 강력 매수세
     elif vol_ratio > 1.5 and daily_change > 0:
-        vol_score = 5     # 평균 이상 매수세
+        vol_score = 5     # 평균 이상
     elif vol_ratio > 1.0:
         vol_score = 0     # 중립
     elif 0.5 < vol_ratio <= 0.8:
-        vol_score = -10   # 매수세 실종
+        vol_score = -5    # 매수세 부족
     breakdown['vol'] = vol_score
     
     # ---- D. ATR 채점 (+10 ~ -20) ----

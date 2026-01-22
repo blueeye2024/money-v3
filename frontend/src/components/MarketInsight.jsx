@@ -453,78 +453,106 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                                         </div>
                                     </div>
 
-                                    {/* Score Breakdown 2-Column Layout (V6.4.8) */}
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '15px', fontSize: '0.75rem' }}>
-                                        {/* 좌측: 청안 지수 */}
-                                        <div style={{ background: 'rgba(0,0,0,0.25)', padding: '10px', borderRadius: '8px' }}>
-                                            <div style={{ fontWeight: 'bold', color: color, marginBottom: '8px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '4px' }}>
-                                                🔥 청안지수 <span style={{ fontWeight: 'normal', color: '#94a3b8' }}>(최대 70점)</span>
-                                            </div>
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
-                                                    <span style={{ color: '#ccc' }}>1차 (5분 GC)</span>
-                                                    <span style={{ color: v2Status?.[ticker]?.buy?.buy_sig1_yn === 'Y' ? '#4ade80' : '#64748b', fontWeight: 'bold' }}>
-                                                        {v2Status?.[ticker]?.buy?.buy_sig1_yn === 'Y' ? '+20' : '0'}
-                                                    </span>
-                                                </div>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
-                                                    <span style={{ color: '#ccc' }}>2차 (+1%)</span>
-                                                    <span style={{ color: v2Status?.[ticker]?.buy?.buy_sig2_yn === 'Y' ? '#4ade80' : '#64748b', fontWeight: 'bold' }}>
-                                                        {v2Status?.[ticker]?.buy?.buy_sig2_yn === 'Y' ? '+20' : '0'}
-                                                    </span>
-                                                </div>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
-                                                    <span style={{ color: '#ccc' }}>3차 (30분 GC)</span>
-                                                    <span style={{ color: v2Status?.[ticker]?.buy?.buy_sig3_yn === 'Y' ? '#4ade80' : '#64748b', fontWeight: 'bold' }}>
-                                                        {v2Status?.[ticker]?.buy?.buy_sig3_yn === 'Y' ? '+30' : '0'}
-                                                    </span>
-                                                </div>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: '4px' }}>
-                                                    <span style={{ fontWeight: 'bold', color: '#fff' }}>소계</span>
-                                                    <span style={{ fontWeight: '900', color: color }}>{scoreObj.breakdown?.cheongan || 0}</span>
-                                                </div>
-                                            </div>
-                                        </div>
+                                    {/* Score Breakdown 2-Column Layout (V6.4.9) */}
+                                    {(() => {
+                                        // Calculate Energy Score from UPRO relationIndex
+                                        const soxlData = indices?.find(s => s.ticker === 'SOXL');
+                                        const uproData = indices?.find(s => s.ticker === 'UPRO');
+                                        const soxlChange = soxlData ? Number(soxlData.change_pct || soxlData.change_rate || 0) : 0;
+                                        const uproChange = uproData ? Number(uproData.change_pct || uproData.change_rate || 0) : 0;
+                                        let relationIndex = 0;
+                                        if (Math.abs(uproChange) > 0.05) {
+                                            relationIndex = (soxlChange / uproChange) * 100;
+                                        }
+                                        // Energy: SOXL = +relationIndex/10, SOXS = -relationIndex/10 (truncated)
+                                        const energyScore = isSoxl
+                                            ? Math.trunc(relationIndex / 10)
+                                            : Math.trunc((relationIndex * -1) / 10);
 
-                                        {/* 우측: 보조지표 */}
-                                        <div style={{ background: 'rgba(0,0,0,0.25)', padding: '10px', borderRadius: '8px' }}>
-                                            <div style={{ fontWeight: 'bold', color: '#94a3b8', marginBottom: '8px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '4px' }}>
-                                                📊 보조지표 <span style={{ fontWeight: 'normal', color: '#64748b' }}>(±40점)</span>
+                                        // Recalculate cheongan total with energy
+                                        const baseCheongan = scoreObj.breakdown?.cheongan || 0;
+                                        const cheonganWithEnergy = baseCheongan + energyScore;
+
+                                        return (
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '15px', fontSize: '0.75rem' }}>
+                                                {/* 좌측: 청안 지수 */}
+                                                <div style={{ background: 'rgba(0,0,0,0.25)', padding: '10px', borderRadius: '8px' }}>
+                                                    <div style={{ fontWeight: 'bold', color: color, marginBottom: '8px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '4px' }}>
+                                                        🔥 청안지수 <span style={{ fontWeight: 'normal', color: '#94a3b8' }}>(최대 80점)</span>
+                                                    </div>
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                                                            <span style={{ color: '#ccc' }}>1차 (5분 GC)</span>
+                                                            <span style={{ color: v2Status?.[ticker]?.buy?.buy_sig1_yn === 'Y' ? '#4ade80' : '#64748b', fontWeight: 'bold' }}>
+                                                                {v2Status?.[ticker]?.buy?.buy_sig1_yn === 'Y' ? '+20' : '0'}
+                                                            </span>
+                                                        </div>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                                                            <span style={{ color: '#ccc' }}>2차 (+1%)</span>
+                                                            <span style={{ color: v2Status?.[ticker]?.buy?.buy_sig2_yn === 'Y' ? '#4ade80' : '#64748b', fontWeight: 'bold' }}>
+                                                                {v2Status?.[ticker]?.buy?.buy_sig2_yn === 'Y' ? '+20' : '0'}
+                                                            </span>
+                                                        </div>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                                                            <span style={{ color: '#ccc' }}>3차 (30분 GC)</span>
+                                                            <span style={{ color: v2Status?.[ticker]?.buy?.buy_sig3_yn === 'Y' ? '#4ade80' : '#64748b', fontWeight: 'bold' }}>
+                                                                {v2Status?.[ticker]?.buy?.buy_sig3_yn === 'Y' ? '+30' : '0'}
+                                                            </span>
+                                                        </div>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                                                            <span style={{ color: '#fbbf24' }}>⚡ 에너지 <span style={{ fontSize: '0.65rem', color: '#64748b' }}>({Math.abs(relationIndex).toFixed(0)}%)</span></span>
+                                                            <span style={{ color: energyScore > 0 ? '#4ade80' : energyScore < 0 ? '#f87171' : '#64748b', fontWeight: 'bold' }}>
+                                                                {energyScore > 0 ? '+' : ''}{energyScore}
+                                                            </span>
+                                                        </div>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: '4px' }}>
+                                                            <span style={{ fontWeight: 'bold', color: '#fff' }}>소계</span>
+                                                            <span style={{ fontWeight: '900', color: color }}>{cheonganWithEnergy}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* 우측: 보조지표 */}
+                                                <div style={{ background: 'rgba(0,0,0,0.25)', padding: '10px', borderRadius: '8px' }}>
+                                                    <div style={{ fontWeight: 'bold', color: '#94a3b8', marginBottom: '8px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '4px' }}>
+                                                        📊 보조지표 <span style={{ fontWeight: 'normal', color: '#64748b' }}>(±40점)</span>
+                                                    </div>
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                                                            <span style={{ color: '#ccc' }}>RSI</span>
+                                                            <span style={{ color: (scoreObj.breakdown?.rsi || 0) > 0 ? '#4ade80' : (scoreObj.breakdown?.rsi || 0) < 0 ? '#f87171' : '#ccc', fontWeight: 'bold' }}>
+                                                                {scoreObj.breakdown?.rsi > 0 ? '+' : ''}{scoreObj.breakdown?.rsi || 0}
+                                                            </span>
+                                                        </div>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                                                            <span style={{ color: '#ccc' }}>MACD</span>
+                                                            <span style={{ color: (scoreObj.breakdown?.macd || 0) > 0 ? '#4ade80' : (scoreObj.breakdown?.macd || 0) < 0 ? '#f87171' : '#ccc', fontWeight: 'bold' }}>
+                                                                {scoreObj.breakdown?.macd > 0 ? '+' : ''}{scoreObj.breakdown?.macd || 0}
+                                                            </span>
+                                                        </div>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                                                            <span style={{ color: '#ccc' }}>Volume</span>
+                                                            <span style={{ color: (scoreObj.breakdown?.vol || 0) > 0 ? '#4ade80' : (scoreObj.breakdown?.vol || 0) < 0 ? '#f87171' : '#ccc', fontWeight: 'bold' }}>
+                                                                {scoreObj.breakdown?.vol > 0 ? '+' : ''}{scoreObj.breakdown?.vol || 0}
+                                                            </span>
+                                                        </div>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                                                            <span style={{ color: '#ccc' }}>ATR</span>
+                                                            <span style={{ color: (scoreObj.breakdown?.atr || 0) > 0 ? '#4ade80' : (scoreObj.breakdown?.atr || 0) < 0 ? '#f87171' : '#ccc', fontWeight: 'bold' }}>
+                                                                {scoreObj.breakdown?.atr > 0 ? '+' : ''}{scoreObj.breakdown?.atr || 0}
+                                                            </span>
+                                                        </div>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: '4px' }}>
+                                                            <span style={{ fontWeight: 'bold', color: '#fff' }}>소계</span>
+                                                            <span style={{ fontWeight: '900', color: '#94a3b8' }}>
+                                                                {(scoreObj.breakdown?.rsi || 0) + (scoreObj.breakdown?.macd || 0) + (scoreObj.breakdown?.vol || 0) + (scoreObj.breakdown?.atr || 0)}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             </div>
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
-                                                    <span style={{ color: '#ccc' }}>RSI</span>
-                                                    <span style={{ color: (scoreObj.breakdown?.rsi || 0) > 0 ? '#4ade80' : (scoreObj.breakdown?.rsi || 0) < 0 ? '#f87171' : '#ccc', fontWeight: 'bold' }}>
-                                                        {scoreObj.breakdown?.rsi > 0 ? '+' : ''}{scoreObj.breakdown?.rsi || 0}
-                                                    </span>
-                                                </div>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
-                                                    <span style={{ color: '#ccc' }}>MACD</span>
-                                                    <span style={{ color: (scoreObj.breakdown?.macd || 0) > 0 ? '#4ade80' : (scoreObj.breakdown?.macd || 0) < 0 ? '#f87171' : '#ccc', fontWeight: 'bold' }}>
-                                                        {scoreObj.breakdown?.macd > 0 ? '+' : ''}{scoreObj.breakdown?.macd || 0}
-                                                    </span>
-                                                </div>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
-                                                    <span style={{ color: '#ccc' }}>Volume</span>
-                                                    <span style={{ color: (scoreObj.breakdown?.vol || 0) > 0 ? '#4ade80' : (scoreObj.breakdown?.vol || 0) < 0 ? '#f87171' : '#ccc', fontWeight: 'bold' }}>
-                                                        {scoreObj.breakdown?.vol > 0 ? '+' : ''}{scoreObj.breakdown?.vol || 0}
-                                                    </span>
-                                                </div>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
-                                                    <span style={{ color: '#ccc' }}>ATR</span>
-                                                    <span style={{ color: (scoreObj.breakdown?.atr || 0) > 0 ? '#4ade80' : (scoreObj.breakdown?.atr || 0) < 0 ? '#f87171' : '#ccc', fontWeight: 'bold' }}>
-                                                        {scoreObj.breakdown?.atr > 0 ? '+' : ''}{scoreObj.breakdown?.atr || 0}
-                                                    </span>
-                                                </div>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: '4px' }}>
-                                                    <span style={{ fontWeight: 'bold', color: '#fff' }}>소계</span>
-                                                    <span style={{ fontWeight: '900', color: '#94a3b8' }}>
-                                                        {(scoreObj.breakdown?.rsi || 0) + (scoreObj.breakdown?.macd || 0) + (scoreObj.breakdown?.vol || 0) + (scoreObj.breakdown?.atr || 0)}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
+                                        );
+                                    })()}
 
                                     {/* 총점 + 매도경고 */}
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.3)', padding: '10px 12px', borderRadius: '8px', marginBottom: '15px' }}>
