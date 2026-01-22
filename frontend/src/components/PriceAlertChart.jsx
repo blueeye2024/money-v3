@@ -13,12 +13,14 @@ const PriceAlertChart = ({ ticker, currentPrice, changePct = 0, relationIndex = 
     useEffect(() => {
         const fetchChart = async () => {
             try {
-                const res = await fetch(`/api/v2/chart/${cleanTicker}?limit=40`);
+                const res = await fetch(`/api/v2/chart/${cleanTicker}?limit=140`);
                 const json = await res.json();
                 if (json.status === 'success' && json.data) {
                     setChartData5m(json.data.candles_5m || []);
                 }
-            } catch (e) { console.error(e); }
+            } catch (e) {
+                console.error(e);
+            }
         };
 
         const fetchAlerts = async () => {
@@ -38,7 +40,7 @@ const PriceAlertChart = ({ ticker, currentPrice, changePct = 0, relationIndex = 
         return () => { clearInterval(chInt); clearInterval(alInt); };
     }, [cleanTicker]);
 
-    // Prepare Data (Recent 1h = Last 12 of 5m candles)
+    // Prepare Data (Last 120 candles)
     const recentData = useMemo(() => {
         let currentTime;
         try {
@@ -69,7 +71,10 @@ const PriceAlertChart = ({ ticker, currentPrice, changePct = 0, relationIndex = 
                 }
             }
 
-            data = validData.slice(-12); // Last 12 candles = 60 mins
+            // User Request: 100 candles
+            // Slice last 120 to be safe (fits 100 nicely)
+            data = validData.slice(-120);
+
             const lastTime = data[data.length - 1].time;
 
             // Gap Check

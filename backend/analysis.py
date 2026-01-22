@@ -1070,17 +1070,70 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, df_1dRaw, market_vol_score=0, is
         if recent_cross_type == 'dead': news_prob -= 20
         news_prob = max(0, min(100, news_prob))
         
-        # === Cheongan Scoring Engine (User Rules) ===
+        # === Cheongan Scoring Engine (Tower V2 Auto-Signal Ver 6.5.0) ===
+        # [User Request] Auto-Signal Cumulative Scoring
+        # Buy: Step1(+20) -> Step2(+20) -> Step3(+30) = Max 70
+        # Sell: Step1(-20) -> Step2(-20) -> Step3(-20) = Max -60
+        
+        base_main = 0
+        current_stage = 0
+        v2_buy_status = None
+        v2_sell_status = None
+        
+        try:
+             # Fetch Tower V2 Status from DB
+             from db import get_v2_buy_status, get_v2_sell_status
+             v2_buy_status = get_v2_buy_status(ticker)
+             v2_sell_status = get_v2_sell_status(ticker)
+             
+             # Calculate Buy Score (Cumulative)
+             if v2_buy_status:
+                 if v2_buy_status.get('buy_sig1_yn') == 'Y': base_main += 20
+                 if v2_buy_status.get('buy_sig2_yn') == 'Y': base_main += 20
+                 if v2_buy_status.get('buy_sig3_yn') == 'Y': base_main += 30
+                 
+             # Calculate Sell Score (Cumulative Negative)
+             # Note: Sell signals usually override Buy signals in logic, 
+             # but here we sum them. If both active (rare/conflict), they cancel out.
+             # Typically Tower V2 Sell resets Buy, so safe to sum.
+             if v2_sell_status:
+                 if v2_sell_status.get('sell_sig1_yn') == 'Y': base_main -= 20
+                 if v2_sell_status.get('sell_sig2_yn') == 'Y': base_main -= 20
+                 if v2_sell_status.get('sell_sig3_yn') == 'Y': base_main -= 20
+                 
+        except Exception as e:
+             print(f"Scoring V2 Auto Check Error: {e}")
+             base_main = 0
+
+        # Define Signals for Aux Logic based on V2 Score
+        is_buy_signal = base_main > 0
+        is_sell_signal = base_main < 0
+        is_observing = (base_main == 0)
+        
+        # [Strict V6.5.1] Real-Time Sanity Check vs DB Status
+        # User Feedback: "If 5m is Dead Cross, Score shouldn't be 60."
+        # Even if DB says "Buy Step 3 (70pts)", if 5m is broken, we must penalize.
+        
         t30 = 'UP' if last_sma10 > last_sma30 else 'DOWN'
         t5 = 'UP' if last_5m_sma10 > last_5m_sma30 else 'DOWN'
-        is_buy_signal = "매수" in position or "상단" in position
-        is_sell_signal = "매도" in position or "하단" in position
-        is_observing = not (is_buy_signal or is_sell_signal)
-
-
-        base_main = 20 if not is_observing else 10
-        base_confluence = 10 if t30 == t5 else -10
         
+        realtime_penalty = 0
+        
+        if is_buy_signal:
+            # Case 1: 5m Dead Cross (Short-term weakness)
+            if t5 == 'DOWN':
+                realtime_penalty += 20
+                
+            # Case 2: 30m Dead Cross (Major Trend broken but DB not updated yet?)
+            if t30 == 'DOWN':
+                realtime_penalty += 30 # Severe penalty
+                
+        # Apply Penalty to Base Score directly or effectively
+        base_main -= realtime_penalty
+        
+        # Re-evaluate signals after penalty (if score drops to negative?)
+        # Let's keep is_buy_signal true but lower the score.
+
         # Auxiliary Indicators (Max 20)
         aux_rsi = 0
         aux_macd = 0
@@ -1093,7 +1146,7 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, df_1dRaw, market_vol_score=0, is
         if is_buy_signal or (is_observing and t30=='UP'):
             if 45 <= rsi_val <= 75: aux_rsi = 5
         elif is_sell_signal or (is_observing and t30=='DOWN'):
-            if 25 <= rsi_val <= 55: aux_rsi = 5
+             if 25 <= rsi_val <= 55: aux_rsi = 5
             
         # (2) MACD (+5)
         if is_buy_signal or (is_observing and t30=='UP'):
@@ -1108,12 +1161,21 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, df_1dRaw, market_vol_score=0, is
             if current_price < bb_mid: aux_bb = 5
             
         # (4) Cross Type Match (+5)
+        # Check against tech_position's cross type for coherence
         if (is_buy_signal and recent_cross_type == 'gold') or \
            (is_sell_signal and recent_cross_type == 'dead'):
             aux_cross = 5
             
         base_score = base_main + base_confluence + aux_rsi + aux_macd + aux_bb + aux_cross
-        base_score = max(0, min(50, base_score))
+        # [Fix] Remove artificial 50 point cap to allow V2 Cumulative Score (up to 70+)
+        # base_score = max(0, min(50, base_score)) 
+        # Base Score can now be up to 70 + Aux.
+        # We ensure it doesn't go below 0 (though negatives are possible in Sell, let's keep max(0) for now if we want positive scale, 
+        # but User said Sell is -20.
+        # If Sell, score should be low. 
+        # If base_main is -60, and we max(0), it becomes 0. Correct for "Score" (High = Buy).
+        
+        base_score = max(0, base_score)
 
         # 2. Trend Score
         # Signal Price & Bars
@@ -1127,10 +1189,12 @@ def analyze_ticker(ticker, df_30mRaw, df_5mRaw, df_1dRaw, market_vol_score=0, is
                 pass
 
         trend_score = 0
-        if is_buy_signal and current_price > sig_price:
-            trend_score = 10
-        elif is_sell_signal and current_price < sig_price:
-            trend_score = 10
+        # [Strict Rule] Only apply Trend Score if Signal is Active (base_main != 0)
+        if not is_observing:
+            if is_buy_signal and current_price > sig_price:
+                trend_score = 10
+            elif is_sell_signal and current_price < sig_price:
+                trend_score = 10
         
         # 3. Reliability Score
         reliability_score = 0
@@ -2046,12 +2110,25 @@ def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None):
     sig2 = v2_buy and v2_buy.get('buy_sig2_yn') == 'Y'
     sig3 = v2_buy and v2_buy.get('buy_sig3_yn') == 'Y'
     
-    if sig3:
-        cheongan_score = 60  # 3단계 완료
-    elif sig2:
-        cheongan_score = 30  # 2단계까지
-    elif sig1:
-        cheongan_score = 20  # 1단계만
+    # ================================================
+    # 1. 청안 지수 (V2 Signal Base) - Max 70점 (Cumulative)
+    # ================================================
+    cheongan_score = 0
+    sig1 = v2_buy and v2_buy.get('buy_sig1_yn') == 'Y'
+    sig2 = v2_buy and v2_buy.get('buy_sig2_yn') == 'Y'
+    sig3 = v2_buy and v2_buy.get('buy_sig3_yn') == 'Y'
+    
+    # [Ver 6.5.3] Cumulative Scoring (Consistent with Dashboard)
+    if sig1: cheongan_score += 20
+    if sig2: cheongan_score += 20
+    if sig3: cheongan_score += 30
+    
+    # [Relaxed] If Step 3 is ON but Step 2 is OFF (Gap), we allow Step 3 to imply Step 2?
+    # User Request "Each occurs". So if Step 2 is OFF, it's OFF. 
+    # Current State: Step 1(20) + Step 3(30) = 50.
+    # If user wants 70, Step 2 must be ON.
+    # However, Step 3 (Trend Confirmed) is stronger. 
+    # Let's stick to strict cumulative for transparency.
     
     breakdown['cheongan'] = cheongan_score
     
@@ -2796,12 +2873,9 @@ def run_v2_signal_analysis():
             
             # ────────────────────────────────────────────────────────────────
             # SIGNAL 1: 5분봉 Golden Cross (자동 + 수동)
+            # [Ver 6.5.2] Real-Time Update: Check even if holding
             # ────────────────────────────────────────────────────────────────
-            # 조건: MA10 > MA30 (5분봉)
-            # ON:   상승 추세 진입
-            # OFF:  추세 이탈 시 자동 리셋 (수동 설정은 유지)
-            # ────────────────────────────────────────────────────────────────
-            if buy_record and not is_holding:
+            if buy_record:
                 manage_id = buy_record.get('manage_id', 'UNKNOWN')
                 sig1_manual = buy_record.get('is_manual_buy1') == 'Y'
                 
@@ -2816,17 +2890,22 @@ def run_v2_signal_analysis():
                     if buy_record['buy_sig1_yn'] == 'Y' and not sig1_manual:
                         try:
                             from db import manual_update_signal
+                            # Turn OFF Sig 1
                             manual_update_signal(ticker, 'buy1', 0, 'N')
                             print(f"📉 {ticker} Signal 1 OFF (5m trend lost)")
+                            
+                            # [Cascade Reset] If Step 1 fails, Step 2 & Final are invalid
+                            if buy_record['buy_sig2_yn'] == 'Y':
+                                manual_update_signal(ticker, 'buy2', 0, 'N')
+                            if buy_record['final_buy_yn'] == 'Y':
+                                manual_update_signal(ticker, 'final', 0, 'N')
+                                print(f"📉 {ticker} Final Signal REMOVED (Cascade)")
                         except: pass
             
             # ────────────────────────────────────────────────────────────────
             # SIGNAL 2: 상승 지속 +1% (자동 + 수동)
             # ────────────────────────────────────────────────────────────────
-            # 자동 조건: 현재가 >= 1차 신호 발생가 × 1.01
-            # 수동 조건: 현재가 >= 사용자 지정가 (target_box_price)
-            # ────────────────────────────────────────────────────────────────
-            if buy_record and not is_holding:
+            if buy_record:
                 sig2_manual = buy_record.get('is_manual_buy2') == 'Y'
                 
                 # 수동: 사용자 지정가 돌파
@@ -2845,28 +2924,30 @@ def run_v2_signal_analysis():
                         is_sig2_met = False
                         sig2_reason = "1차 신호 대기"
                 
-                if is_sig2_met:
-                    if buy_record['buy_sig2_yn'] == 'N':
-                        if save_v2_buy_signal(ticker, 'sig2', curr_price):
-                            print(f"🚀 {ticker} Signal 2 ON ({sig2_reason})")
-                            log_history(manage_id, ticker, "2차매수신호", sig2_reason, curr_price)
-                            sounds_to_play.add(('buy2', ticker))
+                # Only allow Sig 2 if Sig 1 is ON (Sequential)
+                if buy_record['buy_sig1_yn'] == 'Y':
+                    if is_sig2_met:
+                        if buy_record['buy_sig2_yn'] == 'N':
+                            if save_v2_buy_signal(ticker, 'sig2', curr_price):
+                                print(f"🚀 {ticker} Signal 2 ON ({sig2_reason})")
+                                log_history(manage_id, ticker, "2차매수신호", sig2_reason, curr_price)
+                                sounds_to_play.add(('buy2', ticker))
+                    else:
+                        if buy_record['buy_sig2_yn'] == 'Y' and not sig2_manual:
+                            try:
+                                from db import manual_update_signal
+                                manual_update_signal(ticker, 'buy2', 0, 'N')
+                                print(f"📉 {ticker} Signal 2 OFF (condition lost)")
+                            except: pass
                 else:
-                    if buy_record['buy_sig2_yn'] == 'Y' and not sig2_manual:
-                        try:
-                            from db import manual_update_signal
-                            manual_update_signal(ticker, 'buy2', 0, 'N')
-                            print(f"📉 {ticker} Signal 2 OFF (condition lost)")
-                        except: pass
+                    # If Sig 1 is OFF, Sig 2 must be OFF
+                    if buy_record['buy_sig2_yn'] == 'Y':
+                         manual_update_signal(ticker, 'buy2', 0, 'N')
             
             # ────────────────────────────────────────────────────────────────
             # SIGNAL 3: 30분봉 Golden Cross (자동 + 수동)
             # ────────────────────────────────────────────────────────────────
-            # 조건: MA10 > MA30 (30분봉)
-            # ON:   중기 상승 추세 확정
-            # OFF:  추세 이탈 시 자동 리셋 (수동 설정은 유지)
-            # ────────────────────────────────────────────────────────────────
-            if buy_record and not is_holding:
+            if buy_record:
                 sig3_manual = buy_record.get('is_manual_buy3') == 'Y'
                 
                 if is_30m_trend_up:
@@ -2882,14 +2963,15 @@ def run_v2_signal_analysis():
                             from db import manual_update_signal
                             manual_update_signal(ticker, 'buy3', 0, 'N')
                             print(f"📉 {ticker} Signal 3 OFF (30m trend lost)")
+                            # If Step 3 lost, Final also blocked? Maybe not strictly sequential but Final requires all 3.
+                            if buy_record['final_buy_yn'] == 'Y':
+                                manual_update_signal(ticker, 'final', 0, 'N')
                         except: pass
             
             # ────────────────────────────────────────────────────────────────
             # FINAL BUY: 최종 진입 확정
             # ────────────────────────────────────────────────────────────────
-            # 조건: 1차 + 2차 + 3차 모두 Y
-            # ────────────────────────────────────────────────────────────────
-            if buy_record and not is_holding:
+            if buy_record:
                 updated_buy = get_v2_buy_status(ticker)
                 if updated_buy:
                     all_met = (updated_buy['buy_sig1_yn'] == 'Y' and 
@@ -2901,6 +2983,13 @@ def run_v2_signal_analysis():
                             print(f"🎯 {ticker} FINAL BUY! All conditions met.")
                             log_history(manage_id, ticker, "최종진입완료", "Triple Filter Complete", curr_price)
                             sounds_to_play.add(('final_buy', ticker))
+                    elif not all_met and updated_buy['final_buy_yn'] == 'Y':
+                        # Auto Remove Final if any condition fails
+                        try:
+                             from db import manual_update_signal
+                             manual_update_signal(ticker, 'final', 0, 'N')
+                             print(f"📉 {ticker} Final Signal REMOVED (Conditions not met)")
+                        except: pass
             
             # ────────────────────────────────────────────────────────────────
             # SMS 발송 (우선순위: final > 3차 > 2차 > 1차)

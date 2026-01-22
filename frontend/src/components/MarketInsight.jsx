@@ -453,18 +453,37 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                                         </div>
                                     </div>
 
-                                    {/* Score Breakdown Bar (V3.5) */}
-                                    <div style={{ marginBottom: '15px' }}>
-                                        <div style={{ width: '100%', height: '8px', background: '#334155', borderRadius: '4px', overflow: 'hidden', display: 'flex' }}>
-                                            <div style={{ width: `${(scoreObj.breakdown?.cheongan || 0)}%`, background: color, opacity: 1 }} title="청안 프라임 지수" />
-                                            <div style={{ width: `${(scoreObj.breakdown?.tech || 0)}%`, background: color, opacity: 0.6 }} title="기술적 지표" />
-                                            {/* Penalty visualization (Red bar at end if exists, conceptually) */}
-                                            {(scoreObj.breakdown?.penalty || 0) > 0 && <div style={{ width: `${scoreObj.breakdown.penalty}%`, background: '#ef4444' }} title="감점 요인" />}
+                                    {/* Score Breakdown Detail (V6.5.0) */}
+                                    <div style={{ background: 'rgba(0,0,0,0.2)', padding: '12px', borderRadius: '8px', marginBottom: '15px', fontSize: '0.8rem', color: '#ccc' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '4px' }}>
+                                            <span>🔥 기본점수 (V2 Signal):</span>
+                                            <span style={{ fontWeight: 'bold', color: color }}>{scoreObj.breakdown?.cheongan || 0}점</span>
                                         </div>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: '#94a3b8', marginTop: '4px' }}>
-                                            <span>청안지수({scoreObj.breakdown?.cheongan || 0}/60)</span>
-                                            <span>Tech({scoreObj.breakdown?.tech || 0}/40)</span>
-                                            <span style={{ color: (scoreObj.breakdown?.penalty || 0) > 0 ? '#ef4444' : '#94a3b8' }}>감점(-{scoreObj.breakdown?.penalty || 0})</span>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                <span>RSI:</span>
+                                                <span style={{ color: (scoreObj.breakdown?.rsi || 0) > 0 ? '#4ade80' : (scoreObj.breakdown?.rsi || 0) < 0 ? '#f87171' : '#ccc' }}>
+                                                    {scoreObj.breakdown?.rsi > 0 ? '+' : ''}{scoreObj.breakdown?.rsi || 0}
+                                                </span>
+                                            </div>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                <span>MACD:</span>
+                                                <span style={{ color: (scoreObj.breakdown?.macd || 0) > 0 ? '#4ade80' : (scoreObj.breakdown?.macd || 0) < 0 ? '#f87171' : '#ccc' }}>
+                                                    {scoreObj.breakdown?.macd > 0 ? '+' : ''}{scoreObj.breakdown?.macd || 0}
+                                                </span>
+                                            </div>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                <span>Volume:</span>
+                                                <span style={{ color: (scoreObj.breakdown?.vol || 0) > 0 ? '#4ade80' : (scoreObj.breakdown?.vol || 0) < 0 ? '#f87171' : '#ccc' }}>
+                                                    {scoreObj.breakdown?.vol > 0 ? '+' : ''}{scoreObj.breakdown?.vol || 0}
+                                                </span>
+                                            </div>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                <span>ATR:</span>
+                                                <span style={{ color: (scoreObj.breakdown?.atr || 0) > 0 ? '#4ade80' : (scoreObj.breakdown?.atr || 0) < 0 ? '#f87171' : '#ccc' }}>
+                                                    {scoreObj.breakdown?.atr > 0 ? '+' : ''}{scoreObj.breakdown?.atr || 0}
+                                                </span>
+                                            </div>
                                         </div>
                                     </div>
 

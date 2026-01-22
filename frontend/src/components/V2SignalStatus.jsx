@@ -27,7 +27,7 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
     useEffect(() => {
         const fetchChart = async () => {
             try {
-                const res = await fetch(`/api/v2/chart/${cleanTicker}?limit=40`);
+                const res = await fetch(`/api/v2/chart/${cleanTicker}?limit=140`);
                 const json = await res.json();
                 if (json.status === 'success' && json.data) {
                     setChartData5m(json.data.candles_5m || []);
@@ -358,21 +358,70 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
                     const targetKey = `manual_target_${stepType === 'SELL' ? 'sell' : 'buy'}${stepIdx}`;
                     const manualTarget = data?.[targetKey] > 0 ? data[targetKey] : null;
 
-                    // Ver 3.0 Signal Time Logic
+                    // [Ver 6.5.4] Signal Time Display (Direct from DB)
+                    const timeKey = step.key.replace('_yn', '_dt'); // buy_sig1_dt
                     let signalTimeDisplay = null;
-                    if (step.key === 'buy_sig1_yn') signalTimeDisplay = signals.gold_5m; // 1차 매수 (5분 골든)
-                    if (step.key === 'buy_sig3_yn') signalTimeDisplay = signals.gold_30m; // 3차 매수 (30분 골든)
-                    if (step.key === 'sell_sig1_yn') signalTimeDisplay = signals.dead_5m; // 1차 매도 (5분 데드)
-                    if (step.key === 'sell_sig3_yn') signalTimeDisplay = signals.dead_30m; // 3차 매도 (30분 데드)
 
-                    // Clean Time String
-                    if (signalTimeDisplay && signalTimeDisplay !== 'N' && typeof signalTimeDisplay === 'string') {
+                    if (data?.[timeKey]) {
                         try {
-                            const timePart = signalTimeDisplay.split(' ')[1]?.substring(0, 5);
-                            if (timePart) signalTimeDisplay = timePart;
-                        } catch (e) { }
+                            const dtStr = String(data[timeKey]);
+                            const dateObj = new Date(dtStr);
+                            if (!isNaN(dateObj)) {
+                                const mo = String(dateObj.getMonth() + 1).padStart(2, '0');
+                                const dd = String(dateObj.getDate()).padStart(2, '0');
+                                const hh = String(dateObj.getHours()).padStart(2, '0');
+                                const mm = String(dateObj.getMinutes()).padStart(2, '0');
+                                signalTimeDisplay = `${mo}-${dd} ${hh}:${mm}`;
+                            } else {
+                                // Fallback parse if string is weird
+                                signalTimeDisplay = dtStr.substring(5, 16);
+                            }
+                        } catch (e) {
+                            signalTimeDisplay = null;
+                        }
+                    }
+
+                    // [Ver 6.5.5] Detailed Info Display Logic
+                    const isSig1Active = data?.buy_sig1_yn === 'Y';
+                    let infoContent = null;
+
+                    if (isActive) {
+                        // ACTIVE STATE: Show Price + Time
+                        infoContent = (
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                <span style={{ color: '#fbbf24', fontWeight: 'bold', fontSize: '0.8rem' }}>
+                                    {formatPrice(signalPrice)}
+                                </span>
+                                {isManual && <span style={{ fontSize: '0.6rem', color: '#38bdf8' }}>USER</span>}
+                                {signalTimeDisplay && (
+                                    <span style={{ fontSize: '0.65rem', color: '#9ca3af', marginTop: '2px' }}>
+                                        {signalTimeDisplay}
+                                    </span>
+                                )}
+                            </div>
+                        );
                     } else {
-                        signalTimeDisplay = null;
+                        // INACTIVE STATE
+                        if (step.key === 'buy_sig2_yn' && isSig1Active && stepType === 'BUY') {
+                            // Case: Sig1 Active, Sig2 Inactive -> Show Expected Target (+1%)
+                            const sig1Price = parseFloat(data?.buy_sig1_price || 0);
+                            if (sig1Price > 0) {
+                                const targetPrice = sig1Price * 1.01;
+                                infoContent = (
+                                    <span style={{ color: '#fbbf24', fontWeight: 'bold', fontSize: '0.75rem' }}>
+                                        예상 ${targetPrice.toFixed(2)}
+                                    </span>
+                                );
+                            } else {
+                                infoContent = step.desc;
+                            }
+                        } else if (manualTarget) {
+                            // Manual Target Set
+                            infoContent = <span style={{ color: '#fbbf24', fontWeight: 'bold', fontSize: '0.8rem' }}>🎯 ${Number(manualTarget).toFixed(2)}</span>;
+                        } else {
+                            // Default Description (No Time)
+                            infoContent = step.desc;
+                        }
                     }
 
                     return (
@@ -393,7 +442,7 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
                                     cursor: isActiveMode ? 'pointer' : 'default', // Disable cursor if not active
                                     opacity: isActiveMode ? 1 : 0.8
                                 }}
-                                title={isActiveMode ? (isManual ? "사용자 수동 확정" : (signalTimeDisplay ? `신호 발생: ${signals.gold_5m || 'N/A'}` : "수동 신호 발생 (클릭)")) : "진입 신호 (수정 불가)"}
+                                title={isActiveMode ? (isManual ? "사용자 수동 확정" : (signalTimeDisplay ? `신호 발생: ${signalTimeDisplay}` : "수동 신호 발생 (클릭)")) : "진입 신호 (수정 불가)"}
                             >
                                 <span style={{ fontSize: '1rem', color: isActive ? '#fff' : '#64748b', fontWeight: 'bold' }}>
                                     {isActive ? (isManual ? '🧑‍💻' : '✓') : idx + 1}
@@ -404,22 +453,7 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
                                     {step.label}
                                 </div>
                                 <div style={{ fontSize: '0.65rem', color: '#475569', marginTop: '2px' }}>
-                                    {isActive ? (
-                                        // Active: Show Price (+ Manual Badge)
-                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                                            <span style={{ color: '#fbbf24', fontWeight: 'bold', fontSize: '0.8rem' }}>
-                                                {formatPrice(signalPrice)}
-                                            </span>
-                                            {isManual && <span style={{ fontSize: '0.6rem', color: '#38bdf8' }}>USER</span>}
-                                        </div>
-                                    ) : (
-                                        // Inactive: Show Description or Manual Target
-                                        manualTarget ? (
-                                            <span style={{ color: '#fbbf24', fontWeight: 'bold', fontSize: '0.8rem' }}>🎯 ${Number(manualTarget).toFixed(2)}</span>
-                                        ) : (
-                                            signalTimeDisplay ? <span style={{ color: '#64748b' }}>({signalTimeDisplay})</span> : step.desc
-                                        )
-                                    )}
+                                    {infoContent}
                                 </div>
                             </div>
                         </div>
