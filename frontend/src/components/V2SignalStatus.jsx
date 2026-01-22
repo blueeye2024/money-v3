@@ -713,9 +713,28 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
                 let recentData;
                 let baseData = [];
 
+                // [Ver 6.5.1] Gap Check: Only add current time if within 30 mins of last data
+                const getMinutesDiff = (t1, t2) => {
+                    try {
+                        const [h1, m1] = t1.split(':').map(Number);
+                        const [h2, m2] = t2.split(':').map(Number);
+                        let diff = (h2 * 60 + m2) - (h1 * 60 + m1);
+                        if (diff < -720) diff += 1440; // Handle midnight wrap (simple)
+                        return diff;
+                    } catch (e) { return 999; }
+                };
+
                 if (chartData5m.length > 0) {
                     baseData = chartData5m.slice(-6);
-                    recentData = [...baseData, { time: currentTime, price: current_price }];
+                    const lastTime = baseData[baseData.length - 1].time;
+                    const diff = getMinutesDiff(lastTime, currentTime);
+
+                    if (diff <= 30 && diff >= 0) {
+                        recentData = [...baseData, { time: currentTime, price: current_price }];
+                    } else {
+                        // Market Closed or Large Gap -> Show only historical data
+                        recentData = [...baseData];
+                    }
                 } else {
                     // Fallback: create simple data points around current price for visualization
                     const times = ['00:00', '00:05', '00:10', '00:15', '00:20', currentTime];

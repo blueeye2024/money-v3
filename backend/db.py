@@ -3,6 +3,7 @@ from pymysql.cursors import DictCursor
 from dbutils.pooled_db import PooledDB
 import os
 from datetime import datetime
+import pandas as pd
 
 # Connection Config
 DB_CONFIG = {
@@ -1584,9 +1585,18 @@ def get_mini_chart_data(ticker, limit=50):
             vals = [float(data[i]['close_price']) for i in range(idx - period + 1, idx + 1)]
             return sum(vals) / period
         
+        # [Ver 6.5] Timezone Conversion Helper
+        # Data is stored as KST (Standardized)
+        def convert_to_kst_time(r):
+            if r['hour'] is None or r['minute'] is None: return "00:00"
+            return f"{r['hour']:02d}:{r['minute']:02d}"
+
         # 5분봉 처리
         prev_cross_5m = None
         for i, r in enumerate(rows_5m):
+            # [Fix] KST Time String
+            r['time'] = convert_to_kst_time(r)
+
             if i < 29:  # MA30 계산 불가
                 continue
             

@@ -25,9 +25,10 @@ def populate_soxl_data():
 
     # 2. Prepare Timezones
     ny_tz = pytz.timezone('America/New_York')
+    kst_tz = pytz.timezone('Asia/Seoul')
     
-    # 3. Filter Dates
-    df.index = df.index.tz_convert(ny_tz)
+    # 3. Filter Dates & Convert to KST
+    df.index = df.index.tz_convert(kst_tz) # Convert to KST
     unique_dates = sorted(list(set(df.index.date)))
     
     # Keep only last 3 days
@@ -42,13 +43,7 @@ def populate_soxl_data():
         if timestamps.date() not in target_dates:
             continue
             
-        t = timestamps.time()
-        start_time = datetime.strptime("04:00", "%H:%M").time()
-        end_time = datetime.strptime("16:00", "%H:%M").time()
-        
-        if not (start_time <= t <= end_time):
-            continue
-            
+        # [Ver 6.5] No Time Filter (Allow KST overnight)
         try:
             row = df.loc[timestamps]
             close = float(row['Close'])
