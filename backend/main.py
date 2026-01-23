@@ -543,10 +543,10 @@ def monitor_signals():
                                 # Check if already sent for this specific timestamp
                                 last_sent_dt = SOUND_SENT_LOG.get(code)
                                 if str(last_sent_dt) != str(dt):
-                                    # [FIX Ver 6.3.5] Disable V2 Algo Sounds (User wants to manage alerts manually only)
-                                    # if code not in PENDING_SOUNDS: PENDING_SOUNDS.append(code)
+                                    # [Ver 6.5.7] V2 Algo Sounds 재활성화
+                                    if code not in PENDING_SOUNDS: PENDING_SOUNDS.append(code)
                                     SOUND_SENT_LOG[code] = dt
-                                    print(f"🔊 [Muted] V2 Algo Sound: {code} (Signal: {dt})")
+                                    print(f"🔊 V2 Algo Sound Queued: {code} (Signal: {dt})")
 
                     # Check Steps
                     if v2_buy.get('buy_sig1_yn') == 'Y': try_enqueue_sound("1", v2_buy.get('buy_sig1_dt'), prefix)
@@ -566,10 +566,10 @@ def monitor_signals():
                                 code = f"{code_prefix}{suffix}"
                                 last_sent_dt = SOUND_SENT_LOG.get(code)
                                 if str(last_sent_dt) != str(dt):
-                                    # [FIX Ver 6.3.5] Disable V2 Algo Sounds (User wants to manage alerts manually only)
-                                    # if code not in PENDING_SOUNDS: PENDING_SOUNDS.append(code)
+                                    # [Ver 6.5.7] V2 Algo Sounds 재활성화
+                                    if code not in PENDING_SOUNDS: PENDING_SOUNDS.append(code)
                                     SOUND_SENT_LOG[code] = dt
-                                    print(f"🔊 [Muted] V2 Algo Sound: {code} (Signal: {dt})")
+                                    print(f"🔊 V2 Algo Sound Queued: {code} (Signal: {dt})")
 
                     if v2_sell.get('sell_sig1_yn') == 'Y': try_enqueue_sound_sell("1", v2_sell.get('sell_sig1_dt'), prefix)
                     if v2_sell.get('sell_sig2_yn') == 'Y': try_enqueue_sound_sell("2", v2_sell.get('sell_sig2_dt'), prefix)
@@ -1231,6 +1231,18 @@ def get_v2_status(ticker: str):
                     new_obj[k] = v.isoformat()
             return new_obj
 
+        # [Ver 6.5.8] BBI 계산 추가
+        bbi_info = {'bbi': 0, 'adx': 0, 'bbw_ratio': 1.0, 'status': '계산 중'}
+        try:
+            from analysis import calculate_bbi, fetch_data
+            data_30m, _, _, _, _ = fetch_data([ticker], force=False)
+            if data_30m and ticker in data_30m:
+                df_30 = data_30m[ticker]
+                if df_30 is not None and not df_30.empty:
+                    bbi_info = calculate_bbi(df_30)
+        except Exception as e:
+            print(f"BBI Calc Error in API: {e}")
+
         return {
             "status": "success",
             "buy": serialize(buy_record),
@@ -1240,7 +1252,8 @@ def get_v2_status(ticker: str):
                 "change_pct": change_pct,
                 "day_high": day_high
             },
-            "metrics": serialize(indicators)  # Add metrics from market_indicators_log
+            "metrics": serialize(indicators),  # Add metrics from market_indicators_log
+            "bbi": bbi_info  # [Ver 6.5.8] BBI 정보 추가
         }
     except Exception as e:
         print(f"V2 Status Error: {e}")

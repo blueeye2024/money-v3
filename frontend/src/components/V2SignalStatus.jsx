@@ -12,7 +12,7 @@ const getCleanTicker = (title) => {
     return title.split(' ')[0].toUpperCase();
 };
 
-const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: propMetrics, isBear = false, onRefresh }) => {
+const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: propMetrics, bbi, isBear = false, onRefresh }) => {
     // Derived values
     const { current_price, daily_change, change_pct } = renderInfo || {};
     const displayChange = change_pct ?? daily_change;
@@ -536,25 +536,77 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
                 </div>
             </div>
 
-            {/* Hold - Buy Steps */}
-            {
-                isHolding && (
-                    <div style={{ marginBottom: '1.5rem', opacity: 0.8, filter: 'grayscale(0.3)' }}>
-                        <div style={{ fontSize: '0.7rem', color: '#10b981', fontWeight: 'bold', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span>✅ 진입 신호 (완료)</span>
-                            <div style={{ height: '1px', flex: 1, background: '#10b981', opacity: 0.3 }}></div>
+
+
+            {/* [Ver 6.5.7] 진입 신호 (완료) 섹션 제거 - 보유 중일 때는 매도 감시만 표시 */}
+
+            {/* [Ver 6.5.8] BBI (Box Breakout Index) Display */}
+            {bbi && (
+                <div style={{ marginBottom: '1.2rem', padding: '12px', background: 'rgba(0,0,0,0.2)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 'bold' }}>📦 BBI (박스권 지수)</span>
+                            <span style={{ fontSize: '0.7rem', color: '#64748b', background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px' }}>
+                                Range: -10 ~ +10
+                            </span>
                         </div>
-                        {renderSteps('BUY', buyStatus, false)}
+                        <span style={{
+                            fontSize: '1rem',
+                            fontWeight: '900',
+                            color: bbi.bbi < 0 ? '#fbbf24' : '#34d399',
+                            textShadow: bbi.bbi < 0 ? '0 0 10px rgba(251, 191, 36, 0.3)' : '0 0 10px rgba(52, 211, 153, 0.3)'
+                        }}>
+                            {bbi.bbi > 0 ? '+' : ''}{bbi.bbi}
+                        </span>
                     </div>
-                )
-            }
+
+                    {/* Gauge Bar */}
+                    <div style={{ height: '8px', background: '#1e293b', borderRadius: '4px', position: 'relative', overflow: 'hidden', marginBottom: '8px', boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.3)' }}>
+                        {/* Center Marker */}
+                        <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: '2px', background: '#475569', zIndex: 10 }}></div>
+
+                        {/* Fill */}
+                        <div style={{
+                            position: 'absolute',
+                            top: 0, bottom: 0,
+                            left: bbi.bbi >= 0 ? '50%' : `${Math.max(0, 50 + (bbi.bbi * 5))}%`,
+                            width: `${Math.min(50, Math.abs(bbi.bbi) * 5)}%`,
+                            background: bbi.bbi < 0 ? 'linear-gradient(90deg, #f59e0b, #fbbf24)' : 'linear-gradient(90deg, #10b981, #34d399)',
+                            borderRadius: '4px',
+                            transition: 'all 0.5s ease-out'
+                        }}></div>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', alignItems: 'center' }}>
+                        <span style={{ color: bbi.bbi < 0 ? '#fbbf24' : '#34d399', fontWeight: 'bold' }}>
+                            {bbi.bbi < 0 ? (
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    💤 {isHolding ? '박스권 (매도 유효)' : '박스권 (신호 필터링)'}
+                                </span>
+                            ) : (
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    🚀 추세 구간 (적극 매매)
+                                </span>
+                            )}
+                        </span>
+                        <span style={{ color: '#94a3b8', fontWeight: '500' }}>
+                            {bbi.status}
+                        </span>
+                    </div>
+                </div>
+            )}
 
             {/* Active Steps */}
             <div>
-                {isHolding && (
+                {isHolding ? (
                     <div style={{ fontSize: '0.7rem', color: '#ef4444', fontWeight: 'bold', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <span>👁️ 매도 감시 중</span>
                         <div style={{ height: '1px', flex: 1, background: '#ef4444', opacity: 0.3 }}></div>
+                    </div>
+                ) : (
+                    <div style={{ fontSize: '0.7rem', color: themeColor, fontWeight: 'bold', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span>👁️ 매수 감시 중</span>
+                        <div style={{ height: '1px', flex: 1, background: themeColor, opacity: 0.3 }}></div>
                     </div>
                 )}
                 {renderSteps(mode, mode === 'BUY' ? buyStatus : sellStatus, true)}

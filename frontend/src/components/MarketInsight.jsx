@@ -615,6 +615,7 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                         sellStatus={v2Status.SOXL?.sell || regimeDetails?.soxl?.v2_sell}
                         renderInfo={v2Status.SOXL?.market_info || regimeDetails?.soxl}
                         metrics={v2Status.SOXL?.metrics}
+                        bbi={v2Status.SOXL?.bbi}
                         isBear={false}
                         onRefresh={onRefresh}
                     />
@@ -624,6 +625,7 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                         sellStatus={v2Status.SOXS?.sell || regimeDetails?.soxs?.v2_sell}
                         renderInfo={v2Status.SOXS?.market_info || regimeDetails?.soxs}
                         metrics={v2Status.SOXS?.metrics}
+                        bbi={v2Status.SOXS?.bbi}
                         isBear={true}
                         onRefresh={onRefresh}
                     />
@@ -759,6 +761,18 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                                                 </div>
                                                 <div style={{ color: '#e2e8f0', fontWeight: 'bold', marginTop: '2px' }}>
                                                     {dbMetrics.atr ? Number(dbMetrics.atr).toFixed(2) : '-'}
+                                                </div>
+                                            </div>
+                                            {/* BBI */}
+                                            <div style={{ background: 'rgba(255,255,255,0.05)', padding: '8px', borderRadius: '4px' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                    <span style={{ color: '#94a3b8', fontSize: '0.7rem' }}>BBI (Box)</span>
+                                                    <span style={{ color: getScoreColor(breakdown.bbi), fontWeight: 'bold', fontSize: '0.75rem' }}>
+                                                        {formatScore(breakdown.bbi || 0)}
+                                                    </span>
+                                                </div>
+                                                <div style={{ color: '#e2e8f0', fontWeight: 'bold', marginTop: '2px' }}>
+                                                    {v2Status?.[ticker]?.bbi?.bbi ? Number(v2Status?.[ticker]?.bbi?.bbi).toFixed(1) : '-'}
                                                 </div>
                                             </div>
                                         </div>

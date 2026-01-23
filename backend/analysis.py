@@ -548,6 +548,72 @@ def calculate_ema(series, span):
 def calculate_rsi(series, window=14):
     return ta.rsi(series, length=window)
 
+# [Ver 6.5.8] 박스권 탈출 지수 (Box Breakout Index)
+def calculate_bbi(df, period=20):
+    """
+    박스권 탈출 지수 계산
+    범위: -10 (극심한 횡보) ~ +10 (강력한 돌파)
+    
+    Args:
+        df: DataFrame with Close, High, Low columns
+        period: BBW 평균 계산 기간 (default: 20)
+    Returns:
+        dict: {'bbi': float, 'adx': float, 'bbw_ratio': float, 'status': str}
+    """
+    try:
+        close = df['Close']
+        high = df['High']
+        low = df['Low']
+        
+        if len(df) < 30:
+            return {'bbi': 0, 'adx': 0, 'bbw_ratio': 1.0, 'status': '데이터 부족'}
+        
+        # 1. ADX 14일 - 추세 강도
+        adx_df = ta.adx(high, low, close, length=14)
+        adx = float(adx_df['ADX_14'].iloc[-1]) if adx_df is not None and 'ADX_14' in adx_df.columns else 20.0
+        
+        # 2. 볼린저 밴드폭 (BBW)
+        bb = ta.bbands(close, length=20, std=2)
+        if bb is not None and 'BBU_20_2.0' in bb.columns:
+            bbw = (bb['BBU_20_2.0'] - bb['BBL_20_2.0']) / bb['BBM_20_2.0']
+            current_bbw = float(bbw.iloc[-1])
+            avg_bbw = float(bbw.tail(period).mean())
+        else:
+            current_bbw = 0.05
+            avg_bbw = 0.05
+        
+        # 3. Trend Factor (0~10)
+        trend_factor = max(0, min(10, ((adx - 15) / 20) * 10))
+        
+        # 4. Vol Factor (0~10)
+        bbw_ratio = current_bbw / avg_bbw if avg_bbw > 0 else 1.0
+        vol_factor = max(0, min(10, ((bbw_ratio - 0.8) / 0.7) * 10))
+        
+        # 5. BBI 계산
+        bbi = round((trend_factor + vol_factor) - 10, 2)
+        
+        # 6. 상태 텍스트
+        if bbi <= -7:
+            status = '극심한 박스권'
+        elif bbi <= -1:
+            status = '일반 횡보'
+        elif bbi <= 3:
+            status = '변동성 시작'
+        elif bbi <= 7:
+            status = '박스권 돌파'
+        else:
+            status = '강력한 슈팅'
+        
+        return {
+            'bbi': bbi,
+            'adx': round(adx, 2),
+            'bbw_ratio': round(bbw_ratio, 2),
+            'status': status
+        }
+    except Exception as e:
+        print(f"BBI Calculation Error: {e}")
+        return {'bbi': 0, 'adx': 0, 'bbw_ratio': 1.0, 'status': '계산 오류'}
+
 def get_score_interpretation(score, position):
     if "매수" in position:
         if score >= 80: return "강력 매수 분출"
@@ -2074,7 +2140,7 @@ def get_evaluation_label(score):
     else: return "매도/리스크 관리 (Sell/Risk)"
 
 
-def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None):
+def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None, bbi_score=0):
     """
     V4.0 안티그래비티 스코어 시스템 (Antigravity Score System)
     
@@ -2099,6 +2165,7 @@ def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None):
         "macd": 0,        # MACD 점수
         "vol": 0,         # Vol Ratio 점수
         "atr": 0,         # ATR 점수
+        "bbi": 0,         # [Ver 6.5.8] BBI 점수
         "total": 0
     }
     
@@ -2222,10 +2289,14 @@ def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None):
         atr_score = -8    # 패닉셀 구간
     breakdown['atr'] = atr_score
     
+    # [Ver 6.5.8] F. BBI 채점 (+10 ~ -10)
+    # BBI Score is passed directly (Range -10 to +10)
+    breakdown['bbi'] = bbi_score
+
     # ================================================
     # 3. 총점 계산
     # ================================================
-    indicator_total = breakdown['rsi'] + breakdown['macd'] + breakdown['vol'] + breakdown['atr']
+    indicator_total = breakdown['rsi'] + breakdown['macd'] + breakdown['vol'] + breakdown['atr'] + breakdown['bbi']
     sell_penalty = breakdown.get('sell_penalty', 0)
     total_score = breakdown['cheongan'] + indicator_total + sell_penalty
     
@@ -2570,7 +2641,16 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
              v2_sell_info = results[t].get('v2_sell')
              
         # 1. Calculate Score
-        score_model = calculate_holding_score(results[t], techs[t], v2_buy_info, v2_sell_info)
+        # [Ver 6.5.8] Calculate BBI for Score Weighting
+        bbi_score = 0
+        try:
+            if t in ['SOXL', 'SOXS'] and df_30 is not None:
+                bbi_res = calculate_bbi(df_30)
+                bbi_score = bbi_res.get('bbi', 0)
+        except Exception as e:
+            print(f"BBI Score Error {t}: {e}")
+
+        score_model = calculate_holding_score(results[t], techs[t], v2_buy_info, v2_sell_info, bbi_score=bbi_score)
         scores[t] = score_model
         
         # 2. Generate Guide
@@ -2825,6 +2905,17 @@ def run_v2_signal_analysis():
             
             # --- Logic Checking ---
             
+            # [Ver 6.5.8] BBI (박스권 탈출 지수) 계산 - 신호 필터링용
+            bbi_result = calculate_bbi(df_30)
+            bbi_score = bbi_result['bbi']
+            bbi_status = bbi_result['status']
+            print(f"  📊 {ticker} BBI: {bbi_score} ({bbi_status})")
+            
+            # BBI 기반 신호 필터링 여부 결정
+            # BBI < 0: 박스권 → 신호 사운드 억제
+            # BBI >= 0: 변동성/돌파 → 정상 처리
+            bbi_filter_active = bbi_score < 0
+            
             # [Ver 5.8.3] Independent Signal Processing
             # Each signal checks and updates INDEPENDENTLY
             # Sound duplicate prevention using set
@@ -3016,17 +3107,20 @@ def run_v2_signal_analysis():
             
             # ────────────────────────────────────────────────────────────────
             # SMS 발송 (우선순위: final > 3차 > 2차 > 1차)
+            # [Ver 6.5.8] BBI 필터: 박스권(BBI<0)일 때는 SMS 발송 억제
             # ────────────────────────────────────────────────────────────────
-            if sounds_to_play:
+            if sounds_to_play and not bbi_filter_active:
                 sms_time = get_current_time_str_sms()
                 if ('final_buy', ticker) in sounds_to_play:
-                    send_sms(ticker, "최종매수(V2)", curr_price, sms_time, "트리플필터완성")
+                    send_sms(ticker, "최종매수(V2)", curr_price, sms_time, f"트리플필터완성 (BBI:{bbi_score})")
                 elif ('buy3', ticker) in sounds_to_play:
-                    send_sms(ticker, "3차매수(30분봉)", curr_price, sms_time, "30분봉 추세확정")
+                    send_sms(ticker, "3차매수(30분봉)", curr_price, sms_time, f"30분봉 추세확정 (BBI:{bbi_score})")
                 elif ('buy2', ticker) in sounds_to_play:
-                    send_sms(ticker, "2차매수(+1%)", curr_price, sms_time, "상승 지속 확인")
+                    send_sms(ticker, "2차매수(+1%)", curr_price, sms_time, f"상승 지속 확인 (BBI:{bbi_score})")
                 elif ('buy1', ticker) in sounds_to_play:
-                    send_sms(ticker, "1차매수(5분봉)", curr_price, sms_time, "5분봉 골든크로스")
+                    send_sms(ticker, "1차매수(5분봉)", curr_price, sms_time, f"5분봉 골든크로스 (BBI:{bbi_score})")
+            elif sounds_to_play and bbi_filter_active:
+                print(f"  🔇 {ticker} SMS 억제 (박스권: BBI={bbi_score})")
 
             # --- SELL SIDE (Position Management) ---
             # [Ver 5.8.3] Independent Signal Processing for SELL
@@ -3150,14 +3244,15 @@ def run_v2_signal_analysis():
                 # No auto-reset for sell3 (purely target-based)
                 
                 # === SEND SELL SMS (최대 1개만 - 우선순위: 3 > 2 > 1) ===
+                # [Ver 6.5.8] BBI 필터: 박스권일 때 매도 신호도 억제 (단, 보유 중일 때는 리스크 관리 위해 발송)
                 if sell_sounds:
                     sms_time = get_current_time_str_sms()
                     if ('sell3', ticker) in sell_sounds:
-                        send_sms(ticker, "3차청산", curr_price, sms_time, "최종 목표가 도달")
+                        send_sms(ticker, "3차청산", curr_price, sms_time, f"최종 목표가 도달 (BBI:{bbi_score})")
                     elif ('sell2', ticker) in sell_sounds:
-                        send_sms(ticker, "2차청산", curr_price, sms_time, "손절/이익실현")
+                        send_sms(ticker, "2차청산", curr_price, sms_time, f"손절/이익실현 (BBI:{bbi_score})")
                     elif ('sell1', ticker) in sell_sounds:
-                        send_sms(ticker, "1차청산", curr_price, sms_time, "5분봉 하락추세")
+                        send_sms(ticker, "1차청산", curr_price, sms_time, f"5분봉 하락추세 (BBI:{bbi_score})")
                 
                 # ────────────────────────────────────────────────────────────────
                 # Price Level Alerts (사용자 지정가 알림)
