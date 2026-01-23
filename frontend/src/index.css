@@ -596,3 +596,20 @@ header h1 {
 .Toastify__toast-container {
   z-index: 21000 !important;
 }
+
+/* --- ScoreProgressBar --- */
+.score-progress-container {
+  width: 100%;
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.score-progress-container:hover {
+  filter: brightness(1.1);
+}
+
+@media (max-width: 480px) {
+  .score-progress-container {
+    margin-top: 8px !important;
+  }
+}

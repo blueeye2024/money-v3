@@ -1669,9 +1669,10 @@ def get_mini_chart_data(ticker, limit=50):
                 'cross': cross
             })
         
-        # [Ver 6.9] Limit display data (5m: 3h=36, 30m: 6h=12)
-        result['candles_5m'] = result['candles_5m'][-36:]
-        result['candles_30m'] = result['candles_30m'][-12:]
+        # [Ver 6.9] Limit display data removed to meet user request (5m > 6h, 30m > 3d)
+        # Using SQL LIMIT instead.
+        # result['candles_5m'] = result['candles_5m'][-36:]
+        # result['candles_30m'] = result['candles_30m'][-12:]
         
         return result
     except Exception as e:

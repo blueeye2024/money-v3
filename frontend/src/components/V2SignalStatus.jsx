@@ -27,7 +27,7 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
     useEffect(() => {
         const fetchChart = async () => {
             try {
-                const res = await fetch(`/api/v2/chart/${cleanTicker}?limit=140`);
+                const res = await fetch(`/api/v2/chart/${cleanTicker}?limit=300`);
                 const json = await res.json();
                 if (json.status === 'success' && json.data) {
                     setChartData5m(json.data.candles_5m || []);

@@ -151,7 +151,7 @@ function Dashboard({ isMuted, toggleMute }) {
         return () => clearInterval(interval);
     }, [pollingMode, marketStatus]);
 
-    const fetchData = async () => {
+    const fetchData = async (retryCount = 0) => {
         try {
             const response = await fetch('/api/report');
             if (!response.ok) throw new Error('Failed to fetch data');
@@ -174,12 +174,23 @@ function Dashboard({ isMuted, toggleMute }) {
                 if (jsonData.market_status) {
                     setMarketStatus(jsonData.market_status.toLowerCase());
                 }
+
+                // 성공 시 에러 초기화
+                setError(null);
             }
             setLoading(false);
         } catch (err) {
-            console.error(err);
-            setError(err.message);
-            setLoading(false);
+            console.error(`Fetch Error (Retry ${retryCount}/5):`, err);
+
+            if (retryCount < 5) {
+                // 재시도 (Exponential Backoff 없음, 단순 1초 대기)
+                setTimeout(() => {
+                    fetchData(retryCount + 1);
+                }, 1000);
+            } else {
+                setError(err.message + " (서버 연결 실패 - 잠시 후 다시 시도해주세요)");
+                setLoading(false);
+            }
         }
     };
 
