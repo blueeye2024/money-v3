@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import V2SignalStatus from './V2SignalStatus';
 import PriceLevelAlerts from './PriceLevelAlerts';
 import PriceAlertChart from './PriceAlertChart';
@@ -210,6 +210,32 @@ const ManualTestPanel = ({ onRefresh, marketData, v2Status }) => {
 };
 
 const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, setPollingMode, marketStatus, lastUpdateTime, isMuted, toggleMute }) => {
+    // [New] Local state for persistent DB signals
+    const [dbSignals, setDbSignals] = useState({ SOXL: [], SOXS: [] });
+
+    // Fetch DB signals on mount and polling
+    useEffect(() => {
+        const fetchDbSignals = async () => {
+            try {
+                const [soxlRes, soxsRes] = await Promise.all([
+                    fetch('/api/signals?ticker=SOXL&limit=3'),
+                    fetch('/api/signals?ticker=SOXS&limit=3')
+                ]);
+
+                const soxlData = soxlRes.ok ? await soxlRes.json() : [];
+                const soxsData = soxsRes.ok ? await soxsRes.json() : [];
+
+                setDbSignals({ SOXL: soxlData, SOXS: soxsData });
+            } catch (e) {
+                console.error("Failed to fetch DB signals:", e);
+            }
+        };
+
+        fetchDbSignals();
+        // Poll every 30 seconds to keep fresh (independent of main polling for now)
+        const interval = setInterval(fetchDbSignals, 30000);
+        return () => clearInterval(interval);
+    }, []);
     if (!market) return <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>데이터 로딩 중...</div>;
 
     const { market_regime } = market;
@@ -720,269 +746,118 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
 
 
                 {/* 3. Bottom Grid: Intelligence & History */}
-                <div className="responsive-grid-2-1">
 
-                    {/* Col 1: Market Intelligence Center (Detailed) */}
-                    <div style={{ background: 'rgba(0,0,0,0.2)', padding: '1.5rem', borderRadius: '16px' }}>
-                        <h4 style={{ margin: '0 0 16px 0', fontSize: '1.1rem', color: '#e2e8f0', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '10px' }}>
-                            🌐 Market Intelligence Center (심층 분석)
-                        </h4>
 
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '15px', marginBottom: '20px' }}>
-                            {['SOXL', 'SOXS'].map(ticker => {
-                                // Use v2Status metrics from DB (market_indicators_snapshot)
-                                const dbMetrics = v2Status?.[ticker]?.metrics || {};
-                                const guideData = regimeDetails?.prime_guide || {};
-                                const scoreObj = guideData.scores?.[ticker] || { score: 0, breakdown: {} };
-                                const breakdown = scoreObj.breakdown || {};
-                                const comment = guideData.tech_comments?.[ticker] || "-";
+                {/* Col 2: Recent Cross History (SOXL / SOXS) */}
+                <div className="responsive-grid-2">
 
-                                const color = ticker === 'SOXL' ? '#06b6d4' : '#a855f7';
+                    {['SOXL', 'SOXS'].map(ticker => {
+                        // Use Persistent DB History instead of Simulation
+                        const history = dbSignals[ticker] || [];
+                        const mainColor = ticker === 'SOXL' ? '#06b6d4' : '#a855f7';
+                        const title = ticker === 'SOXL' ? 'SOXL (BULL)' : 'SOXS (BEAR)';
 
-                                // Helper for score color
-                                const getScoreColor = (score) => score > 0 ? '#4ade80' : score < 0 ? '#f87171' : '#888';
-                                const formatScore = (score) => score > 0 ? `+${score}` : score;
-
-                                return (
-                                    <div key={ticker} style={{ background: 'rgba(255,255,255,0.03)', padding: '15px', borderRadius: '12px', border: `1px solid ${color}22` }}>
-                                        {/* Header */}
-                                        <div style={{ fontWeight: 'bold', color: color, marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                                <span style={{ fontSize: '1rem' }}>{ticker} Antigravity Score</span>
-                                                {(() => {
-                                                    /* [Ver 6.6.2] Add Real-time Price & Change */
-                                                    const indices = Array.isArray(market?.indices) ? market.indices : [];
-                                                    const idxData = indices.find(m => m.ticker === ticker);
-                                                    const curPrice = idxData ? Number(idxData.current_price || idxData.price) : 0;
-                                                    const curChange = idxData ? Number(idxData.change_pct || idxData.change_rate) : 0;
-
-                                                    return (
-                                                        <span style={{ fontSize: '0.8rem', color: '#ccc', marginTop: '2px' }}>
-                                                            ${curPrice.toFixed(2)}
-                                                            <span style={{
-                                                                color: curChange > 0 ? '#4ade80' : curChange < 0 ? '#f87171' : '#ccc',
-                                                                marginLeft: '6px',
-                                                                fontWeight: 'bold'
-                                                            }}>
-                                                                {curChange > 0 ? '+' : ''}{curChange.toFixed(2)}%
-                                                            </span>
-                                                        </span>
-                                                    );
-                                                })()}
-                                            </div>
-                                            <span style={{
-                                                fontSize: '1.3rem', fontWeight: '900',
-                                                color: scoreObj.score >= 90 ? '#22c55e' : scoreObj.score >= 70 ? '#4ade80' : scoreObj.score >= 60 ? '#fbbf24' : '#94a3b8'
-                                            }}>
-                                                {scoreObj.score}점
-                                            </span>
-                                        </div>
-
-                                        {/* 청안 지수 */}
-                                        <div style={{ background: 'rgba(255,255,255,0.05)', padding: '8px', borderRadius: '6px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between' }}>
-                                            <span style={{ color: '#e2e8f0', fontSize: '0.85rem' }}>📊 청안 지수 (V2 신호)</span>
-                                            <span style={{ color: breakdown.cheongan >= 60 ? '#4ade80' : breakdown.cheongan >= 30 ? '#fbbf24' : '#94a3b8', fontWeight: 'bold' }}>
-                                                {breakdown.cheongan || 0}점
-                                            </span>
-                                        </div>
-
-                                        {/* 보조지표 그리드 */}
-                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.8rem' }}>
-                                            {/* RSI */}
-                                            <div style={{ background: 'rgba(255,255,255,0.05)', padding: '8px', borderRadius: '4px' }}>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                    <span style={{ color: '#94a3b8', fontSize: '0.7rem' }}>RSI (14)</span>
-                                                    <span style={{ color: getScoreColor(breakdown.rsi), fontWeight: 'bold', fontSize: '0.75rem' }}>
-                                                        {formatScore(breakdown.rsi || 0)}
-                                                    </span>
-                                                </div>
-                                                <div style={{ color: '#e2e8f0', fontWeight: 'bold', marginTop: '2px' }}>
-                                                    {dbMetrics.rsi_14 ? Number(dbMetrics.rsi_14).toFixed(1) : '-'}
-                                                </div>
-                                            </div>
-                                            {/* MACD */}
-                                            <div style={{ background: 'rgba(255,255,255,0.05)', padding: '8px', borderRadius: '4px' }}>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                    <span style={{ color: '#94a3b8', fontSize: '0.7rem' }}>MACD</span>
-                                                    <span style={{ color: getScoreColor(breakdown.macd), fontWeight: 'bold', fontSize: '0.75rem' }}>
-                                                        {formatScore(breakdown.macd || 0)}
-                                                    </span>
-                                                </div>
-                                                <div style={{ color: (Number(dbMetrics.macd) > Number(dbMetrics.macd_sig)) ? '#4ade80' : '#f87171', fontWeight: 'bold', marginTop: '2px' }}>
-                                                    {dbMetrics.macd ? Number(dbMetrics.macd).toFixed(3) : '-'}
-                                                </div>
-                                            </div>
-                                            {/* Vol Ratio */}
-                                            <div style={{ background: 'rgba(255,255,255,0.05)', padding: '8px', borderRadius: '4px' }}>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                    <span style={{ color: '#94a3b8', fontSize: '0.7rem' }}>Vol Ratio</span>
-                                                    <span style={{ color: getScoreColor(breakdown.vol), fontWeight: 'bold', fontSize: '0.75rem' }}>
-                                                        {formatScore(breakdown.vol || 0)}
-                                                    </span>
-                                                </div>
-                                                <div style={{ color: '#e2e8f0', fontWeight: 'bold', marginTop: '2px' }}>
-                                                    {dbMetrics.vol_ratio ? Number(dbMetrics.vol_ratio).toFixed(1) + 'x' : '-'}
-                                                </div>
-                                            </div>
-                                            {/* ATR */}
-                                            <div style={{ background: 'rgba(255,255,255,0.05)', padding: '8px', borderRadius: '4px' }}>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                    <span style={{ color: '#94a3b8', fontSize: '0.7rem' }}>ATR</span>
-                                                    <span style={{ color: getScoreColor(breakdown.atr), fontWeight: 'bold', fontSize: '0.75rem' }}>
-                                                        {formatScore(breakdown.atr || 0)}
-                                                    </span>
-                                                </div>
-                                                <div style={{ color: '#e2e8f0', fontWeight: 'bold', marginTop: '2px' }}>
-                                                    {dbMetrics.atr ? Number(dbMetrics.atr).toFixed(2) : '-'}
-                                                </div>
-                                            </div>
-                                            {/* BBI */}
-                                            <div style={{ background: 'rgba(255,255,255,0.05)', padding: '8px', borderRadius: '4px' }}>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                    <span style={{ color: '#94a3b8', fontSize: '0.7rem' }}>BBI (Box)</span>
-                                                    <span style={{ color: getScoreColor(breakdown.bbi), fontWeight: 'bold', fontSize: '0.75rem' }}>
-                                                        {formatScore(breakdown.bbi || 0)}
-                                                    </span>
-                                                </div>
-                                                <div style={{ color: '#e2e8f0', fontWeight: 'bold', marginTop: '2px' }}>
-                                                    {v2Status?.[ticker]?.bbi?.bbi ? Number(v2Status?.[ticker]?.bbi?.bbi).toFixed(1) : '-'}
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Evaluation & Comment - User Request: 160px fixed for comment div */}
-                                        <div style={{
-                                            marginTop: '10px',
-                                            padding: '8px',
-                                            background: 'rgba(255,255,255,0.03)',
-                                            borderRadius: '6px',
-                                            borderLeft: `3px solid ${scoreObj.score >= 60 ? '#4ade80' : '#94a3b8'}`
-                                        }}>
-                                            <div style={{
-                                                fontSize: '0.8rem',
-                                                fontWeight: 'bold',
-                                                color: scoreObj.score >= 90 ? '#22c55e' : scoreObj.score >= 70 ? '#4ade80' : scoreObj.score >= 60 ? '#fbbf24' : '#94a3b8',
-                                                marginBottom: '6px'
-                                            }}>
-                                                {scoreObj.evaluation || '⏳ 관망'}
-                                            </div>
-                                            <div style={{
-                                                fontSize: '0.65rem',
-                                                color: '#94a3b8',
-                                                lineHeight: '1.4',
-                                                height: '160px',
-                                                minHeight: '160px',
-                                                maxHeight: '160px',
-                                                overflowY: 'auto',
-                                                whiteSpace: 'pre-wrap',
-                                                paddingRight: '4px'
-                                            }} className="custom-scrollbar">
-                                                "{comment}"
-                                            </div>
-                                        </div>
-                                    </div>
-                                )
-                            })}
-                        </div>
-
-                        {/* [NEW] System Trading Performance Report (Virtual) */}
-                        <div style={{ background: 'rgba(16, 185, 129, 0.05)', padding: '15px', borderRadius: '12px', border: '1px solid rgba(16, 185, 129, 0.2)', marginTop: '20px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', borderBottom: '1px dashed rgba(16, 185, 129, 0.3)', paddingBottom: '8px' }}>
-                                <h4 style={{ margin: 0, fontSize: '1rem', color: '#10b981', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    🤖 System Auto-Trading Log (Virtual)
+                        return (
+                            <div key={ticker} style={{
+                                background: 'rgba(0,0,0,0.25)', padding: '1.2rem', borderRadius: '16px', border: `1px solid ${mainColor}33`
+                            }}>
+                                <h4 style={{ margin: '0 0 12px 0', fontSize: '1rem', color: mainColor, display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '8px' }}>
+                                    <span style={{ fontSize: '1.2rem' }}>{ticker === 'SOXL' ? '🚀' : '🛡️'}</span> {title} Signal History
                                 </h4>
-                                <div style={{ fontSize: '0.75rem', color: '#6ee7b7' }}>청안 3중 필터 자동매매 시뮬레이션</div>
-                            </div>
 
-                            <SystemPerformanceReport trades={regimeDetails?.prime_guide?.trade_history} />
-                        </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
 
-                    </div>
+                                    {/* DB Signal History List */}
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                        {
+                                            (() => {
+                                                const signals = history;
 
-                    {/* Col 2: Recent Cross History (SOXL / SOXS) */}
-                    <div style={{ padding: '0', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                                                if (signals.length === 0) {
+                                                    return (
+                                                        <div style={{ padding: '20px', textAlign: 'center', color: '#666', fontSize: '0.8rem', background: 'rgba(0,0,0,0.2)', borderRadius: '8px' }}>
+                                                            Waiting for signals...
+                                                        </div>
+                                                    );
+                                                }
 
-                        {['SOXL', 'SOXS'].map(ticker => {
-                            // Extract History from regime details
-                            const tickData = ticker === 'SOXL' ? regimeDetails?.soxl : regimeDetails?.soxs;
-                            const history = tickData?.cross_history || { gold_30m: [], gold_5m: [] };
-                            const mainColor = ticker === 'SOXL' ? '#06b6d4' : '#a855f7';
-                            const title = ticker === 'SOXL' ? 'SOXL (BULL)' : 'SOXS (BEAR)';
+                                                return signals.map((sig, idx) => {
+                                                    // Determine Type (BUY/SELL)
+                                                    const isBuy = (sig.signal_type && sig.signal_type.includes('BUY')) ||
+                                                        (sig.position && sig.position.includes('매수')) ||
+                                                        (sig.position && sig.position.includes('진입'));
 
-                            return (
-                                <div key={ticker} style={{ background: 'rgba(0,0,0,0.25)', padding: '1.2rem', borderRadius: '16px', border: `1px solid ${mainColor}33` }}>
-                                    <h4 style={{ margin: '0 0 12px 0', fontSize: '1rem', color: mainColor, display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '8px' }}>
-                                        <span style={{ fontSize: '1.2rem' }}>{ticker === 'SOXL' ? '🚀' : '🛡️'}</span> {title} Signal History
-                                    </h4>
+                                                    // Context/Reason
+                                                    const reason = sig.signal_reason || sig.position || sig.interpretation || '-';
 
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-
-                                        {/* Auto Trade History List */}
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                            {
-                                                (() => {
-                                                    const signals = [
-                                                        ...(history?.gold_30m || []),
-                                                        ...(history?.gold_5m || []),
-                                                        ...(history?.dead_5m || [])
-                                                    ];
-
-                                                    if (signals.length === 0) {
-                                                        return (
-                                                            <div style={{ padding: '20px', textAlign: 'center', color: '#666', fontSize: '0.8rem', background: 'rgba(0,0,0,0.2)', borderRadius: '8px' }}>
-                                                                Waiting for signals...
-                                                            </div>
-                                                        );
+                                                    // Time Formatting
+                                                    let displayTime = '-';
+                                                    if (sig.signal_time) {
+                                                        const d = new Date(sig.signal_time);
+                                                        const mo = String(d.getMonth() + 1).padStart(2, '0');
+                                                        const dy = String(d.getDate()).padStart(2, '0');
+                                                        const hr = String(d.getHours()).padStart(2, '0');
+                                                        const mi = String(d.getMinutes()).padStart(2, '0');
+                                                        displayTime = `${mo}-${dy} ${hr}:${mi}`;
+                                                    } else if (sig.created_at) {
+                                                        const d = new Date(sig.created_at);
+                                                        const mo = String(d.getMonth() + 1).padStart(2, '0');
+                                                        const dy = String(d.getDate()).padStart(2, '0');
+                                                        const hr = String(d.getHours()).padStart(2, '0');
+                                                        const mi = String(d.getMinutes()).padStart(2, '0');
+                                                        displayTime = `${mo}-${dy} ${hr}:${mi}`;
                                                     }
 
-                                                    return signals.map((sig, idx) => {
-                                                        const isGold = sig.type && sig.type.includes('골든');
-                                                        return (
-                                                            <div key={idx} style={{
-                                                                background: 'rgba(255,255,255,0.03)',
-                                                                padding: '10px',
-                                                                borderRadius: '8px',
-                                                                borderLeft: isGold ? `3px solid ${mainColor}` : '3px solid #777',
-                                                                display: 'flex',
-                                                                justifyContent: 'space-between',
-                                                                alignItems: 'center'
-                                                            }}>
-                                                                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                                                    <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: isGold ? mainColor : '#ccc', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                                        {isGold ? '⚡ SIGNAL' : '💤 EXIT'} <span style={{ fontSize: '0.8rem', color: '#888' }}>| {sig.type}</span>
-                                                                    </div>
-                                                                    <div style={{ fontSize: '0.75rem', color: '#888', marginTop: '3px' }}>
-                                                                        {sig.time_ny} (NY) <span style={{ margin: '0 4px' }}>@</span> <b style={{ color: '#fff' }}>${sig.price}</b>
-                                                                    </div>
+                                                    return (
+                                                        <div key={idx} style={{
+                                                            background: 'rgba(255,255,255,0.03)',
+                                                            padding: '10px',
+                                                            borderRadius: '8px',
+                                                            borderLeft: isBuy ? `3px solid ${mainColor}` : '3px solid #777',
+                                                            display: 'flex',
+                                                            justifyContent: 'space-between',
+                                                            alignItems: 'center'
+                                                        }}>
+                                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                                <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: isBuy ? mainColor : '#ccc', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                                    {isBuy ? '⚡ SIGNAL' : '💤 EXIT'} <span style={{ fontSize: '0.8rem', color: '#888' }}>| {isBuy ? '매수 진입' : '매도 청산'}</span>
+                                                                </div>
+                                                                <div style={{ fontSize: '0.75rem', color: '#aaa', marginTop: '3px' }}>
+                                                                    {reason}
+                                                                </div>
+                                                                <div style={{ fontSize: '0.75rem', color: '#888', marginTop: '3px' }}>
+                                                                    {displayTime} (KST) <span style={{ margin: '0 4px' }}>@</span> <b style={{ color: '#fff' }}>${Number(sig.price).toFixed(2)}</b>
                                                                 </div>
                                                             </div>
-                                                        );
-                                                    });
-                                                })()
-                                            }
-                                        </div>
-
+                                                        </div>
+                                                    );
+                                                });
+                                            })()
+                                        }
                                     </div>
+
+
                                 </div>
-                            );
-                        })}
-                    </div>
+                            </div>
+                        );
+                    })}
                 </div>
 
+
                 <style>{`
-                @keyframes pulse {
-                    0% { transform: scale(1); opacity: 1; }
-                    50% { transform: scale(1.05); opacity: 0.9; }
-                    100% { transform: scale(1); opacity: 1; }
-                }
-                @keyframes flash {
-                    0% { opacity: 1; }
-                    50% { opacity: 0.3; }
-                    100% { opacity: 1; }
-                }
-                .glass-panel {
-                    /* Existing styles inherited */
-                    backdrop-filter: blur(12px);
+                        @keyframes pulse {
+                            0 % { transform: scale(1); opacity: 1; }
+                            50 % { transform: scale(1.05); opacity: 0.9; }
+                            100 % { transform: scale(1); opacity: 1; }
+                        }
+                        @keyframes flash {
+                            0 % { opacity: 1; }
+                            50 % { opacity: 0.3; }
+                            100 % { opacity: 1; }
+                        }
+                .glass - panel {
+                        /* Existing styles inherited */
+                        backdrop - filter: blur(12px);
                 }
             `}</style>
             </div>

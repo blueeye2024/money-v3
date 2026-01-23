@@ -375,7 +375,7 @@ def monitor_signals():
                         
                         # If same signal type AND within 30 mins, ignore
                         # (Assume position text equality implies same signal type)
-                        if diff_mins < 30 and last_sig['position'] == res['position']:
+                        if diff_mins < 10 and last_sig['position'] == res['position']:
                             print(f"Skipping duplicate signal for {ticker} (Last: {lt}, Curr: {ct}, Diff: {diff_mins:.1f}m)")
                             is_new = False
                         
