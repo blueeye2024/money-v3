@@ -12,8 +12,8 @@ UPLOAD_DIR = "../frontend/public/uploads"
 if not os.path.exists(UPLOAD_DIR):
     os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-@router.get("/")
-def get_daily_reports(limit: int = 30):
+@router.get("")
+def get_daily_reports(limit: int = 365):
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
@@ -54,7 +54,7 @@ def get_daily_report(date_str: str):
     finally:
         conn.close()
 
-@router.post("/")
+@router.post("")
 def upsert_daily_report(
     report_date: str = Form(...),
     pre_market_strategy: str = Form(""),

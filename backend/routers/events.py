@@ -12,7 +12,7 @@ class EventModel(BaseModel):
     description: Optional[str] = ""
     importance: str = "MEDIUM"
 
-@router.get("/")
+@router.get("")
 def get_events(year: int, month: int):
     conn = get_connection()
     try:
@@ -84,7 +84,7 @@ def get_today_events():
     finally:
         conn.close()
 
-@router.post("/")
+@router.post("")
 def create_event(event: EventModel):
     conn = get_connection()
     try:
