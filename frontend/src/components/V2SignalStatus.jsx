@@ -22,7 +22,7 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
     const [chartData5m, setChartData5m] = useState([]);
     const [chartData30m, setChartData30m] = useState([]);
     const [alertLevels, setAlertLevels] = useState([]);
-    const [showMaChart, setShowMaChart] = useState(false);
+    // [Ver 6.5.6] showMaChart 상태 제거 - 30분봉 차트 항상 표시
 
     useEffect(() => {
         const fetchChart = async () => {
@@ -561,13 +561,8 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
             </div>
 
             {/* Footer Actions */}
+            {/* [Ver 6.5.6] Footer Actions - 보조차트 토글 버튼 제거 */}
             <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end', gap: '12px', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '10px' }}>
-                <span
-                    onClick={() => setShowMaChart(!showMaChart)}
-                    style={{ fontSize: '0.75rem', color: showMaChart ? '#fbbf24' : '#64748b', cursor: 'pointer', fontWeight: 'bold' }}
-                >
-                    [{showMaChart ? '보조 차트 닫기' : '보조 차트 보기'}]
-                </span>
                 {buyStatus?.real_buy_yn !== 'Y' && (
                     <span
                         onClick={() => setModal({ type: 'BUY', isOpen: true })}
@@ -942,104 +937,7 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
                 );
             })()}
 
-            {/* [Ver 5.9.2] Enhanced Mini Price Charts with MA10/MA30 - Toggle Controlled */}
-            {showMaChart && (chartData5m.length > 0 || chartData30m.length > 0) && (
-                <div style={{
-                    marginTop: '8px',
-                    background: 'rgba(0,0,0,0.3)',
-                    borderRadius: '8px',
-                    padding: '10px',
-                    border: '1px solid rgba(255,255,255,0.05)'
-                }}>
-                    {/* 5분봄 차트 */}
-                    {chartData5m.length > 0 && (
-                        <>
-                            <div style={{ fontSize: '0.7rem', color: '#64748b', marginBottom: '4px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span>📈 5분봄 (MA10<span style={{ color: '#f87171' }}>●</span> / MA30<span style={{ color: '#60a5fa' }}>●</span>)</span>
-                                <span style={{ display: 'flex', gap: '6px', fontSize: '0.65rem' }}>
-                                    {chartData5m.some(d => d.cross === 'golden') && <span style={{ color: '#22c55e' }}>🟢 GC</span>}
-                                    {chartData5m.some(d => d.cross === 'dead') && <span style={{ color: '#ef4444' }}>🔴 DC</span>}
-                                </span>
-                            </div>
-                            <ResponsiveContainer width="100%" height={90}>
-                                <ComposedChart data={chartData5m} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
-                                    <defs>
-                                        <linearGradient id={`grad5m-${cleanTicker}`} x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
-                                            <stop offset="95%" stopColor="#22c55e" stopOpacity={0.05} />
-                                        </linearGradient>
-                                    </defs>
-                                    <XAxis dataKey="time" tick={false} axisLine={false} />
-                                    <YAxis domain={['dataMin', 'dataMax']} hide />
-                                    <Tooltip
-                                        contentStyle={{ background: 'rgba(15,23,42,0.95)', border: '1px solid #334155', borderRadius: '6px', fontSize: '0.7rem' }}
-                                        labelStyle={{ color: '#94a3b8' }}
-                                        formatter={(val, name) => {
-                                            if (name === 'price') return [`$${val?.toFixed(2)}`, '가격'];
-                                            if (name === 'ma10') return [`$${val?.toFixed(2)}`, 'MA10'];
-                                            if (name === 'ma30') return [`$${val?.toFixed(2)}`, 'MA30'];
-                                            return [val, name];
-                                        }}
-                                    />
-                                    <Area type="monotone" dataKey="price" stroke="#22c55e" strokeWidth={2.5} fill={`url(#grad5m-${cleanTicker})`} />
-                                    <Line type="monotone" dataKey="ma10" stroke="#f87171" strokeWidth={1} dot={false} />
-                                    <Line type="monotone" dataKey="ma30" stroke="#60a5fa" strokeWidth={1} dot={false} />
-                                    {chartData5m.map((d, i) => d.cross === 'golden' && (
-                                        <ReferenceDot key={`gc5-${i}`} x={d.time} y={d.price} r={4} fill="#22c55e" stroke="#fff" strokeWidth={1} />
-                                    ))}
-                                    {chartData5m.map((d, i) => d.cross === 'dead' && (
-                                        <ReferenceDot key={`dc5-${i}`} x={d.time} y={d.price} r={4} fill="#ef4444" stroke="#fff" strokeWidth={1} />
-                                    ))}
-                                </ComposedChart>
-                            </ResponsiveContainer>
-                        </>
-                    )}
-
-                    {/* 30분봄 차트 */}
-                    {chartData30m.length > 0 && (
-                        <>
-                            <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '8px', marginBottom: '4px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '8px' }}>
-                                <span>📈 30분봄 (MA10<span style={{ color: '#f87171' }}>●</span> / MA30<span style={{ color: '#60a5fa' }}>●</span>)</span>
-                                <span style={{ display: 'flex', gap: '6px', fontSize: '0.65rem' }}>
-                                    {chartData30m.some(d => d.cross === 'golden') && <span style={{ color: '#22c55e' }}>🟢 GC</span>}
-                                    {chartData30m.some(d => d.cross === 'dead') && <span style={{ color: '#ef4444' }}>🔴 DC</span>}
-                                </span>
-                            </div>
-                            <ResponsiveContainer width="100%" height={90}>
-                                <ComposedChart data={chartData30m} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
-                                    <defs>
-                                        <linearGradient id={`grad30m-${cleanTicker}`} x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-                                            <stop offset="95%" stopColor="#10b981" stopOpacity={0.05} />
-                                        </linearGradient>
-                                    </defs>
-                                    <XAxis dataKey="time" tick={false} axisLine={false} />
-                                    <YAxis domain={['dataMin', 'dataMax']} hide />
-                                    <Tooltip
-                                        contentStyle={{ background: 'rgba(15,23,42,0.95)', border: '1px solid #334155', borderRadius: '6px', fontSize: '0.7rem' }}
-                                        labelStyle={{ color: '#94a3b8' }}
-                                        formatter={(val, name) => {
-                                            if (name === 'price') return [`$${val?.toFixed(2)}`, '가격'];
-                                            if (name === 'ma10') return [`$${val?.toFixed(2)}`, 'MA10'];
-                                            if (name === 'ma30') return [`$${val?.toFixed(2)}`, 'MA30'];
-                                            return [val, name];
-                                        }}
-                                    />
-                                    <Area type="monotone" dataKey="price" stroke="#10b981" strokeWidth={2.5} fill={`url(#grad30m-${cleanTicker})`} />
-                                    <Line type="monotone" dataKey="ma10" stroke="#f87171" strokeWidth={1} dot={false} />
-                                    <Line type="monotone" dataKey="ma30" stroke="#60a5fa" strokeWidth={1} dot={false} />
-                                    {chartData30m.map((d, i) => d.cross === 'golden' && (
-                                        <ReferenceDot key={`gc30-${i}`} x={d.time} y={d.price} r={4} fill="#22c55e" stroke="#fff" strokeWidth={1} />
-                                    ))}
-                                    {chartData30m.map((d, i) => d.cross === 'dead' && (
-                                        <ReferenceDot key={`dc30-${i}`} x={d.time} y={d.price} r={4} fill="#ef4444" stroke="#fff" strokeWidth={1} />
-                                    ))}
-                                </ComposedChart>
-                            </ResponsiveContainer>
-                        </>
-                    )}
-                </div>
-            )}
+            {/* [Ver 6.5.6] 보조 차트 제거됨 (5분봉/30분봉 MA 차트 삭제) */}
         </div >
     );
 };

@@ -3042,6 +3042,20 @@ def run_v2_signal_analysis():
                     print(f"✨ {ticker} Created sell record (entry: ${entry_price})")
                     sell_record = get_v2_sell_status(ticker)
 
+            # [Ver 6.5.6] Orphan Sell Signal Cleanup: 보유 중이 아닌데 sell 신호가 있으면 정리
+            if sell_record and not is_holding:
+                try:
+                    from db import manual_update_signal
+                    if sell_record.get('sell_sig1_yn') == 'Y':
+                        manual_update_signal(ticker, 'sell1', 0, 'N')
+                    if sell_record.get('sell_sig2_yn') == 'Y':
+                        manual_update_signal(ticker, 'sell2', 0, 'N')
+                    if sell_record.get('sell_sig3_yn') == 'Y':
+                        manual_update_signal(ticker, 'sell3', 0, 'N')
+                    print(f"🧹 {ticker} Orphan sell signals cleaned (not holding)")
+                except Exception as e:
+                    print(f"⚠️ {ticker} Orphan cleanup error: {e}")
+
             # Only process sell signals if in HOLDING mode
             if sell_record and is_holding:
                 manage_id = sell_record.get('manage_id', 'UNKNOWN')
@@ -3089,7 +3103,8 @@ def run_v2_signal_analysis():
                             log_history(manage_id, ticker, "1차청산신호", msg_type, curr_price)
                             sell_sounds.add(('sell1', ticker))
                 else:
-                    if sell_record['sell_sig1_yn'] == 'Y' and not sig1_manual:
+                    # [Ver 6.5.6] 실시간 업데이트: 수동 플래그 무시하고 조건 미충족 시 OFF
+                    if sell_record['sell_sig1_yn'] == 'Y':
                         try:
                             from db import manual_update_signal
                             manual_update_signal(ticker, 'sell1', 0, 'N')
@@ -3113,7 +3128,8 @@ def run_v2_signal_analysis():
                         log_history(manage_id, ticker, "2차청산신호", sig2_reason, curr_price)
                         sell_sounds.add(('sell2', ticker))
                 else:
-                    if sell_record['sell_sig2_yn'] == 'Y' and not sig2_manual:
+                    # [Ver 6.5.6] 실시간 업데이트: 수동 플래그 무시하고 조건 미충족 시 OFF
+                    if sell_record['sell_sig2_yn'] == 'Y':
                         try:
                             from db import manual_update_signal
                             manual_update_signal(ticker, 'sell2', 0, 'N')
