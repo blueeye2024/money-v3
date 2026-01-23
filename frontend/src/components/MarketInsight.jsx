@@ -444,6 +444,26 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                             const currentPrice = tickerData?.current_price || 0;
                             const dailyChange = tickerData?.daily_change || 0;
 
+                            // Calculate Energy Score [Jian 1.1 - moved outside IIFE for total]
+                            const soxlChange = regimeDetails?.soxl?.daily_change || 0;
+                            const uproChange = regimeDetails?.upro?.daily_change || 0;
+                            let relationIndex = 0;
+                            if (Math.abs(uproChange) > 0.05) {
+                                relationIndex = (soxlChange / uproChange) * 100;
+                            }
+                            let rawEnergy = (relationIndex - 100) / 20;
+                            if (uproChange < 0) rawEnergy = -rawEnergy;
+                            rawEnergy = Math.max(-10, Math.min(10, rawEnergy));
+                            const energyScore = isSoxl ? Math.trunc(rawEnergy) : Math.trunc(-rawEnergy);
+
+                            // Calculate frontend total score [Jian 1.1]
+                            const cheonganBase = scoreObj.breakdown?.cheongan || 0;
+                            const cheonganWithEnergy = cheonganBase + energyScore;
+                            const indicatorTotal = (scoreObj.breakdown?.rsi || 0) + (scoreObj.breakdown?.macd || 0) +
+                                (scoreObj.breakdown?.vol || 0) + (scoreObj.breakdown?.atr || 0);
+                            const sellPenalty = scoreObj.breakdown?.sell_penalty || 0;
+                            const realTotalScore = cheonganWithEnergy + indicatorTotal + sellPenalty;
+
                             return (
                                 <div key={ticker} style={{ width: '100%', background: `rgba(${isSoxl ? '6,182,212' : '168,85,247'}, 0.05)`, padding: '1.5rem', borderRadius: '16px', border: `1px solid ${color}33` }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
@@ -453,7 +473,7 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                                         <div style={{ textAlign: 'right' }}>
                                             <span style={{ fontSize: '0.8rem', color: isSoxl ? '#cffafe' : '#f3e8ff', display: 'block' }}>보유 매력도 (Holding Score)</span>
                                             <span style={{ fontSize: '1.5rem', fontWeight: '900', color: color }}>
-                                                {scoreObj.score}점
+                                                {realTotalScore}점
                                             </span>
                                             <div style={{ fontSize: '0.85rem', color: dailyChange >= 0 ? '#4ade80' : '#f87171', marginTop: '4px' }}>
                                                 ${currentPrice.toFixed(2)} <span style={{ fontWeight: 'bold' }}>({dailyChange >= 0 ? '+' : ''}{dailyChange.toFixed(2)}%)</span>
@@ -569,13 +589,13 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.3)', padding: '10px 12px', borderRadius: '8px', marginBottom: '15px' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                             <span style={{ fontWeight: 'bold', color: '#fff', fontSize: '0.85rem' }}>📌 총점</span>
-                                            {(scoreObj.breakdown?.sell_penalty || 0) !== 0 && (
+                                            {sellPenalty !== 0 && (
                                                 <span style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#f87171', padding: '2px 8px', borderRadius: '10px', fontSize: '0.7rem', fontWeight: 'bold' }}>
-                                                    ⚠️ 매도경고 {scoreObj.breakdown?.sell_penalty}
+                                                    ⚠️ 매도경고 {sellPenalty}
                                                 </span>
                                             )}
                                         </div>
-                                        <span style={{ fontWeight: '900', fontSize: '1.2rem', color: color }}>{scoreObj.score}점</span>
+                                        <span style={{ fontWeight: '900', fontSize: '1.2rem', color: color }}>{realTotalScore}점</span>
                                     </div>
 
                                     {/* Guide Commentary */}
