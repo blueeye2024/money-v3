@@ -251,17 +251,20 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
     React.useEffect(() => {
         const fetchV2Status = async () => {
             try {
-                const [soxlRes, soxsRes] = await Promise.all([
+                const [soxlRes, soxsRes, uproRes] = await Promise.all([
                     fetch('/api/v2/status/SOXL'),
-                    fetch('/api/v2/status/SOXS')
+                    fetch('/api/v2/status/SOXS'),
+                    fetch('/api/v2/status/UPRO')
                 ]);
                 const soxlData = await soxlRes.json();
                 const soxsData = await soxsRes.json();
+                const uproData = await uproRes.json();
 
                 if (soxlData.status === 'success' && soxsData.status === 'success') {
                     setV2Status({
                         SOXL: soxlData,
-                        SOXS: soxsData
+                        SOXS: soxsData,
+                        UPRO: uproData.status === 'success' ? uproData : null
                     });
                 }
             } catch (e) {
@@ -439,10 +442,10 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                             const isSoxl = ticker === 'SOXL';
                             const color = isSoxl ? '#06b6d4' : '#a855f7';
 
-                            // Get price and change data
-                            const tickerData = isSoxl ? regimeDetails?.soxl : regimeDetails?.soxs;
-                            const currentPrice = tickerData?.current_price || 0;
-                            const dailyChange = tickerData?.daily_change || 0;
+                            // Get price and change data (동일 소스: BULL TOWER와 일치)
+                            const renderInfo = v2Status[ticker]?.market_info || (isSoxl ? regimeDetails?.soxl : regimeDetails?.soxs);
+                            const currentPrice = renderInfo?.current_price || 0;
+                            const dailyChange = renderInfo?.change_pct ?? renderInfo?.daily_change ?? 0;
 
                             // Calculate Energy Score [Jian 1.1 - moved outside IIFE for total]
                             const soxlChange = regimeDetails?.soxl?.daily_change || 0;
@@ -599,7 +602,7 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                                     </div>
 
                                     {/* Guide Commentary */}
-                                    <div style={{ whiteSpace: 'pre-wrap', lineHeight: '1.7', fontSize: '0.88rem', color: isSoxl ? '#cffafe' : '#f3e8ff', fontFamily: "'Noto Sans KR', sans-serif", background: 'rgba(0,0,0,0.15)', padding: '12px', borderRadius: '8px', borderLeft: `3px solid ${color}` }}>
+                                    <div style={{ whiteSpace: 'pre-wrap', lineHeight: '1.7', fontSize: '0.88rem', color: isSoxl ? '#cffafe' : '#f3e8ff', fontFamily: "'Noto Sans KR', sans-serif", background: 'rgba(0,0,0,0.15)', padding: '12px', borderRadius: '8px', borderLeft: `3px solid ${color}`, height: '160px', overflowY: 'auto' }}>
                                         {guideText}
                                     </div>
                                 </div>
@@ -631,18 +634,66 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                     />
                 </div>
 
+                {/* [Ver 6.6.6] BBI (Box Breakout Index) Display - SOXL/SOXS 나란히 */}
+                <div className="responsive-grid-2" style={{ marginBottom: '1.5rem' }}>
+                    {['SOXL', 'SOXS'].map(ticker => {
+                        const bbi = v2Status[ticker]?.bbi;
+                        const isSoxl = ticker === 'SOXL';
+                        const color = isSoxl ? '#06b6d4' : '#a855f7';
+
+                        if (!bbi) return null;
+
+                        return (
+                            <div key={ticker} style={{ padding: '12px', background: 'rgba(0,0,0,0.2)', borderRadius: '12px', border: `1px solid ${color}22` }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        <span style={{ fontSize: '0.8rem', color: color, fontWeight: 'bold' }}>📦 {ticker} BBI</span>
+                                        <span style={{ fontSize: '0.65rem', color: '#64748b', background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px' }}>
+                                            -10 ~ +10
+                                        </span>
+                                    </div>
+                                    <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#60a5fa' }}>
+                                        {bbi.bbi > 0 ? '+' : ''}{bbi.bbi}
+                                    </span>
+                                </div>
+
+                                {/* Gauge Bar */}
+                                <div style={{ height: '8px', background: '#1e293b', borderRadius: '4px', position: 'relative', overflow: 'hidden', marginBottom: '8px', boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.3)' }}>
+                                    <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: '2px', background: '#475569', zIndex: 10 }}></div>
+                                    <div style={{
+                                        position: 'absolute', top: 0, bottom: 0,
+                                        left: bbi.bbi >= 0 ? '50%' : `${Math.max(0, 50 + (bbi.bbi * 5))}%`,
+                                        width: `${Math.min(50, Math.abs(bbi.bbi) * 5)}%`,
+                                        background: bbi.bbi < 0 ? 'linear-gradient(90deg, #f59e0b, #fbbf24)' : 'linear-gradient(90deg, #10b981, #34d399)',
+                                        borderRadius: '4px', transition: 'all 0.5s ease-out'
+                                    }}></div>
+                                </div>
+
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', alignItems: 'center' }}>
+                                    <span style={{ color: bbi.bbi < 0 ? '#fbbf24' : '#34d399', fontWeight: 'bold' }}>
+                                        {bbi.bbi < 0 ? '💤 박스권' : '🚀 추세'}
+                                    </span>
+                                    <span style={{ color: '#94a3b8', fontWeight: '500' }}>{bbi.status}</span>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+
                 {/* [Ver 5.4] Independent Price Level Alert Panel */}
                 {(() => {
-                    const indices = Array.isArray(market?.indices) ? market.indices : [];
-                    const soxlData = indices.find(m => m.ticker === 'SOXL');
-                    const soxsData = indices.find(m => m.ticker === 'SOXS');
-                    const uproData = indices.find(m => m.ticker === 'UPRO');
+                    // SOXL, SOXS: v2Status에서 가져오기 (안정적)
+                    const soxlPrice = v2Status.SOXL?.market_info?.current_price || 0;
+                    const soxsPrice = v2Status.SOXS?.market_info?.current_price || 0;
 
-                    const soxlPrice = soxlData ? Number(soxlData.current_price || soxlData.price) : 0;
-                    const soxsPrice = soxsData ? Number(soxsData.current_price || soxsData.price) : 0;
-                    const uproPrice = uproData ? Number(uproData.current_price || uproData.price) : 0;
-                    const soxlChange = soxlData ? Number(soxlData.change_pct || soxlData.change_rate || 0) : 0;
-                    const uproChange = uproData ? Number(uproData.change_pct || uproData.change_rate || 0) : 0;
+                    // UPRO: v2Status에서 우선, 없으면 market.indices에서 폴백
+                    const uproV2 = v2Status.UPRO?.market_info;
+                    const indices = Array.isArray(market?.indices) ? market.indices : [];
+                    const uproFallback = indices.find(m => m.ticker === 'UPRO');
+
+                    const uproPrice = uproV2?.current_price || (uproFallback ? Number(uproFallback.current_price || uproFallback.price) : 0);
+                    const uproChange = uproV2?.change_pct ?? (uproFallback ? Number(uproFallback.change_pct || uproFallback.change_rate || 0) : 0);
+                    const soxlChange = v2Status.SOXL?.market_info?.change_pct || 0;
 
                     let relationIndex = null;
                     if (Math.abs(uproChange) > 0.05) { // Minimum threshold to avoid noise
@@ -696,7 +747,29 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                                     <div key={ticker} style={{ background: 'rgba(255,255,255,0.03)', padding: '15px', borderRadius: '12px', border: `1px solid ${color}22` }}>
                                         {/* Header */}
                                         <div style={{ fontWeight: 'bold', color: color, marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <span style={{ fontSize: '1rem' }}>{ticker} 안티그래비티 스코어</span>
+                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                <span style={{ fontSize: '1rem' }}>{ticker} Antigravity Score</span>
+                                                {(() => {
+                                                    /* [Ver 6.6.2] Add Real-time Price & Change */
+                                                    const indices = Array.isArray(market?.indices) ? market.indices : [];
+                                                    const idxData = indices.find(m => m.ticker === ticker);
+                                                    const curPrice = idxData ? Number(idxData.current_price || idxData.price) : 0;
+                                                    const curChange = idxData ? Number(idxData.change_pct || idxData.change_rate) : 0;
+
+                                                    return (
+                                                        <span style={{ fontSize: '0.8rem', color: '#ccc', marginTop: '2px' }}>
+                                                            ${curPrice.toFixed(2)}
+                                                            <span style={{
+                                                                color: curChange > 0 ? '#4ade80' : curChange < 0 ? '#f87171' : '#ccc',
+                                                                marginLeft: '6px',
+                                                                fontWeight: 'bold'
+                                                            }}>
+                                                                {curChange > 0 ? '+' : ''}{curChange.toFixed(2)}%
+                                                            </span>
+                                                        </span>
+                                                    );
+                                                })()}
+                                            </div>
                                             <span style={{
                                                 fontSize: '1.3rem', fontWeight: '900',
                                                 color: scoreObj.score >= 90 ? '#22c55e' : scoreObj.score >= 70 ? '#4ade80' : scoreObj.score >= 60 ? '#fbbf24' : '#94a3b8'
@@ -777,12 +850,33 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                                             </div>
                                         </div>
 
-                                        {/* Evaluation & Comment */}
-                                        <div style={{ marginTop: '10px', padding: '8px', background: 'rgba(255,255,255,0.03)', borderRadius: '6px', borderLeft: `3px solid ${scoreObj.score >= 60 ? '#4ade80' : '#94a3b8'}` }}>
-                                            <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: scoreObj.score >= 90 ? '#22c55e' : scoreObj.score >= 70 ? '#4ade80' : scoreObj.score >= 60 ? '#fbbf24' : '#94a3b8' }}>
+                                        {/* Evaluation & Comment - User Request: 160px fixed for comment div */}
+                                        <div style={{
+                                            marginTop: '10px',
+                                            padding: '8px',
+                                            background: 'rgba(255,255,255,0.03)',
+                                            borderRadius: '6px',
+                                            borderLeft: `3px solid ${scoreObj.score >= 60 ? '#4ade80' : '#94a3b8'}`
+                                        }}>
+                                            <div style={{
+                                                fontSize: '0.8rem',
+                                                fontWeight: 'bold',
+                                                color: scoreObj.score >= 90 ? '#22c55e' : scoreObj.score >= 70 ? '#4ade80' : scoreObj.score >= 60 ? '#fbbf24' : '#94a3b8',
+                                                marginBottom: '6px'
+                                            }}>
                                                 {scoreObj.evaluation || '⏳ 관망'}
                                             </div>
-                                            <div style={{ marginTop: '4px', fontSize: '0.75rem', color: '#94a3b8', lineHeight: '1.3' }}>
+                                            <div style={{
+                                                fontSize: '0.65rem',
+                                                color: '#94a3b8',
+                                                lineHeight: '1.4',
+                                                height: '160px',
+                                                minHeight: '160px',
+                                                maxHeight: '160px',
+                                                overflowY: 'auto',
+                                                whiteSpace: 'pre-wrap',
+                                                paddingRight: '4px'
+                                            }} className="custom-scrollbar">
                                                 "{comment}"
                                             </div>
                                         </div>
