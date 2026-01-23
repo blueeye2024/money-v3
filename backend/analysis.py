@@ -2912,23 +2912,27 @@ def run_v2_signal_analysis():
             print(f"  📊 {ticker} BBI: {bbi_score} ({bbi_status})")
             
             # BBI 기반 신호 필터링 여부 결정
-            # BBI < 0: 박스권 → 신호 사운드 억제
-            # BBI >= 0: 변동성/돌파 → 정상 처리
-            bbi_filter_active = bbi_score < 0
+            # BBI < -3: 심각한 박스권 → 신호 사운드/SMS 억제 (기존 0에서 완화)
+            # BBI >= -3: 약한 횡보는 허용
+            bbi_filter_active = bbi_score < -3
+            
+
             
             # [Ver 5.8.3] Independent Signal Processing
             # Each signal checks and updates INDEPENDENTLY
-            # Sound duplicate prevention using set
             sounds_to_play = set()
             
             # --- BUY SIDE ---
             buy_record = get_v2_buy_status(ticker)
-            
             # Condition checks (calculated once, used multiple times)
             is_5m_gc_cross = (prev_ma10_5 <= prev_ma30_5) and (ma10_5 > ma30_5)
             is_5m_trend_up = (ma10_5 > ma30_5)
             is_30m_gc = (prev_ma10_30 <= prev_ma30_30) and (ma10_30 > ma30_30)
             is_30m_trend_up = (ma10_30 > ma30_30)
+
+            # [DEBUG] Signal Logic Trace
+            print(f"  🔍 {ticker} 5m: MA10={ma10_5:.4f}, MA30={ma30_5:.4f} (Diff: {ma10_5-ma30_5:.4f}) {'[UP]' if is_5m_trend_up else '[DOWN]'}")
+            print(f"  🔍 {ticker} 30m: MA10={ma10_30:.4f}, MA30={ma30_30:.4f} (Diff: {ma10_30-ma30_30:.4f}) {'[UP]' if is_30m_trend_up else '[DOWN]'}")
             
             # 2% breakout condition
             cond_2pct = (prev_close > 0) and (curr_price > prev_close * 1.02)
@@ -3109,18 +3113,28 @@ def run_v2_signal_analysis():
             # SMS 발송 (우선순위: final > 3차 > 2차 > 1차)
             # [Ver 6.5.8] BBI 필터: 박스권(BBI<0)일 때는 SMS 발송 억제
             # ────────────────────────────────────────────────────────────────
-            if sounds_to_play and not bbi_filter_active:
-                sms_time = get_current_time_str_sms()
-                if ('final_buy', ticker) in sounds_to_play:
-                    send_sms(ticker, "최종매수(V2)", curr_price, sms_time, f"트리플필터완성 (BBI:{bbi_score})")
-                elif ('buy3', ticker) in sounds_to_play:
-                    send_sms(ticker, "3차매수(30분봉)", curr_price, sms_time, f"30분봉 추세확정 (BBI:{bbi_score})")
-                elif ('buy2', ticker) in sounds_to_play:
-                    send_sms(ticker, "2차매수(+1%)", curr_price, sms_time, f"상승 지속 확인 (BBI:{bbi_score})")
-                elif ('buy1', ticker) in sounds_to_play:
-                    send_sms(ticker, "1차매수(5분봉)", curr_price, sms_time, f"5분봉 골든크로스 (BBI:{bbi_score})")
-            elif sounds_to_play and bbi_filter_active:
-                print(f"  🔇 {ticker} SMS 억제 (박스권: BBI={bbi_score})")
+            if sounds_to_play:
+                # [Ver 6.5.9] BBI Filter Optim: -3 미만일 때만 SMS 차단
+                if not bbi_filter_active:
+                    sms_time = get_current_time_str_sms()
+                    
+                    # BBI가 0 미만이지만 -3 이상인 경우 (Weak) → 메시지에 표기
+                    bbi_note = f" (BBI:{bbi_score})"
+                    if bbi_score < 0:
+                        bbi_note = f" (Low Vol/BBI:{bbi_score})"
+
+                    if ('final_buy', ticker) in sounds_to_play:
+                        send_sms(ticker, "최종매수(V2)", curr_price, sms_time, f"트리플필터완성{bbi_note}")
+                    elif ('buy3', ticker) in sounds_to_play:
+                        send_sms(ticker, "3차매수(30분봉)", curr_price, sms_time, f"30분봉 추세확정{bbi_note}")
+                    elif ('buy2', ticker) in sounds_to_play:
+                        send_sms(ticker, "2차매수(+1%)", curr_price, sms_time, f"상승 지속 확인{bbi_note}")
+                    elif ('buy1', ticker) in sounds_to_play:
+                        send_sms(ticker, "1차매수(5분봉)", curr_price, sms_time, f"5분봉 골든크로스{bbi_note}")
+                
+                else:
+                    # Filter Active (BBI < -3)
+                    print(f"  🔇 {ticker} SMS 억제 (심한 박스권: BBI={bbi_score} < -3)")
 
             # --- SELL SIDE (Position Management) ---
             # [Ver 5.8.3] Independent Signal Processing for SELL
