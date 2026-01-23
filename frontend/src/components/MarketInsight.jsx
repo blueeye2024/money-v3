@@ -462,16 +462,15 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                                         if (Math.abs(uproChange) > 0.05) {
                                             relationIndex = (soxlChange / uproChange) * 100;
                                         }
-                                        // Energy Score Logic (Ver 6.4.11) - 2x multiplier
-                                        // 연관지수 >= 100%: SOXL=+, SOXS=-
-                                        // 연관지수 < 100%: SOXL=-, SOXS=+
-                                        const baseEnergy = Math.trunc(relationIndex / 10) * 2;  // 2배 적용
-                                        let energyScore;
-                                        if (relationIndex >= 100) {
-                                            energyScore = isSoxl ? baseEnergy : -baseEnergy;
-                                        } else {
-                                            energyScore = isSoxl ? -baseEnergy : baseEnergy;
-                                        }
+                                        // Energy Score Logic [Jian 1.1]
+                                        // S = (RI - 100) / 20 (상승 시), S = -(RI - 100) / 20 (하락 시)
+                                        // 제한: ±10점
+                                        let rawEnergy = (relationIndex - 100) / 20;
+                                        if (uproChange < 0) rawEnergy = -rawEnergy;  // 시장 하락 시 부호 반전
+                                        rawEnergy = Math.max(-10, Math.min(10, rawEnergy));  // ±10 제한
+                                        const energyScore = isSoxl
+                                            ? Math.trunc(rawEnergy)
+                                            : Math.trunc(-rawEnergy);
 
                                         // Recalculate cheongan total with energy
                                         const baseCheongan = scoreObj.breakdown?.cheongan || 0;
@@ -482,7 +481,7 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                                                 {/* 좌측: 청안 지수 */}
                                                 <div style={{ background: 'rgba(0,0,0,0.25)', padding: '10px', borderRadius: '8px' }}>
                                                     <div style={{ fontWeight: 'bold', color: color, marginBottom: '8px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '4px' }}>
-                                                        🔥 청안지수 <span style={{ fontWeight: 'normal', color: '#94a3b8' }}>(최대 80점)</span>
+                                                        🔥 청안지수 <span style={{ fontWeight: 'normal', color: '#94a3b8' }}>(최대 60점)</span>
                                                     </div>
                                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                                         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
@@ -494,13 +493,13 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                                                         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
                                                             <span style={{ color: '#ccc' }}>2차 (+1%)</span>
                                                             <span style={{ color: v2Status?.[ticker]?.buy?.buy_sig2_yn === 'Y' ? '#4ade80' : '#64748b', fontWeight: 'bold' }}>
-                                                                {v2Status?.[ticker]?.buy?.buy_sig2_yn === 'Y' ? '+20' : '0'}
+                                                                {v2Status?.[ticker]?.buy?.buy_sig2_yn === 'Y' ? '+10' : '0'}
                                                             </span>
                                                         </div>
                                                         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
                                                             <span style={{ color: '#ccc' }}>3차 (30분 GC)</span>
                                                             <span style={{ color: v2Status?.[ticker]?.buy?.buy_sig3_yn === 'Y' ? '#4ade80' : '#64748b', fontWeight: 'bold' }}>
-                                                                {v2Status?.[ticker]?.buy?.buy_sig3_yn === 'Y' ? '+30' : '0'}
+                                                                {v2Status?.[ticker]?.buy?.buy_sig3_yn === 'Y' ? '+20' : '0'}
                                                             </span>
                                                         </div>
                                                         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>

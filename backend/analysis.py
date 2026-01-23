@@ -2118,10 +2118,10 @@ def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None):
     sig2 = v2_buy and v2_buy.get('buy_sig2_yn') == 'Y'
     sig3 = v2_buy and v2_buy.get('buy_sig3_yn') == 'Y'
     
-    # [Ver 6.5.3] Cumulative Scoring (Consistent with Dashboard)
+    # [Jian 1.1] Cumulative Scoring
     if sig1: cheongan_score += 20
-    if sig2: cheongan_score += 20
-    if sig3: cheongan_score += 30
+    if sig2: cheongan_score += 10  # 2차 10점
+    if sig3: cheongan_score += 20  # 3차 20점
     
     # [Ver 6.4.7] Strict cumulative scoring
     breakdown['cheongan'] = cheongan_score
@@ -2150,7 +2150,7 @@ def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None):
     current_price = res.get('current_price', 0)
     daily_change = res.get('daily_change', 0)
     
-    # ---- A. RSI 채점 (+8 ~ -8) [Ver 6.4.11] ----
+    # ---- A. RSI 채점 (+8 ~ -4) [Jian 1.1] ----
     rsi_score = 0
     if 55 <= rsi < 70:
         rsi_score = 8    # 상승 추세
@@ -2161,9 +2161,9 @@ def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None):
     elif 30 <= rsi < 45:
         rsi_score = -4   # 하락 추세
     elif rsi >= 80:
-        rsi_score = -8   # 과열
+        rsi_score = -4   # 과열
     elif rsi < 30:
-        rsi_score = -8   # 과매도
+        rsi_score = -4   # 과매도
     breakdown['rsi'] = rsi_score
     
     # ---- B. MACD 채점 (+8 ~ -8) [Ver 6.4.11] ----
@@ -2180,16 +2180,16 @@ def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None):
         macd_score = -8   # 강력 하락
     breakdown['macd'] = macd_score
     
-    # ---- C. Vol Ratio 채점 (+5 ~ -5) [Ver 6.4.11] ----
+    # ---- C. Vol Ratio 채점 (+8 ~ -8) [Jian 1.1] ----
     vol_score = 0
     if vol_ratio > 2.5 and daily_change < 0:
-        vol_score = -5    # 투매
+        vol_score = -8    # 투매
     elif vol_ratio > 2.0 and daily_change < 0:
-        vol_score = -5    # 투매
+        vol_score = -8    # 투매
     elif vol_ratio > 2.0 and daily_change > 0 and rsi > 70:
         vol_score = 0     # 경계
     elif vol_ratio > 2.0 and daily_change > 0:
-        vol_score = 5     # 강력 매수세
+        vol_score = 8     # 강력 매수세
     elif vol_ratio > 1.5 and daily_change > 0:
         vol_score = 3     # 평균 이상
     elif vol_ratio > 1.0:
