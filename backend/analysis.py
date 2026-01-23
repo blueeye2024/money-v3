@@ -2127,20 +2127,30 @@ def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None):
     breakdown['cheongan'] = cheongan_score
     
     # ================================================
-    # 1-B. 매도 신호 감점 (Sell Signal Penalty)
+    # 1-B. 매도 감점 (Sell Penalty) [Jian 1.2 개선]
+    # Level 1: -10점 (5분봉 DC + RSI < 45)
+    # Level 2: -20점 (30분봉 DC 또는 RSI < 30)
+    # Level 3: -30점 (수동 지정가 도달)
     # ================================================
+    rsi = tech.get('rsi', 50)
+    is_30m_dc = tech.get('is_30m_dc', False)  # 30분봉 데드크로스
+    
     sell_penalty = 0
     if v2_sell:
         if v2_sell.get('sell_sig3_yn') == 'Y':
-            sell_penalty = -30  # 추세 이탈 확정
+            sell_penalty = -30  # Level 3: 추세 이탈 확정
+        elif is_30m_dc or rsi < 30:
+            sell_penalty = -20  # Level 2: 강력 경고 (30분 DC 또는 과매도)
+        elif v2_sell.get('sell_sig1_yn') == 'Y' and rsi < 45:
+            sell_penalty = -10  # Level 1: 경고 (5분 DC + 약세 RSI)
         elif v2_sell.get('sell_sig1_yn') == 'Y':
-            sell_penalty = -15  # 경고
+            sell_penalty = -5   # 5분 DC만 (RSI 양호 시 가벼운 감점)
     breakdown['sell_penalty'] = sell_penalty
     
     # ================================================
-    # 2. 안티그래비티 보조지표 (+40 ~ -80점)
+    # 2. 안티그래비티 보조지표 (+32 ~ -32점) [Jian 1.1]
     # ================================================
-    rsi = tech.get('rsi', 50)
+    # rsi already defined above
     macd = tech.get('macd', 0)
     macd_sig = tech.get('macd_sig', 0)
     
