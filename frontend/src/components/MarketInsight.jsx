@@ -439,6 +439,11 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                             const isSoxl = ticker === 'SOXL';
                             const color = isSoxl ? '#06b6d4' : '#a855f7';
 
+                            // Get price and change data
+                            const tickerData = isSoxl ? regimeDetails?.soxl : regimeDetails?.soxs;
+                            const currentPrice = tickerData?.current_price || 0;
+                            const dailyChange = tickerData?.daily_change || 0;
+
                             return (
                                 <div key={ticker} style={{ width: '100%', background: `rgba(${isSoxl ? '6,182,212' : '168,85,247'}, 0.05)`, padding: '1.5rem', borderRadius: '16px', border: `1px solid ${color}33` }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
@@ -450,6 +455,9 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                                             <span style={{ fontSize: '1.5rem', fontWeight: '900', color: color }}>
                                                 {scoreObj.score}점
                                             </span>
+                                            <div style={{ fontSize: '0.85rem', color: dailyChange >= 0 ? '#4ade80' : '#f87171', marginTop: '4px' }}>
+                                                ${currentPrice.toFixed(2)} <span style={{ fontWeight: 'bold' }}>({dailyChange >= 0 ? '+' : ''}{dailyChange.toFixed(2)}%)</span>
+                                            </div>
                                         </div>
                                     </div>
 
