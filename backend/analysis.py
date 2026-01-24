@@ -2513,29 +2513,29 @@ def get_cross_history(df_30, df_5):
 
 def process_auto_trading(ticker, result_info, current_price, current_time):
     """
-    Process auto trading logic (Simulation)
-    - Entry: Final Signal == True AND No Open Trade
-    - Exit: 30m Trend (Step1) == Dead Cross AND Open Trade
+    Process auto trading logic (Ver 7.0 Score-Based)
+    - Entry: Score >= 70 AND No Open Trade
+    - Exit: Score < 50 AND Open Trade
     """
     try:
-        # Check current status
-        open_trade = check_open_trade(ticker)
+        from db import get_open_trade, create_trade, close_trade
         
-        # 1. Entry Logic
-        if result_info['final'] and not open_trade:
-            # Only enter if signal time is recent (e.g. within 2 hours or same day)
-            # For simulation, we trust the 'final' flag which implies conditions are met NOW.
-            create_trade(ticker, current_price, current_time)
-            print(f"🚀 [AUTO BUY] {ticker} at {current_price}")
+        # Check current status
+        open_trade = get_open_trade(ticker)
+        score = result_info.get('score', 0)
+        
+        # 1. Entry Logic (Score >= 70)
+        if not open_trade:
+            if score >= 70:
+                create_trade(ticker, current_price, current_time)
+                print(f"🚀 [AUTO BUY] {ticker} at {current_price} (Score: {score})")
             
-        # 2. Exit Logic (Trend Reversal)
+        # 2. Exit Logic (Score < 50)
         elif open_trade:
-            # Exit if Step 1 is NOT met (i.e., Dead Cross or not confirmed)
-            # result_info['step1'] is True if Golden Cross maintained.
-            # If Step1 becomes False -> Trend broken.
-            if not result_info['step1']:
+            # Only exit if score drops below 50
+            if score < 50:
                  close_trade(ticker, current_price, current_time)
-                 print(f"📉 [AUTO SELL] {ticker} at {current_price}")
+                 print(f"📉 [AUTO SELL] {ticker} at {current_price} (Score: {score})")
                  
     except Exception as e:
         print(f"Auto Trading Error ({ticker}): {e}")

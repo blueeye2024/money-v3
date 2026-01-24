@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from routers import reports, events
+from routers import reports, events, trading
 from typing import Optional
 from pydantic import BaseModel
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -37,6 +37,7 @@ app.mount("/uploads", StaticFiles(directory="../frontend/public/uploads"), name=
 # Include Routers
 app.include_router(reports.router)
 app.include_router(events.router)
+app.include_router(trading.router)
 
 # 1. Initialize DB & Scheduler
 @app.on_event("startup")

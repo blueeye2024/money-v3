@@ -26,10 +26,16 @@ const SignalPage = () => {
 
     useEffect(() => {
         fetchStocks();
-        fetchSignals();
         fetchSmsLogs();
         fetchSmsSetting();
     }, []);
+
+    // Auto-refresh signals every 10 seconds (User Request)
+    useEffect(() => {
+        fetchSignals();
+        const interval = setInterval(fetchSignals, 10000);
+        return () => clearInterval(interval);
+    }, [filters]); // Re-create interval if filters change
 
     const fetchSmsSetting = async () => {
         try {

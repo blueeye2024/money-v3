@@ -3342,3 +3342,69 @@ def migrate_v68_add_simulation_columns():
     finally:
         try: conn.close()
         except: pass
+
+def get_open_trade(ticker):
+    """Get currently open trade for ticker"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            sql = "SELECT * FROM trade_history WHERE ticker=%s AND status='OPEN' ORDER BY id DESC LIMIT 1"
+            cursor.execute(sql, (ticker,))
+            return cursor.fetchone()
+    finally:
+        conn.close()
+
+def create_trade(ticker, price, time_obj):
+    """Open a new trade based on Score >= 70"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            # Check if open trade exists just in case
+            cursor.execute("SELECT id FROM trade_history WHERE ticker=%s AND status='OPEN'", (ticker,))
+            if cursor.fetchone():
+                print(f"Trade already open for {ticker}")
+                return
+            
+            sql = """
+            INSERT INTO trade_history (ticker, entry_time, entry_price, status, strategy_ver)
+            VALUES (%s, %s, %s, 'OPEN', '7.0_SCORE')
+            """
+            cursor.execute(sql, (ticker, time_obj, price))
+        conn.commit()
+    except Exception as e:
+        print(f"Create Trade Error: {e}")
+    finally:
+        conn.close()
+
+def close_trade(ticker, price, time_obj):
+    """Close an existing open trade based on Score < 50"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT id, entry_price FROM trade_history WHERE ticker=%s AND status='OPEN' ORDER BY id DESC LIMIT 1", (ticker,))
+            row = cursor.fetchone()
+            if not row:
+                print(f"No open trade to close for {ticker}")
+                return
+
+            trade_id = row['id']
+            entry_price = float(row['entry_price'])
+            
+            # Calculate Profit % (Long only for now)
+            # If ticker is SOXS, profit is inverse? 
+            # Actually, SOXS price goes UP if market down. So profit calculation is same: (Exit - Entry) / Entry
+            # Because we BUY SOXS.
+            profit_pct = ((float(price) - entry_price) / entry_price) * 100
+            
+            sql = """
+            UPDATE trade_history 
+            SET exit_time=%s, exit_price=%s, status='CLOSED', profit_pct=%s 
+            WHERE id=%s
+            """
+            cursor.execute(sql, (time_obj, price, profit_pct, trade_id))
+        conn.commit()
+        print(f"Trade Closed {ticker}: {profit_pct:.2f}%")
+    except Exception as e:
+        print(f"Close Trade Error: {e}")
+    finally:
+        conn.close()

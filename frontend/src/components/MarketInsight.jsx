@@ -218,8 +218,8 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
         const fetchDbSignals = async () => {
             try {
                 const [soxlRes, soxsRes] = await Promise.all([
-                    fetch('/api/signals?ticker=SOXL&limit=3'),
-                    fetch('/api/signals?ticker=SOXS&limit=3')
+                    fetch('/api/signals?ticker=SOXL&limit=10'),
+                    fetch('/api/signals?ticker=SOXS&limit=10')
                 ]);
 
                 const soxlData = soxlRes.ok ? await soxlRes.json() : [];
@@ -232,8 +232,8 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
         };
 
         fetchDbSignals();
-        // Poll every 30 seconds to keep fresh (independent of main polling for now)
-        const interval = setInterval(fetchDbSignals, 30000);
+        // Poll every 10 seconds to keep fresh (User Request)
+        const interval = setInterval(fetchDbSignals, 10000);
         return () => clearInterval(interval);
     }, []);
     if (!market) return <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>데이터 로딩 중...</div>;
@@ -808,27 +808,46 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                                                         displayTime = `${mo}-${dy} ${hr}:${mi}`;
                                                     }
 
+                                                    // Single Line Format: MM-DD HH:mm  [Type] [Reason]  $Price
                                                     return (
                                                         <div key={idx} style={{
                                                             background: 'rgba(255,255,255,0.03)',
-                                                            padding: '10px',
-                                                            borderRadius: '8px',
+                                                            padding: '6px 10px',
+                                                            borderRadius: '6px',
                                                             borderLeft: isBuy ? `3px solid ${mainColor}` : '3px solid #777',
                                                             display: 'flex',
-                                                            justifyContent: 'space-between',
-                                                            alignItems: 'center'
+                                                            alignItems: 'center',
+                                                            fontSize: '0.85rem',
+                                                            color: '#ddd',
+                                                            gap: '8px'
                                                         }}>
-                                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                                                <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: isBuy ? mainColor : '#ccc', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                                    {isBuy ? '⚡ SIGNAL' : '💤 EXIT'} <span style={{ fontSize: '0.8rem', color: '#888' }}>| {isBuy ? '매수 진입' : '매도 청산'}</span>
-                                                                </div>
-                                                                <div style={{ fontSize: '0.75rem', color: '#aaa', marginTop: '3px' }}>
-                                                                    {reason}
-                                                                </div>
-                                                                <div style={{ fontSize: '0.75rem', color: '#888', marginTop: '3px' }}>
-                                                                    {displayTime} (KST) <span style={{ margin: '0 4px' }}>@</span> <b style={{ color: '#fff' }}>${Number(sig.price).toFixed(2)}</b>
-                                                                </div>
-                                                            </div>
+                                                            {/* Time */}
+                                                            <span style={{ color: '#888', fontSize: '0.8rem', minWidth: '85px' }}>{displayTime}</span>
+
+                                                            {/* Type */}
+                                                            <span style={{
+                                                                color: isBuy ? '#4ade80' : '#f87171',
+                                                                fontWeight: 'bold',
+                                                                minWidth: '30px'
+                                                            }}>
+                                                                {isBuy ? '매수' : '매도'}
+                                                            </span>
+
+                                                            {/* Reason */}
+                                                            <span style={{
+                                                                color: '#ccc',
+                                                                flex: 1,
+                                                                whiteSpace: 'nowrap',
+                                                                overflow: 'hidden',
+                                                                textOverflow: 'ellipsis'
+                                                            }}>
+                                                                {reason}
+                                                            </span>
+
+                                                            {/* Price */}
+                                                            <span style={{ fontWeight: 'bold', color: '#fff' }}>
+                                                                ${Number(sig.price).toFixed(2)}
+                                                            </span>
                                                         </div>
                                                     );
                                                 });
@@ -843,6 +862,8 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                     })}
                 </div>
 
+                {/* 4. System Trading Panel (Auto-Trading Log) */}
+                <SystemTradingPanel />
 
                 <style>{`
                         @keyframes pulse {
@@ -855,13 +876,136 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                             50 % { opacity: 0.3; }
                             100 % { opacity: 1; }
                         }
-                .glass - panel {
+                .glass-panel {
                         /* Existing styles inherited */
-                        backdrop - filter: blur(12px);
+                        backdrop-filter: blur(12px);
                 }
             `}</style>
             </div>
         </div >
+    );
+};
+
+// [Ver 7.2] System Trading Panel (Split SOXL/SOXS Tables)
+const SystemTradingPanel = () => {
+    const [trades, setTrades] = useState({ soxl: [], soxs: [] });
+
+    const fetchData = async () => {
+        try {
+            // Fetch both Open and Closed trades
+            // limit=50 to show recent history
+            const [statusRes, historyRes] = await Promise.all([
+                fetch('/api/trading/status'),
+                fetch('/api/trading/history?limit=50')
+            ]);
+
+            let openTrades = [];
+            let closedTrades = [];
+
+            if (statusRes.ok) openTrades = await statusRes.json();
+            if (historyRes.ok) closedTrades = await historyRes.json();
+
+            // Combine and Sort
+            const allTrades = [...openTrades, ...closedTrades];
+
+            // Split by Ticker
+            const soxl = allTrades.filter(t => t.ticker === 'SOXL').sort((a, b) => new Date(b.entry_time) - new Date(a.entry_time));
+            const soxs = allTrades.filter(t => t.ticker === 'SOXS').sort((a, b) => new Date(b.entry_time) - new Date(a.entry_time));
+
+            setTrades({ soxl, soxs });
+
+        } catch (e) {
+            console.error("Trading Data Error:", e);
+        }
+    };
+
+    useEffect(() => {
+        fetchData();
+        const interval = setInterval(fetchData, 10000);
+        return () => clearInterval(interval);
+    }, []);
+
+    const formatDate = (isoString) => {
+        if (!isoString) return '-';
+        const d = new Date(isoString);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+
+    const formatTime = (isoString) => {
+        if (!isoString) return '-';
+        const d = new Date(isoString);
+        return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    };
+
+    const formatFullDateTime = (isoString) => {
+        if (!isoString) return '-';
+        const d = new Date(isoString);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}-${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    }
+
+    const renderTable = (ticker, data) => (
+        <div className="glass-panel" style={{ padding: '15px', marginBottom: '20px', overflowX: 'auto' }}>
+            <h4 style={{
+                color: ticker === 'SOXL' ? '#06b6d4' : '#a855f7',
+                margin: '0 0 10px 0',
+                fontSize: '1.1rem',
+                borderBottom: `2px solid ${ticker === 'SOXL' ? 'rgba(6,182,212,0.3)' : 'rgba(168,85,247,0.3)'}`,
+                paddingBottom: '5px'
+            }}>
+                {ticker} Auto-Trading Log
+            </h4>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', color: '#ddd' }}>
+                <thead>
+                    <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#888' }}>
+                        <th style={{ padding: '8px', textAlign: 'left' }}>Date</th>
+                        <th style={{ padding: '8px', textAlign: 'left' }}>Time</th>
+                        <th style={{ padding: '8px', textAlign: 'left' }}>Entry Action</th>
+                        <th style={{ padding: '8px', textAlign: 'left' }}>Exit Time</th>
+                        <th style={{ padding: '8px', textAlign: 'left' }}>Exit Action</th>
+                        <th style={{ padding: '8px', textAlign: 'right' }}>Profit</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {data.length === 0 ? (
+                        <tr><td colSpan="6" style={{ padding: '15px', textAlign: 'center', color: '#666' }}>No records found</td></tr>
+                    ) : (
+                        data.map((trade, idx) => {
+                            const isWin = trade.profit_pct > 0;
+                            const profitColor = isWin ? '#ef4444' : trade.profit_pct < 0 ? '#3b82f6' : '#ddd'; // Red win, Blue loss
+                            return (
+                                <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                    <td style={{ padding: '8px' }}>{formatDate(trade.entry_time)}</td>
+                                    <td style={{ padding: '8px' }}>{formatTime(trade.entry_time)}</td>
+                                    <td style={{ padding: '8px', color: '#ddd' }}>70점 매수</td>
+                                    <td style={{ padding: '8px' }}>{trade.status === 'CLOSED' ? formatFullDateTime(trade.exit_time) : '-'}</td>
+                                    <td style={{ padding: '8px' }}>{trade.status === 'CLOSED' ? '50점 매도' : '-'}</td>
+                                    <td style={{ padding: '8px', textAlign: 'right', color: trade.status === 'CLOSED' ? profitColor : '#aaa', fontWeight: 'bold' }}>
+                                        {trade.status === 'CLOSED' ? `${trade.profit_pct}%` : 'Running'}
+                                    </td>
+                                </tr>
+                            );
+                        })
+                    )}
+                </tbody>
+            </table>
+        </div>
+    );
+
+    return (
+        <div style={{ marginTop: '2rem' }}>
+            <h3 style={{
+                color: '#fff', fontSize: '1.2rem', margin: '0 0 1rem 0',
+                display: 'flex', alignItems: 'center', gap: '8px',
+                borderLeft: '4px solid #f59e0b', paddingLeft: '12px'
+            }}>
+                🤖 System Trading Log <span style={{ fontSize: '0.8rem', color: '#888', fontWeight: 'normal' }}>(Score Strategy)</span>
+            </h3>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {renderTable('SOXL', trades.soxl)}
+                {renderTable('SOXS', trades.soxs)}
+            </div>
+        </div>
     );
 };
 
