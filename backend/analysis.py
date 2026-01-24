@@ -687,6 +687,53 @@ def parse_strategy_config(strategy_str):
         
     return config
 
+# [Ver 7.2.5] Pure Signal Calculation (No DB Dependency)
+def calculate_v2_signals_pure(df_30, df_5, daily_change=0.0):
+    """
+    Calculate V2 Signals purely from DataFrames for Objective Scoring.
+    Returns logic state: step1, step2, step3 (all booleans)
+    Step 2 Logic: Daily Change >= +2.0% (Vanguard Condition)
+    """
+    res = {'step1': False, 'step2': False, 'step3': False}
+    if df_5 is None or df_5.empty or df_30 is None or df_30.empty:
+        return res
+        
+    try:
+        # 1. Step 1 (5m Trend)
+        # Check if MA10 > MA30 on 5m
+        last_5 = df_5.iloc[-1]
+        
+        # Ensure MAs exist (calculated in analyze_ticker usually, but let's be safe)
+        ma10_5 = last_5.get('SMA10', 0) or last_5.get('ma10', 0)
+        ma30_5 = last_5.get('SMA30', 0) or last_5.get('ma30', 0)
+        
+        # If columns missing, re-calc for last row? 
+        # analyze_ticker adds 'SMA10', 'SMA30'. run_v2 adds 'ma10', 'ma30'.
+        # Let's support both or recalc if 0.
+        if ma10_5 == 0: ma10_5 = df_5['Close'].tail(10).mean()
+        if ma30_5 == 0: ma30_5 = df_5['Close'].tail(30).mean()
+        
+        res['step1'] = (ma10_5 > ma30_5)
+        
+        # 2. Step 3 (30m Trend - Sequence is 1->2->3 but logic checks 3 independently)
+        last_30 = df_30.iloc[-1]
+        ma10_30 = last_30.get('SMA10', 0) or last_30.get('ma10', 0)
+        ma30_30 = last_30.get('SMA30', 0) or last_30.get('ma30', 0)
+        
+        if ma10_30 == 0: ma10_30 = df_30['Close'].tail(10).mean()
+        if ma30_30 == 0: ma30_30 = df_30['Close'].tail(30).mean()
+        
+        res['step3'] = (ma10_30 > ma30_30)
+        
+        # 3. Step 2 (Vanguard / Momentum)
+        # Definition from '06_SOXL_SOXS_Ver5.3.2_상세설계.md': Daily Change >= +2.0%
+        res['step2'] = (daily_change >= 2.0)
+        
+    except Exception as e:
+        print(f"Pure Signal Calc Error: {e}")
+        
+    return res
+
 def analyze_ticker(ticker, df_30mRaw, df_5mRaw, df_1dRaw, market_vol_score=0, is_held=False, real_time_info=None, holdings_data=None, strategy_info=None):
     # Retrieve Stock Name
     stock_name = TICKER_NAMES.get(ticker, ticker)
@@ -2634,13 +2681,9 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
         v2_buy_info = None
         v2_sell_info = None
         if t in ['SOXL', 'SOXS']:
-             # Access raw DB version via results[t]['v2_buy'] which is a DICT (serialized)
-             # But calculate_holding_score might expect dict access.
              v2_buy_info = results[t].get('v2_buy')
              v2_sell_info = results[t].get('v2_sell')
-             
 
-              
         # 1. Calculate Score
         # [Ver 6.5.8] Calculate BBI for Score Weighting
         bbi_score = 0
@@ -2648,13 +2691,42 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
             if t in ['SOXL', 'SOXS'] and df_30 is not None:
                 bbi_res = calculate_bbi(df_30)
                 bbi_score = bbi_res.get('bbi', 0)
-        except Exception as e:
-            print(f"BBI Score Error {t}: {e}")
 
-        score_model = calculate_holding_score(results[t], techs[t], v2_buy_info, v2_sell_info, bbi_score=bbi_score)
+        except Exception as e:
+            print(f"BBI Calc Error {t}: {e}")
+
+        # [Ver 7.2.5] Decouple Score from User DB Status (PURE MODE)
+        # Calculate signals purely from chart data, ignoring DB/User status.
+        daily_chg = results[t].get('daily_change', 0)
+        pure_sig = calculate_v2_signals_pure(data_30m.get(t), data_5m.get(t), daily_change=daily_chg)
+        
+        fresh_v2_buy = {
+            'buy_sig1_yn': 'Y' if pure_sig.get('step1') else 'N',
+            'buy_sig2_yn': 'Y' if pure_sig.get('step2') else 'N',
+            'buy_sig3_yn': 'Y' if pure_sig.get('step3') else 'N'
+        }
+        
+        score_model = calculate_holding_score(
+            results[t], 
+            techs[t], 
+            v2_buy=fresh_v2_buy, # [CHANGED] Fresh Algo Status
+            v2_sell=None, 
+            bbi_score=bbi_score
+        )
         scores[t] = score_model
         
+        # [Ver 7.2.4] Inject Score into Results for Frontend
+        results[t]['score'] = score_model.get('score', 0)
+        results[t]['score_eval'] = score_model.get('evaluation', '')
+        
         # 2. Generate Guide
+        # For Guide text, we might still want to know "Real Buy" status to give context?
+        # But usually Guide should also be objective. 
+        # However, v2_buy_info (DB) might be needed if we want to say "You are holding this". 
+        # generate_expert_commentary_v2 uses v2_buy to customize message?
+        # Let's check. If it uses it for 'Status: Holding', then we might want to pass DB info there.
+        # But if calculate_holding_score is what determines the "Score" and "Signal Strength", we fixed that.
+        
         guides[t] = generate_expert_commentary_v2(t, score_model, results[t], techs[t], regime, v2_buy_info, v2_sell_info)
         
         # 3. Simple Tech Comment
