@@ -3012,16 +3012,28 @@ def run_v2_signal_analysis():
                             manual_update_signal(ticker, 'buy1', 0, 'N')
                             print(f"📉 {ticker} Signal 1 OFF (5m trend lost)")
                             
-                            # [Cascade Reset] If Step 1 fails, Step 2 & Final are invalid
-                            if buy_record['buy_sig2_yn'] == 'Y':
-                                manual_update_signal(ticker, 'buy2', 0, 'N')
+                            # [Cascade Reset] If Step 1 fails, Step 2 is INDEPENDENT (User Req Ver 7.2)
+                            # Only Final is cascade removed if it depends on Sig 1 (Conceptually Final needs all 3)
+                            # But if Sig 2 is independent, maybe Final should be too?
+                            # Guide says: "Final: 1+2+3". If 1 is off, Final is technically invalid.
+                            # But user only asked for Sig 2 independence. Let's keep Final cascade for safety?
+                            # User: "1차 신호가 해제 되면 바로 2차 신호도 해제가 되니까 .. 2차 신호 발생 가격이 유지 되면 신호도 유지"
+                            # Does not explicitly mention Final. But usually Final = Strong Buy.
+                            # If 1 is off (Trend broken), Final might be risky. Let's start with Sig 2 independence only.
+                            
+                            # if buy_record['buy_sig2_yn'] == 'Y':
+                            #     manual_update_signal(ticker, 'buy2', 0, 'N')
+                            
                             if buy_record['final_buy_yn'] == 'Y':
                                 manual_update_signal(ticker, 'final', 0, 'N')
-                                print(f"📉 {ticker} Final Signal REMOVED (Cascade)")
+                                print(f"📉 {ticker} Final Signal REMOVED (Cascade from Sig1)")
                         except: pass
             
             # ────────────────────────────────────────────────────────────────
             # SIGNAL 2: 상승 지속 +1% (자동 + 수동)
+            # [Ver 7.2] Independent Logic:
+            # - Entry: Requires Sig 1 ON + Price >= Target
+            # - Exit: Requires Price < Target (Independent of Sig 1)
             # ────────────────────────────────────────────────────────────────
             if buy_record:
                 sig2_manual = buy_record.get('is_manual_buy2') == 'Y'
@@ -3036,31 +3048,37 @@ def run_v2_signal_analysis():
                     sig1_price = float(buy_record.get('buy_sig1_price') or 0)
                     if sig1_price > 0:
                         target_price = sig1_price * 1.01
+                        # [Fix] Target Price Consistency
+                        # If Sig 2 is ALREADY ON, stick to the target price that triggered it?
+                        # But 'buy_sig1_price' is static for this cycle.
                         is_sig2_met = (curr_price >= target_price)
                         sig2_reason = f"+1% (${sig1_price:.2f}→${target_price:.2f})"
                     else:
                         is_sig2_met = False
                         sig2_reason = "1차 신호 대기"
                 
-                # Only allow Sig 2 if Sig 1 is ON (Sequential)
-                if buy_record['buy_sig1_yn'] == 'Y':
-                    if is_sig2_met:
-                        if buy_record['buy_sig2_yn'] == 'N':
-                            if save_v2_buy_signal(ticker, 'sig2', curr_price):
-                                print(f"🚀 {ticker} Signal 2 ON ({sig2_reason})")
-                                log_history(manage_id, ticker, "2차매수신호", sig2_reason, curr_price)
-                                sounds_to_play.add(('buy2', ticker))
+                # Refactored Logic
+                if is_sig2_met:
+                    # Condition Met (Price >= Target)
+                    if buy_record['buy_sig2_yn'] == 'N':
+                        # Entry Attempt: Must have Sig 1 active to START Signal 2
+                        if buy_record['buy_sig1_yn'] == 'Y':
+                             if save_v2_buy_signal(ticker, 'sig2', curr_price):
+                                 print(f"🚀 {ticker} Signal 2 ON ({sig2_reason})")
+                                 log_history(manage_id, ticker, "2차매수신호", sig2_reason, curr_price)
+                                 sounds_to_play.add(('buy2', ticker))
                     else:
-                        if buy_record['buy_sig2_yn'] == 'Y' and not sig2_manual:
-                            try:
-                                from db import manual_update_signal
-                                manual_update_signal(ticker, 'buy2', 0, 'N')
-                                print(f"📉 {ticker} Signal 2 OFF (condition lost)")
-                            except: pass
+                        # Already ON: Maintain (regardless of Sig 1)
+                        pass
                 else:
-                    # If Sig 1 is OFF, Sig 2 must be OFF
-                    if buy_record['buy_sig2_yn'] == 'Y':
-                         manual_update_signal(ticker, 'buy2', 0, 'N')
+                    # Condition Lost (Price < Target)
+                    # Only exit if not manual mode
+                    if buy_record['buy_sig2_yn'] == 'Y' and not sig2_manual:
+                        try:
+                            from db import manual_update_signal
+                            manual_update_signal(ticker, 'buy2', 0, 'N')
+                            print(f"📉 {ticker} Signal 2 OFF (Price dropped < Target)")
+                        except: pass
             
             # ────────────────────────────────────────────────────────────────
             # SIGNAL 3: 30분봉 Golden Cross (자동 + 수동)
