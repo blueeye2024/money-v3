@@ -2154,16 +2154,16 @@ def generate_expert_commentary(ticker, res, tech, regime):
     if score >= 90:
         action_header = "🚀 강력 매수 (STRONG BUY)"
         action_detail = "모든 진입 조건이 완벽합니다. 비중을 실어 적극 진입하십시오. 목표 수익률은 +3% 이상입니다."
-    elif score >= 70:
+    elif score >= 60:
         action_header = "✅ 매수 (BUY)"
-        action_detail = "상승 추세가 확인되었습니다. 눌림목 발생 시 분할로 진입하는 것이 유리합니다."
+        action_detail = "1차(5분봉) 신호 발생 시 20% 정찰병 선진입이 유리합니다. 단, 5분봉 데드크로스 발생 시 즉시 이탈(청산)해야 합니다."
     elif score <= 30:
         action_header = "⚠️ 관망/매도 (WAIT/SELL)"
         action_detail = "진입 근거가 부족합니다. 무리한 진입보다 현금 비중을 늘리고 다음 파동을 기다리십시오."
     elif res.get('step2_color') == 'orange':
         action_header = "🚨 긴급 탈출 (STOP LOSS)"
         action_detail = "원금 보전을 최우선으로 하십시오. 즉시 비중을 축소하거나 전량 청산하는 것을 권장합니다."
-    else:
+    else: # 40~59
         action_header = "⏳ 중립/박스권 (NEUTRAL)"
         action_detail = "방향성 탐색 구간입니다. 짧은 스캘핑 외에는 관망하는 것이 좋습니다."
 
@@ -2367,7 +2367,14 @@ def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None, bbi_score=0):
         "score": total_score,
         "breakdown": breakdown,
         "evaluation": evaluation,
-        "new_metrics": new_metrics
+        "new_metrics": new_metrics,
+        "cheongan_details": {
+            "sig1": 20 if sig1 else 0,
+            "sig2": 10 if sig2 else 0,
+            "sig3": 20 if sig3 else 0,
+            "energy": max(-10, min(10, breakdown.get('energy', 0))) # Pass raw energy if needed, but handled in frontend currently. Let's pass 0 for now or calculate here?
+            # Actually frontend calculates energy itself. Let's just pass signal points.
+        }
     }
 
 
@@ -2391,7 +2398,7 @@ def generate_expert_commentary_v2(ticker, score_data, res, tech, regime, v2_buy=
     current_price = res.get('current_price', 0)
     
     # --- Score Breakdown Header ---
-    bd_text = f"[채점표] 추세 +{breakdown.get('trend', 0)} | 지표 "
+    bd_text = f"[채점표] 추세 +{breakdown.get('cheongan', 0)} | 지표 "
     if breakdown.get('macd', 0) != 0: bd_text += f"MACD{breakdown['macd']:+d} "
     if breakdown.get('rsi', 0) != 0: bd_text += f"RSI{breakdown['rsi']:+d} "
     if breakdown.get('vol', 0) != 0: bd_text += f"VOL{breakdown['vol']:+d} "
@@ -2695,22 +2702,16 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
         except Exception as e:
             print(f"BBI Calc Error {t}: {e}")
 
-        # [Ver 7.2.5] Decouple Score from User DB Status (PURE MODE)
-        # Calculate signals purely from chart data, ignoring DB/User status.
-        daily_chg = results[t].get('daily_change', 0)
-        pure_sig = calculate_v2_signals_pure(data_30m.get(t), data_5m.get(t), daily_change=daily_chg)
-        
-        fresh_v2_buy = {
-            'buy_sig1_yn': 'Y' if pure_sig.get('step1') else 'N',
-            'buy_sig2_yn': 'Y' if pure_sig.get('step2') else 'N',
-            'buy_sig3_yn': 'Y' if pure_sig.get('step3') else 'N'
-        }
+        # [Ver 7.5.0] Revert to DB-based Score (Honoring Latched System Signals)
+        # Using pure calc caused valid past signals to be ignored.
+        # DB 'buy_sigX_yn' is updated by Auto Logic based on Chart, even if Manual is On.
+        # Manual Register inserts 'N' initially, so scoring is safe.
         
         score_model = calculate_holding_score(
             results[t], 
             techs[t], 
-            v2_buy=fresh_v2_buy, # [CHANGED] Fresh Algo Status
-            v2_sell=None, 
+            v2_buy=results[t].get('v2_buy'), # Use DB Status
+            v2_sell=results[t].get('v2_sell'), 
             bbi_score=bbi_score
         )
         scores[t] = score_model
@@ -3060,7 +3061,8 @@ def run_v2_signal_analysis():
             # ═══════════════════════════════════════════════════════════════════
 
             # Check if we are in HOLDING mode (already bought)
-            is_holding = buy_record and buy_record.get('final_buy_yn') == 'Y'
+            # [Ver 7.2.8] Hybrid Trading: Auto Final OR Manual Real Buy = Holding
+            is_holding = buy_record and (buy_record.get('final_buy_yn') == 'Y' or buy_record.get('real_buy_yn') == 'Y')
             
             # ────────────────────────────────────────────────────────────────
             # SIGNAL 1: 5분봉 Golden Cross (자동 + 수동)
@@ -3078,11 +3080,10 @@ def run_v2_signal_analysis():
                             log_history(manage_id, ticker, "1차매수신호", msg_type, curr_price)
                             sounds_to_play.add(('buy1', ticker))
                 else:
-                    if buy_record['buy_sig1_yn'] == 'Y' and not sig1_manual:
+                    if buy_record['buy_sig1_yn'] == 'Y':
                         try:
-                            from db import manual_update_signal
-                            # Turn OFF Sig 1
-                            manual_update_signal(ticker, 'buy1', 0, 'N')
+                            # [Ver 7.4.2] Use System Save to turn OFF Score, Ignore Manual Flag
+                            save_v2_buy_signal(ticker, 'sig1', 0, 'N')
                             print(f"📉 {ticker} Signal 1 OFF (5m trend lost)")
                             
                             # [Cascade Reset] If Step 1 fails, Step 2 is INDEPENDENT (User Req Ver 7.2)
@@ -3145,11 +3146,9 @@ def run_v2_signal_analysis():
                         pass
                 else:
                     # Condition Lost (Price < Target)
-                    # Only exit if not manual mode
-                    if buy_record['buy_sig2_yn'] == 'Y' and not sig2_manual:
+                    if buy_record['buy_sig2_yn'] == 'Y':
                         try:
-                            from db import manual_update_signal
-                            manual_update_signal(ticker, 'buy2', 0, 'N')
+                            save_v2_buy_signal(ticker, 'sig2', 0, 'N')
                             print(f"📉 {ticker} Signal 2 OFF (Price dropped < Target)")
                         except: pass
             
@@ -3167,10 +3166,9 @@ def run_v2_signal_analysis():
                             log_history(manage_id, ticker, "3차매수신호", msg_type, curr_price)
                             sounds_to_play.add(('buy3', ticker))
                 else:
-                    if buy_record['buy_sig3_yn'] == 'Y' and not sig3_manual:
+                    if buy_record['buy_sig3_yn'] == 'Y':
                         try:
-                            from db import manual_update_signal
-                            manual_update_signal(ticker, 'buy3', 0, 'N')
+                            save_v2_buy_signal(ticker, 'sig3', 0, 'N')
                             print(f"📉 {ticker} Signal 3 OFF (30m trend lost)")
                             # If Step 3 lost, Final also blocked? Maybe not strictly sequential but Final requires all 3.
                             if buy_record['final_buy_yn'] == 'Y':
@@ -3290,7 +3288,8 @@ def run_v2_signal_analysis():
                 if tgt1 > 0 and curr_price <= tgt1:
                     if sell_record['sell_sig1_yn'] == 'N':
                         from db import manual_update_signal
-                        manual_update_signal(ticker, 'sell1', curr_price, 'Y')
+                        # [Ver 7.2.9] Auto Trigger -> is_manual='N'
+                        manual_update_signal(ticker, 'sell1', curr_price, 'Y', is_manual_override='N')
                         print(f"🎯 {ticker} Sell Target 1 Met (${tgt1})")
                         log_history(manage_id, ticker, "1차청산신호", f"지정가도달(${tgt1})", curr_price)
                         sell_sounds.add(('sell1', ticker))
@@ -3306,7 +3305,8 @@ def run_v2_signal_analysis():
                     if sell_record['sell_sig1_yn'] == 'Y':
                         try:
                             from db import manual_update_signal
-                            manual_update_signal(ticker, 'sell1', 0, 'N')
+                            # Auto Off -> is_manual='N'
+                            manual_update_signal(ticker, 'sell1', 0, 'N', is_manual_override='N')
                             print(f"📈 {ticker} Sell Signal 1 OFF (trend recovered)")
                         except: pass
                 
@@ -3322,7 +3322,8 @@ def run_v2_signal_analysis():
                 if is_sig2_met:
                     if sell_record['sell_sig2_yn'] == 'N':
                         from db import manual_update_signal
-                        manual_update_signal(ticker, 'sell2', curr_price, 'Y')
+                        # [Ver 7.2.9] Auto Trigger (Trailing Stop) -> is_manual='N'
+                        manual_update_signal(ticker, 'sell2', curr_price, 'Y', is_manual_override='N')
                         print(f"🎯 {ticker} Sell Signal 2 ON ({sig2_reason})")
                         log_history(manage_id, ticker, "2차청산신호", sig2_reason, curr_price)
                         sell_sounds.add(('sell2', ticker))
@@ -3331,7 +3332,7 @@ def run_v2_signal_analysis():
                     if sell_record['sell_sig2_yn'] == 'Y':
                         try:
                             from db import manual_update_signal
-                            manual_update_signal(ticker, 'sell2', 0, 'N')
+                            manual_update_signal(ticker, 'sell2', 0, 'N', is_manual_override='N')
                             print(f"📈 {ticker} Sell Signal 2 OFF (above stop)")
                         except: pass
                 

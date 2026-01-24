@@ -2336,17 +2336,32 @@ def save_v2_buy_signal(ticker, signal_type, price, status='Y'):
             print(f"DEBUG_PROTECT: Ticker={ticker}, Man1={is_man_1}, Man2={is_man_2}, Man3={is_man_3}")
             
             sql = ""
+            sql = ""
             if signal_type == 'sig1':
+                # [Ver 7.4.0] Update YN for Score correctness, protect Price if Manual
                 if str(is_man_1) == 'Y': 
-                    print(f"DEBUG_PROTECT: Skipping Sig1 Update for {ticker} (Manual)")
-                    return True # Manual Override (Skip Auto)
-                sql = "UPDATE buy_stock SET buy_sig1_yn=%s, buy_sig1_price=%s, buy_sig1_dt=NOW() WHERE ticker=%s"
+                    sql = "UPDATE buy_stock SET buy_sig1_yn=%s, buy_sig1_dt=NOW() WHERE ticker=%s"
+                    cursor.execute(sql, (status, ticker))
+                    sql = None # Handled
+                else:
+                    sql = "UPDATE buy_stock SET buy_sig1_yn=%s, buy_sig1_price=%s, buy_sig1_dt=NOW() WHERE ticker=%s"
+            
             elif signal_type == 'sig2':
-                if str(is_man_2) == 'Y': return True
-                sql = "UPDATE buy_stock SET buy_sig2_yn=%s, buy_sig2_price=%s, buy_sig2_dt=NOW() WHERE ticker=%s"
+                if str(is_man_2) == 'Y': 
+                    sql = "UPDATE buy_stock SET buy_sig2_yn=%s, buy_sig2_dt=NOW() WHERE ticker=%s"
+                    cursor.execute(sql, (status, ticker))
+                    sql = None
+                else:
+                    sql = "UPDATE buy_stock SET buy_sig2_yn=%s, buy_sig2_price=%s, buy_sig2_dt=NOW() WHERE ticker=%s"
+
             elif signal_type == 'sig3':
-                if str(is_man_3) == 'Y': return True
-                sql = "UPDATE buy_stock SET buy_sig3_yn=%s, buy_sig3_price=%s, buy_sig3_dt=NOW() WHERE ticker=%s"
+                if str(is_man_3) == 'Y': 
+                    sql = "UPDATE buy_stock SET buy_sig3_yn=%s, buy_sig3_dt=NOW() WHERE ticker=%s"
+                    cursor.execute(sql, (status, ticker))
+                    sql = None
+                else:
+                    sql = "UPDATE buy_stock SET buy_sig3_yn=%s, buy_sig3_price=%s, buy_sig3_dt=NOW() WHERE ticker=%s"
+
             elif signal_type == 'final':
                 sql = "UPDATE buy_stock SET final_buy_yn=%s, final_buy_price=%s, final_buy_dt=NOW() WHERE ticker=%s"
             
@@ -2464,15 +2479,9 @@ def confirm_v2_buy(ticker, price, qty):
                 SET real_buy_yn = 'Y', 
                     real_buy_price = %s, 
                     real_buy_qn = %s,
-                    real_buy_dt = NOW(),
-                    /* [Ver 5.3 Force Entry] Force all signals to Y if manually confirmed */
-                    final_buy_yn = 'Y',
-                    buy_sig1_yn = 'Y',
-                    buy_sig2_yn = 'Y',
-                    buy_sig3_yn = 'Y',
-                    is_manual_buy1 = 'Y',
-                    is_manual_buy2 = 'Y',
-                    is_manual_buy3 = 'Y'
+                    real_buy_dt = NOW()
+                    /* [Ver 7.2.5] Manual Confirm ONLY updates Real Buy info. 
+                       Do NOT force Auto-Signals (buy_sig etc) to prevent Score distortion. */
                 WHERE ticker = %s
             """
             cursor.execute(sql, (price, qty, ticker))
@@ -2548,15 +2557,17 @@ def confirm_v2_sell(ticker, price, qty, is_end=False):
         conn.close()
 
 
-def manual_update_signal(ticker, signal_key, price, status='Y'):
+def manual_update_signal(ticker, signal_key, price, status='Y', is_manual_override=None):
     """
     수동으로 신호 상태 변경 (1차, 2차, 3차)
     signal_key: 'buy1', 'buy2', 'buy3', 'sell1', 'sell2', 'sell3'
     status: 'Y' (Set) or 'N' (Cancel)
     ticker: SOXL, SOXS, etc.
+    is_manual_override: 'Y' or 'N'. If None, defaults to 'Y' when status is 'Y'.
     """
     conn = get_connection()
     try:
+        # ... (mapping omitted for brevity in diff, assume unchanged) ...
         # Map key to columns (Added is_manual column)
         mapping = {
             'buy1': ('buy_stock', 'buy_sig1_yn', 'buy_sig1_price', 'buy_sig1_dt', 'is_manual_buy1'),
@@ -2572,7 +2583,7 @@ def manual_update_signal(ticker, signal_key, price, status='Y'):
             
         table, col_yn, col_price, col_dt, col_manual = mapping[signal_key]
         
-        print(f"DEBUG_MANUAL: Key={signal_key}, Table={table}, Status={status}, Ticker={ticker}")
+        # ... (target logic omitted) ...
 
         if status == 'SET_TARGET' and signal_key.startswith('sell'):
             step_idx = int(signal_key[-1])
@@ -2595,11 +2606,12 @@ def manual_update_signal(ticker, signal_key, price, status='Y'):
             finally:
                 conn.close()
 
-        
-        # Determine Manual Flag: 'Y' if setting signal (status='Y'), 'N' if cancelling (status='N')
-        # User wants: Manual Set -> Fixed ON (is_manual='Y')
-        #             Manual Cancel -> Auto Mode (is_manual='N')
-        is_manual_val = 'Y' if status == 'Y' else 'N'
+
+        # Determine Manual Flag
+        if is_manual_override is not None:
+             is_manual_val = is_manual_override
+        else:
+             is_manual_val = 'Y' if status == 'Y' else 'N'
 
         with conn.cursor() as cursor:
             # Check existence first
@@ -2610,11 +2622,12 @@ def manual_update_signal(ticker, signal_key, price, status='Y'):
             if not exists:
                 if table == 'buy_stock' and status == 'Y':
                     # Create New Record for buy_stock
+                    # [Ver 7.4.1] Manual Buy Start: Init YN as 'N' (System Score 0), but set Manual Flag 'Y'
                     sql_insert = f"""
                         INSERT INTO buy_stock (ticker, row_dt, {col_yn}, {col_price}, {col_dt}, {col_manual})
                         VALUES (%s, NOW(), %s, %s, NOW(), %s)
                     """
-                    cursor.execute(sql_insert, (ticker, status, price, is_manual_val))
+                    cursor.execute(sql_insert, (ticker, 'N', price, is_manual_val))
                 elif table == 'sell_stock' and status == 'Y':
                     # Create New Record for sell_stock (when in SELL mode)
                     sql_insert = f"""
@@ -2627,16 +2640,15 @@ def manual_update_signal(ticker, signal_key, price, status='Y'):
                     return False
 
             else:
-                # Update existing
+                # Update existing (Modified Ver 7.4.0: Do NOT touch col_yn to preserve System Score)
                 sql = f"""
                     UPDATE {table}
-                    SET {col_yn} = %s, 
-                        {col_price} = %s, 
+                    SET {col_price} = %s, 
                         {col_dt} = NOW(),
                         {col_manual} = %s
                     WHERE ticker = %s
                 """
-                cursor.execute(sql, (status, price, is_manual_val, ticker))
+                cursor.execute(sql, (price, is_manual_val, ticker))
 
             
             # [FIX] Clear Custom Targets when Resetting Signal (N)

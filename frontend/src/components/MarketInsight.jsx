@@ -171,6 +171,22 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
         fetchTodayEvents();
     }, []);
 
+
+
+    // [Ver 7.2.6] Enhanced Refresh Handler (Combines Parent + Local Refresh)
+    const handleRefresh = () => {
+        if (onRefresh) onRefresh(); // Parent Refresh (Global Data)
+
+        // Local Refresh (V2 Signals) - defined inside effect, so we need to extract it or trigger it
+        // Re-defining fetchV2Status outside effect or using a trigger state is better.
+        // Let's use a trigger state for simplicity and safety.
+        setManualRefreshTrigger(prev => prev + 1);
+    };
+
+    // [Ver 7.2.6] State to trigger local refresh
+    const [manualRefreshTrigger, setManualRefreshTrigger] = useState(0);
+
+    // [Ver 7.2.6] Separate Effect for V2 Status Fetching (Both Interval & Manual Trigger)
     React.useEffect(() => {
         const fetchV2Status = async () => {
             try {
@@ -196,7 +212,6 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
         };
 
         fetchV2Status();
-        fetchV2Status();
 
         // Polling Logic
         let delay = 10000; // Default 10s
@@ -205,13 +220,12 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
         } else if (pollingMode === 'auto' && marketStatus === 'closed') {
             delay = 60000; // Slow down to 60s when closed
         }
-        // 'on' mode or 'auto' + open/pre-after/day-market uses default 10s
 
         if (!delay) return;
 
         const interval = setInterval(fetchV2Status, delay);
         return () => clearInterval(interval);
-    }, [pollingMode, marketStatus, lastUpdateTime]);
+    }, [pollingMode, marketStatus, lastUpdateTime, manualRefreshTrigger]); // Add trigger dependency
 
     const activeStocks = stocks && Array.isArray(stocks)
         ? [...stocks].sort((a, b) => (b.current_ratio || 0) - (a.current_ratio || 0))
@@ -383,8 +397,10 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                             const energyScore = isSoxl ? Math.trunc(rawEnergy) : Math.trunc(-rawEnergy);
 
                             // Calculate frontend total score [Jian 1.1]
-                            const cheonganBase = scoreObj.breakdown?.cheongan || 0;
-                            const cheonganWithEnergy = cheonganBase + energyScore;
+                            const d = scoreObj.cheongan_details || {};
+                            const pureSum = (d.sig1 || 0) + (d.sig2 || 0) + (d.sig3 || 0);
+                            const cheonganWithEnergy = pureSum + energyScore;
+
                             const indicatorTotal = (scoreObj.breakdown?.rsi || 0) + (scoreObj.breakdown?.macd || 0) +
                                 (scoreObj.breakdown?.vol || 0) + (scoreObj.breakdown?.atr || 0);
                             const sellPenalty = scoreObj.breakdown?.sell_penalty || 0;
@@ -427,8 +443,10 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                                             : Math.trunc(-rawEnergy);
 
                                         // Recalculate cheongan total with energy
-                                        const baseCheongan = scoreObj.breakdown?.cheongan || 0;
-                                        const cheonganWithEnergy = baseCheongan + energyScore;
+                                        // [Ver 7.2.7 Fix] Force Subtotal to match displayed rows (Pure Algo Sum)
+                                        const d = scoreObj.cheongan_details || {};
+                                        const pureSum = (d.sig1 || 0) + (d.sig2 || 0) + (d.sig3 || 0);
+                                        const cheonganWithEnergy = pureSum + energyScore;
 
                                         return (
                                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '15px', fontSize: '0.75rem' }}>
@@ -440,20 +458,20 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                                         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
                                                             <span style={{ color: '#ccc' }}>1차 (5분 GC)</span>
-                                                            <span style={{ color: v2Status?.[ticker]?.buy?.buy_sig1_yn === 'Y' ? '#4ade80' : '#64748b', fontWeight: 'bold' }}>
-                                                                {v2Status?.[ticker]?.buy?.buy_sig1_yn === 'Y' ? '+20' : '0'}
+                                                            <span style={{ color: (scoreObj.cheongan_details?.sig1 || 0) > 0 ? '#4ade80' : '#64748b', fontWeight: 'bold' }}>
+                                                                {(scoreObj.cheongan_details?.sig1 || 0) > 0 ? `+${scoreObj.cheongan_details?.sig1}` : '0'}
                                                             </span>
                                                         </div>
                                                         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
                                                             <span style={{ color: '#ccc' }}>2차 (+1%)</span>
-                                                            <span style={{ color: v2Status?.[ticker]?.buy?.buy_sig2_yn === 'Y' ? '#4ade80' : '#64748b', fontWeight: 'bold' }}>
-                                                                {v2Status?.[ticker]?.buy?.buy_sig2_yn === 'Y' ? '+10' : '0'}
+                                                            <span style={{ color: (scoreObj.cheongan_details?.sig2 || 0) > 0 ? '#4ade80' : '#64748b', fontWeight: 'bold' }}>
+                                                                {(scoreObj.cheongan_details?.sig2 || 0) > 0 ? `+${scoreObj.cheongan_details?.sig2}` : '0'}
                                                             </span>
                                                         </div>
                                                         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
                                                             <span style={{ color: '#ccc' }}>3차 (30분 GC)</span>
-                                                            <span style={{ color: v2Status?.[ticker]?.buy?.buy_sig3_yn === 'Y' ? '#4ade80' : '#64748b', fontWeight: 'bold' }}>
-                                                                {v2Status?.[ticker]?.buy?.buy_sig3_yn === 'Y' ? '+20' : '0'}
+                                                            <span style={{ color: (scoreObj.cheongan_details?.sig3 || 0) > 0 ? '#4ade80' : '#64748b', fontWeight: 'bold' }}>
+                                                                {(scoreObj.cheongan_details?.sig3 || 0) > 0 ? `+${scoreObj.cheongan_details?.sig3}` : '0'}
                                                             </span>
                                                         </div>
                                                         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
@@ -543,7 +561,7 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                         metrics={v2Status.SOXL?.metrics}
                         bbi={v2Status.SOXL?.bbi}
                         isBear={false}
-                        onRefresh={onRefresh}
+                        onRefresh={handleRefresh}
                     />
                     <V2SignalStatus
                         title="SOXS (BEAR TOWER)"
@@ -553,7 +571,7 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                         metrics={v2Status.SOXS?.metrics}
                         bbi={v2Status.SOXS?.bbi}
                         isBear={true}
-                        onRefresh={onRefresh}
+                        onRefresh={handleRefresh}
                     />
                 </div>
 
@@ -618,8 +636,8 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                     const uproChange = uproV2?.change_pct ?? (uproFallback ? Number(uproFallback.change_pct || uproFallback.change_rate || 0) : 0);
                     const soxlChange = v2Status.SOXL?.market_info?.change_pct || 0;
 
-                    let relationIndex = null;
-                    if (Math.abs(uproChange) > 0.05) { // Minimum threshold to avoid noise
+                    let relationIndex = 0;
+                    if (uproChange !== 0) {
                         relationIndex = (soxlChange / uproChange) * 100;
                     }
 
