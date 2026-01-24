@@ -10,6 +10,7 @@ import ManagedStocksPage from './ManagedStocksPage';
 import BacktestPage from './BacktestPage';
 import AssetDashboardPage from './AssetDashboardPage';
 import DailyReportPage from './DailyReportPage';
+import LabPage from './LabPage';
 import './index.css';
 import packageJson from '../package.json'; // Version Import
 
@@ -468,6 +469,10 @@ function Layout() {
                     color: location.pathname === '/trading-journal' ? 'var(--accent-blue)' : 'var(--text-primary)',
                     fontWeight: location.pathname === '/trading-journal' ? 'bold' : 'normal',
                 }}>매매일지</Link>
+                <Link to="/lab" className="nav-link" style={{
+                    color: location.pathname === '/lab' ? 'var(--accent-blue)' : 'var(--text-primary)',
+                    fontWeight: location.pathname === '/lab' ? 'bold' : 'normal',
+                }}>🧪 실험실</Link>
 
 
                 {isAuthenticated ? (
@@ -508,6 +513,7 @@ function Layout() {
                 <Route path="/backtest" element={<BacktestPage />} />
                 <Route path="/requests" element={<RequestPage />} />
                 <Route path="/daily-reports" element={<DailyReportPage />} />
+                <Route path="/lab" element={<LabPage />} />
                 <Route path="/asset-dashboard" element={<AssetDashboardPage />} />
                 <Route path="/asset-dashboard" element={<AssetDashboardPage />} />
                 <Route path="/login" element={<LoginPage />} />
@@ -519,7 +525,7 @@ function Layout() {
                 borderTop: '1px solid var(--glass-border)', color: 'var(--text-secondary)'
             }}>
                 <div style={{ textAlign: 'center', padding: '20px', color: '#64748b', fontSize: '0.8rem', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                    <p>&copy; 2026 BlueEye AI. All rights reserved. | System Status: <span style={{ color: '#4ade80' }}>Operational</span> | Ver {packageJson.version} (Updated: 2026-01-24 20:52)</p>
+                    <p>&copy; 2026 BlueEye AI. All rights reserved. | System Status: <span style={{ color: '#4ade80' }}>Operational</span> | Ver {packageJson.version} (Updated: 2026-01-24 23:05)</p>
                 </div>
             </footer>
         </div>

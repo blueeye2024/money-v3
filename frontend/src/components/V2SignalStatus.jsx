@@ -73,6 +73,7 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
     const [formData, setFormData] = React.useState({ price: '', qty: '' });
     const [submitting, setSubmitting] = React.useState(false);
     const [isUpdating, setIsUpdating] = React.useState(false);
+    const [showBuyMonitor, setShowBuyMonitor] = React.useState(false); // [Ver 7.2.2] Toggle Buy View
 
     // Update indicator effect
     React.useEffect(() => {
@@ -556,11 +557,30 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
                     </div>
                 )}
                 {renderSteps(mode, mode === 'BUY' ? buyStatus : sellStatus, true)}
+
+                {/* [Ver 7.2.2] Buy Monitor Review (Visible only in Holding & Toggled) */}
+                {isHolding && showBuyMonitor && (
+                    <div style={{ marginTop: '1.5rem', opacity: 0.8 }}>
+                        <div style={{ fontSize: '0.7rem', color: '#10b981', fontWeight: 'bold', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span>👁️ 매수 감시 기록 (참고)</span>
+                            <div style={{ height: '1px', flex: 1, borderTop: '1px dashed #10b981', opacity: 0.3 }}></div>
+                        </div>
+                        {renderSteps('BUY', buyStatus, false)}
+                    </div>
+                )}
             </div>
 
             {/* Footer Actions */}
-            {/* [Ver 6.5.6] Footer Actions - 보조차트 토글 버튼 제거 */}
             <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end', gap: '12px', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '10px' }}>
+                {isHolding && (
+                    <span
+                        onClick={() => setShowBuyMonitor(!showBuyMonitor)}
+                        style={{ fontSize: '0.75rem', color: '#94a3b8', cursor: 'pointer', marginRight: 'auto' }}
+                    >
+                        [{showBuyMonitor ? '매수 감시 숨기기' : '매수 감시 보기'}]
+                    </span>
+                )}
+
                 {buyStatus?.real_buy_yn !== 'Y' && (
                     <span
                         onClick={() => setModal({ type: 'BUY', isOpen: true })}

@@ -104,110 +104,7 @@ const SystemPerformanceReport = ({ trades = [] }) => {
 };
 
 
-const ManualTestPanel = ({ onRefresh, marketData, v2Status }) => {
-    const [inputs, setInputs] = React.useState({
-        SOXL: { price: '', change: '', rsi: '', vr: '', atr: '', pr1: '' },
-        SOXS: { price: '', change: '', rsi: '', vr: '', atr: '', pr1: '' }
-    });
 
-    // 현재 값 가져오기 Helper
-    const getCurrent = (ticker, type) => {
-        if (type === 'price' || type === 'change') {
-            if (!marketData || !Array.isArray(marketData)) return '';
-            const item = marketData.find(m => m.ticker === ticker);
-            if (!item) return '';
-            return type === 'price' ? item.current_price : item.change_pct;
-        } else {
-            // Indicators
-            const metrics = v2Status?.[ticker]?.metrics;
-            if (!metrics) return '';
-            const map = { rsi: 'rsi_14', vr: 'vol_ratio', atr: 'atr', pr1: 'pivot_r1' };
-            return metrics[map[type]] || '';
-        }
-    };
-
-    const handleChange = (ticker, field, value) => {
-        setInputs({
-            ...inputs,
-            [ticker]: { ...inputs[ticker], [field]: value }
-        });
-    };
-
-    const handleSubmit = async (ticker) => {
-        const inp = inputs[ticker];
-        const price = inp.price || getCurrent(ticker, 'price');
-        const change = inp.change || getCurrent(ticker, 'change');
-
-        if (!price || parseFloat(price) <= 0) return;
-
-        try {
-            const payload = {
-                ticker,
-                price: parseFloat(price),
-                change_pct: parseFloat(change) || 0,
-                indicators: {
-                    rsi: inp.rsi ? parseFloat(inp.rsi) : null,
-                    vr: inp.vr ? parseFloat(inp.vr) : null,
-                    atr: inp.atr ? parseFloat(inp.atr) : null,
-                    pr1: inp.pr1 ? parseFloat(inp.pr1) : null
-                }
-            };
-
-            const res = await fetch('/api/market-indices/manual', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            const data = await res.json();
-            if (data.status === 'success') {
-                // Clear inputs
-                setInputs({ ...inputs, [ticker]: { price: '', change: '', rsi: '', vr: '', atr: '', pr1: '' } });
-                if (onRefresh) onRefresh();
-            }
-        } catch (e) {
-            console.error('Manual update error:', e);
-        }
-    };
-
-    const inputStyle = {
-        background: '#0f172a', border: '1px solid #334155', color: '#fff',
-        borderRadius: '6px', fontSize: '0.8rem', padding: '0.4rem', flex: 1, minWidth: '60px'
-    };
-
-    return (
-        <div style={{
-            background: 'rgba(56, 189, 248, 0.05)', padding: '1.2rem',
-            borderRadius: '12px', border: '1px solid rgba(56, 189, 248, 0.2)', marginBottom: '1rem'
-        }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', marginBottom: '1rem' }}>
-                <div style={{ fontSize: '1.2rem' }}>🧪</div>
-                <h3 style={{ margin: 0, color: '#38bdf8', fontSize: '1rem', fontWeight: '700' }}>수동 테스트 (가격 & 보조지표)</h3>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                {['SOXL', 'SOXS'].map(ticker => (
-                    <div key={ticker} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px', background: 'rgba(0,0,0,0.2)', padding: '8px', borderRadius: '8px' }}>
-                        <label style={{ width: '40px', fontSize: '0.9rem', color: '#38bdf8', fontWeight: '700' }}>{ticker}</label>
-
-                        <input type="number" step="0.01" placeholder={`$${getCurrent(ticker, 'price')}`} value={inputs[ticker].price} onChange={e => handleChange(ticker, 'price', e.target.value)} style={{ ...inputStyle, minWidth: '70px' }} title="Current Price" />
-                        <input type="number" step="0.1" placeholder={`${getCurrent(ticker, 'change')}%`} value={inputs[ticker].change} onChange={e => handleChange(ticker, 'change', e.target.value)} style={{ ...inputStyle, width: '60px' }} title="Change %" />
-
-                        <div style={{ width: '1px', height: '20px', background: '#334155', margin: '0 4px' }}></div>
-
-                        <input type="number" placeholder={`RSI ${getCurrent(ticker, 'rsi')}`} value={inputs[ticker].rsi} onChange={e => handleChange(ticker, 'rsi', e.target.value)} style={inputStyle} title="RSI" />
-                        <input type="number" placeholder={`VR ${getCurrent(ticker, 'vr')}`} value={inputs[ticker].vr} onChange={e => handleChange(ticker, 'vr', e.target.value)} style={inputStyle} title="Volume Ratio" />
-                        <input type="number" placeholder={`ATR ${getCurrent(ticker, 'atr')}`} value={inputs[ticker].atr} onChange={e => handleChange(ticker, 'atr', e.target.value)} style={inputStyle} title="ATR" />
-                        <input type="number" placeholder={`PR1 ${getCurrent(ticker, 'pr1')}`} value={inputs[ticker].pr1} onChange={e => handleChange(ticker, 'pr1', e.target.value)} style={inputStyle} title="Pivot R1" />
-
-                        <button onClick={() => handleSubmit(ticker)} style={{
-                            padding: '0.4rem 0.8rem', background: '#38bdf8', color: '#0f172a',
-                            border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.8rem', marginLeft: 'auto'
-                        }}>적용</button>
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
-};
 
 const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, setPollingMode, marketStatus, lastUpdateTime, isMuted, toggleMute }) => {
     // [New] Local state for persistent DB signals
@@ -740,10 +637,6 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                         </div>
                     );
                 })()}
-
-                {/* 수동 테스트 패널 (Params 전달) */}
-                <ManualTestPanel onRefresh={onRefresh} marketData={market?.indices} v2Status={v2Status} />
-
 
                 {/* 3. Bottom Grid: Intelligence & History */}
 

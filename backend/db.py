@@ -2785,32 +2785,7 @@ def get_latest_market_indicators(ticker):
     finally:
         conn.close()
 
-def manual_update_market_indicators(ticker, rsi, vr, atr, pivot_r1):
-    """보조지표 수동 업데이트 (Upsert)"""
-    conn = get_connection()
-    try:
-        with conn.cursor() as cursor:
-            # Upsert Logic
-            sql = """
-                INSERT INTO market_indicators_log 
-                (ticker, candle_time, rsi_14, vol_ratio, atr, pivot_r1, created_at)
-                VALUES (%s, NOW(), %s, %s, %s, %s, NOW())
-                ON DUPLICATE KEY UPDATE
-                rsi_14 = VALUES(rsi_14),
-                vol_ratio = VALUES(vol_ratio),
-                atr = VALUES(atr),
-                pivot_r1 = VALUES(pivot_r1),
-                created_at = NOW(),
-                candle_time = NOW()
-            """
-            cursor.execute(sql, (ticker, rsi, vr, atr, pivot_r1))
-        conn.commit()
-        return True
-    except Exception as e:
-        print(f"Manual Indicators Update Error: {e}")
-        return False
-    finally:
-        conn.close()
+
 
 # ========================================
 # Trading Journal (거래일지) CRUD Functions

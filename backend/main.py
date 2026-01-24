@@ -1367,56 +1367,7 @@ def api_delete_sell_record(ticker: str):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
-class ManualPriceUpdate(BaseModel):
-    ticker: str
-    price: float
-    change_pct: float = 0.0
-    indicators: dict = None
 
-@app.post("/api/market-indices/manual")
-def update_manual_market_price(data: ManualPriceUpdate):
-    """수동으로 market_indices 가격 및 보조지표 업데이트"""
-    from db import manual_update_market_indices, manual_update_market_indicators
-    try:
-        # 1. Price Update
-        price_success = manual_update_market_indices(
-            data.ticker.upper(), 
-            data.price, 
-            data.change_pct
-        )
-
-        # 2. Indicators Update (if provided)
-        indicator_success = True
-        if data.indicators:
-            indicator_success = manual_update_market_indicators(
-                data.ticker.upper(),
-                data.indicators.get('rsi'),
-                data.indicators.get('vr'),
-                data.indicators.get('atr'),
-                data.indicators.get('pr1')
-            )
-
-        if price_success and indicator_success:
-            return {"status": "success"}
-        return {"status": "error", "message": "Update failed (Check console)"}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-@app.post("/api/test/market-price")
-def test_update_market_price(data: ManualPriceUpdate):
-    """테스트용 market_indices 가격 업데이트 (별칭 엔드포인트)"""
-    from db import manual_update_market_indices
-    try:
-        success = manual_update_market_indices(
-            data.ticker.upper(), 
-            data.price, 
-            data.change_pct
-        )
-        if success:
-            return {"status": "success", "message": f"{data.ticker} 가격이 ${data.price}로 업데이트되었습니다."}
-        return {"status": "error", "message": "Update failed"}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
 
 # ========================================
 # Trading Journal (거래일지) API Endpoints

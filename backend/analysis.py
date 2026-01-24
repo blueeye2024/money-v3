@@ -2631,7 +2631,6 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
     tech_comments = {}
     
     for t in tickers:
-        # [V3.8] Retrieve V2 Status (Already fetched in results[t])
         v2_buy_info = None
         v2_sell_info = None
         if t in ['SOXL', 'SOXS']:
@@ -2640,6 +2639,8 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
              v2_buy_info = results[t].get('v2_buy')
              v2_sell_info = results[t].get('v2_sell')
              
+
+              
         # 1. Calculate Score
         # [Ver 6.5.8] Calculate BBI for Score Weighting
         bbi_score = 0
