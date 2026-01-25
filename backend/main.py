@@ -1313,21 +1313,21 @@ class ManualSignalModel(BaseModel):
     signal_key: str
     price: float
     status: str = 'Y'
+    qty: float = 0.0  # [Ver 7.3.1] Add Quantity for Partial Real Buy
 
 @app.post("/api/v2/manual-signal")
 def api_manual_signal(data: ManualSignalModel):
-    from db import manual_update_signal
     from db import manual_update_signal, get_v2_buy_status
     try:
-        print(f"DEBUG: Manual Signal Request: Ticker={data.ticker}, Key={data.signal_key}, Status={data.status}")
+        print(f"DEBUG: Manual Signal Request: Ticker={data.ticker}, Key={data.signal_key}, Status={data.status}, Qty={data.qty}")
         
         # [DEBUG] Check Buy Status Before
         buy_before = get_v2_buy_status(data.ticker)
         b2_before = buy_before.get('buy_sig2_yn', 'N') if buy_before else 'None'
-        print(f"DEBUG: Buy2 Before: {b2_before}")
 
         # Use ticker instead of manage_id
-        success = manual_update_signal(data.ticker, data.signal_key, data.price, data.status)
+        # [Ver 7.3.1] Pass qty to manual_update_signal
+        success = manual_update_signal(data.ticker, data.signal_key, data.price, data.status, qty=data.qty)
         
         # [DEBUG] Check Buy Status After
         buy_after = get_v2_buy_status(data.ticker)

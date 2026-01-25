@@ -2557,17 +2557,17 @@ def confirm_v2_sell(ticker, price, qty, is_end=False):
         conn.close()
 
 
-def manual_update_signal(ticker, signal_key, price, status='Y', is_manual_override=None):
+def manual_update_signal(ticker, signal_key, price, status='Y', is_manual_override=None, qty=0.0):
     """
     수동으로 신호 상태 변경 (1차, 2차, 3차)
     signal_key: 'buy1', 'buy2', 'buy3', 'sell1', 'sell2', 'sell3'
     status: 'Y' (Set) or 'N' (Cancel)
     ticker: SOXL, SOXS, etc.
     is_manual_override: 'Y' or 'N'. If None, defaults to 'Y' when status is 'Y'.
+    qty: [Ver 7.3.1] Partial Buy Quantity. If > 0, triggers Real Buy Confirmation logic.
     """
     conn = get_connection()
     try:
-        # ... (mapping omitted for brevity in diff, assume unchanged) ...
         # Map key to columns (Added is_manual column)
         mapping = {
             'buy1': ('buy_stock', 'buy_sig1_yn', 'buy_sig1_price', 'buy_sig1_dt', 'is_manual_buy1'),
@@ -2583,29 +2583,23 @@ def manual_update_signal(ticker, signal_key, price, status='Y', is_manual_overri
             
         table, col_yn, col_price, col_dt, col_manual = mapping[signal_key]
         
-        # ... (target logic omitted) ...
-
         if status == 'SET_TARGET' and signal_key.startswith('sell'):
+            # (Target Setting Logic - Unchanged)
             step_idx = int(signal_key[-1])
             target_col = f"manual_target_sell{step_idx}"
             
-            conn = get_connection()
-            try:
-                with conn.cursor() as cursor:
-                     # Check existence
-                     cursor.execute(f"SELECT 1 FROM {table} WHERE ticker=%s", (ticker,))
-                     if not cursor.fetchone():
-                         init_sql = f"INSERT INTO {table} (ticker, row_dt) VALUES (%s, NOW())"
-                         cursor.execute(init_sql, (ticker,))
-                     
-                     print(f"Updating Target: {target_col} = {price} for {ticker}")
-                     sql = f"UPDATE {table} SET {target_col}=%s WHERE ticker=%s"
-                     cursor.execute(sql, (price, ticker))
-                     conn.commit()
-                return True
-            finally:
-                conn.close()
-
+            with conn.cursor() as cursor:
+                 # Check existence
+                 cursor.execute(f"SELECT 1 FROM {table} WHERE ticker=%s", (ticker,))
+                 if not cursor.fetchone():
+                     init_sql = f"INSERT INTO {table} (ticker, row_dt) VALUES (%s, NOW())"
+                     cursor.execute(init_sql, (ticker,))
+                 
+                 print(f"Updating Target: {target_col} = {price} for {ticker}")
+                 sql = f"UPDATE {table} SET {target_col}=%s WHERE ticker=%s"
+                 cursor.execute(sql, (price, ticker))
+                 conn.commit()
+            return True
 
         # Determine Manual Flag
         if is_manual_override is not None:
@@ -2615,32 +2609,28 @@ def manual_update_signal(ticker, signal_key, price, status='Y', is_manual_overri
 
         with conn.cursor() as cursor:
             # Check existence first
-            check_sql = f"SELECT 1 FROM {table} WHERE ticker=%s"
+            check_sql = f"SELECT * FROM {table} WHERE ticker=%s ORDER BY row_dt DESC LIMIT 1"
             cursor.execute(check_sql, (ticker,))
-            exists = cursor.fetchone()
+            existing_row = cursor.fetchone()
             
-            if not exists:
+            if not existing_row:
                 if table == 'buy_stock' and status == 'Y':
                     # Create New Record for buy_stock
-                    # [Ver 7.4.1] Manual Buy Start: Init YN as 'N' (System Score 0), but set Manual Flag 'Y'
                     sql_insert = f"""
                         INSERT INTO buy_stock (ticker, row_dt, {col_yn}, {col_price}, {col_dt}, {col_manual})
                         VALUES (%s, NOW(), %s, %s, NOW(), %s)
                     """
                     cursor.execute(sql_insert, (ticker, 'N', price, is_manual_val))
                 elif table == 'sell_stock' and status == 'Y':
-                    # Create New Record for sell_stock (when in SELL mode)
                     sql_insert = f"""
                         INSERT INTO sell_stock (ticker, row_dt, {col_yn}, {col_price}, {col_dt}, {col_manual})
                         VALUES (%s, NOW(), %s, %s, NOW(), %s)
                     """
                     cursor.execute(sql_insert, (ticker, status, price, is_manual_val))
                 else:
-                    print(f"Manual Update Skipped: Record not found for {ticker}")
                     return False
-
             else:
-                # Update existing (Modified Ver 7.4.0: Do NOT touch col_yn to preserve System Score)
+                # Update existing
                 sql = f"""
                     UPDATE {table}
                     SET {col_price} = %s, 
@@ -2650,32 +2640,61 @@ def manual_update_signal(ticker, signal_key, price, status='Y', is_manual_overri
                 """
                 cursor.execute(sql, (price, is_manual_val, ticker))
 
-            
+            # [Ver 7.3.1] Partial Buy Logic -> Trigger Real Buy State
+            if table == 'buy_stock' and status == 'Y' and float(qty) > 0:
+                print(f"💰 Partial Buy Triggered: {ticker} Qty={qty} Price={price}")
+                
+                # 1. Calculate New Avg Price & Qty
+                # [FIX]: Handle None (NULL) from DB. .get() returns None if key exists but val is NULL.
+                val_qn = existing_row.get('real_buy_qn') if existing_row else 0
+                val_avg = existing_row.get('real_buy_price') if existing_row else 0
+                
+                current_qn = float(val_qn or 0)
+                current_avg = float(val_avg or 0)
+                
+                new_qn = current_qn + float(qty)
+                new_avg = 0
+                if new_qn > 0:
+                    new_avg = ((current_qn * current_avg) + (float(qty) * float(price))) / new_qn
+                
+                # 2. Update real_buy_yn, price, qn
+                update_real_sql = """
+                    UPDATE buy_stock 
+                    SET real_buy_yn = 'Y', 
+                        real_buy_price = %s, 
+                        real_buy_qn = %s,
+                        real_buy_dt = NOW()
+                    WHERE ticker = %s
+                """
+                cursor.execute(update_real_sql, (new_avg, new_qn, ticker))
+                
+                # 3. Log Trade History
+                # from db import log_trade_history
+                # log_trade_history(...) - Skipped for now (implement inline later)
+                
+                # 4. Ensure Sell Stock Record Exists (Init Sell Monitor)
+                cursor.execute("SELECT 1 FROM sell_stock WHERE ticker=%s", (ticker,))
+                if not cursor.fetchone():
+                    print(f"Starting Sell Monitor for {ticker}")
+                    cursor.execute("INSERT INTO sell_stock (ticker, row_dt) VALUES (%s, NOW())", (ticker,))
+                    
             # [FIX] Clear Custom Targets when Resetting Signal (N)
             if status == 'N':
                 if signal_key == 'buy2':
                     clear_sql = "UPDATE buy_stock SET target_box_price = NULL WHERE ticker=%s"
                     cursor.execute(clear_sql, (ticker,))
                 elif signal_key == 'sell2':
-                    # Clear both old target_stop_price and new manual_target_sell2
-                    clear_sql = "UPDATE sell_stock SET target_stop_price = NULL, manual_target_sell2 = NULL WHERE ticker=%s"
+                    clear_sql = "UPDATE sell_stock SET manual_target_sell2 = NULL, target_stop_price = NULL WHERE ticker=%s"
                     cursor.execute(clear_sql, (ticker,))
-                
-                # [NEW] Clear Manual Sell Targets for Step 1 & 3
-                if signal_key == 'sell1':
-                    cursor.execute("UPDATE sell_stock SET manual_target_sell1 = NULL WHERE ticker=%s", (ticker,))
-                elif signal_key == 'sell3':
-                    cursor.execute("UPDATE sell_stock SET manual_target_sell3 = NULL WHERE ticker=%s", (ticker,))
 
-            # Logic for final_buy only if status is 'Y'
-            if status == 'Y' and signal_key == 'buy3':
-                 cursor.execute("UPDATE buy_stock SET final_buy_yn='Y', final_buy_price=%s, final_buy_dt=NOW() WHERE ticker=%s", (price, ticker))
-            
-            
         conn.commit()
+        
+        # [Ver 6.5.6] Force refresh analysis or notify?
+        # Usually Frontend polls.
+        
         return True
     except Exception as e:
-        print(f"Manual Update Error: {e}")
+        print(f"Manual Signal Update Error: {e}")
         return False
     finally:
         conn.close()

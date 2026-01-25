@@ -2412,12 +2412,14 @@ def generate_expert_commentary_v2(ticker, score_data, res, tech, regime, v2_buy=
     # Analysis Body
     if score >= 80:
         comment += f"🚀 [Action] 강력 매수/보유 (Strong Buy). "
-        if is_v2_active: comment += f"V2 시스템이 {v2_stage} 상태입니다. "
+        if v2_stage: comment += f"V2 시스템이 {v2_stage} 상태입니다. "
         comment += f"추세와 보조지표가 모두 상승을 가리킵니다.\n"
         comment += "💡 수익을 극대화(Let profits run)하십시오."
         
     elif score >= 60:
-        comment += f"✅ [Action] 매수 관점 (Buy). 상승 모멘텀이 유효합니다.\n"
+        comment += f"✅ [Action] 매수 관점 (Buy). 상승 모멘텀이 유효합니다."
+        if v2_stage: comment += f" (V2: {v2_stage})"
+        comment += "\n"
         
         tech_sum = breakdown.get('macd', 0) + breakdown.get('rsi', 0) + breakdown.get('vol', 0)
         if tech_sum > 0: comment += "기술적 지표가 긍정적입니다. "
@@ -2426,12 +2428,14 @@ def generate_expert_commentary_v2(ticker, score_data, res, tech, regime, v2_buy=
         
     elif score >= 40:
         comment += f"⏳ [Action] 관망/중립 (Hold). "
+        if v2_stage: comment += f" (V2: {v2_stage})"
         if breakdown.get('penalty', 0) > 0: comment += f"패널티 요소(-{breakdown['penalty']})가 있어 진입을 보류합니다.\n"
         else: comment += "뚜렷한 상승 신호가 부족합니다.\n"
         comment += "💡 다음 V2 신호를 기다리십시오."
         
     else: # Score < 40
         comment += f"⚠️ [Action] 매도/리스크 관리 (Sell). "
+        if v2_stage: comment += f" (V2: {v2_stage})"
         comment += f"하락 우위 상태입니다.\n"
         comment += "💡 현금 확보 및 포지션 축소를 권장합니다."
         
