@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 SECRET_KEY = "cheongan_fintech_secret_key_2026"
 ALGORITHM = "HS256"
 
-from analysis import run_analysis, fetch_data, analyze_ticker, TARGET_TICKERS, run_v2_signal_analysis
+from analysis import run_analysis, fetch_data, TARGET_TICKERS, run_v2_signal_analysis
 from sms import send_sms
 from db import init_db, save_signal, check_last_signal, get_stocks, add_stock, delete_stock, add_transaction, get_transactions, update_transaction, delete_transaction, get_signals, save_sms_log, get_sms_logs, delete_all_signals, delete_sms_log, delete_all_sms_logs, get_ticker_settings, update_ticker_setting, update_stock_status, get_v2_buy_status, get_v2_sell_status, delete_holding
 

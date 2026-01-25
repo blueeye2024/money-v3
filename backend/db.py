@@ -2633,12 +2633,13 @@ def manual_update_signal(ticker, signal_key, price, status='Y', is_manual_overri
                 # Update existing
                 sql = f"""
                     UPDATE {table}
-                    SET {col_price} = %s, 
+                    SET {col_yn} = %s,
+                        {col_price} = %s, 
                         {col_dt} = NOW(),
                         {col_manual} = %s
                     WHERE ticker = %s
                 """
-                cursor.execute(sql, (price, is_manual_val, ticker))
+                cursor.execute(sql, (status, price, is_manual_val, ticker))
 
             # [Ver 7.3.1] Partial Buy Logic -> Trigger Real Buy State
             if table == 'buy_stock' and status == 'Y' and float(qty) > 0:
