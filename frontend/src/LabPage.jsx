@@ -327,7 +327,6 @@ const LabPage = () => {
                                 <th style={thStyle}>MACD</th>
                                 <th style={thStyle}>Vol</th>
                                 <th style={thStyle}>ATR</th>
-                                <th style={thStyle}>BBI</th>
                                 <th style={thStyle}>Ver</th>
                             </tr>
                         </thead>
@@ -338,7 +337,7 @@ const LabPage = () => {
                                 // Assuming Sum Match is expected.
                                 const sum = (row.score_cheongan_1 || 0) + (row.score_cheongan_2 || 0) + (row.score_cheongan_3 || 0) +
                                     (row.score_energy || 0) + (row.score_rsi || 0) + (row.score_macd || 0) +
-                                    (row.score_vol || 0) + (row.score_atr || 0) + (row.score_bbi || 0);
+                                    (row.score_vol || 0) + (row.score_atr || 0);
 
                                 // Loose check for sell_penalty? 
                                 // [Req] Allow 1 point tolerance for rounding differences
@@ -379,14 +378,13 @@ const LabPage = () => {
                                         <td style={tdStyle}>{row.score_macd}</td>
                                         <td style={tdStyle}>{row.score_vol}</td>
                                         <td style={tdStyle}>{row.score_atr}</td>
-                                        <td style={tdStyle}>{row.score_bbi}</td>
                                         <td style={{ ...tdStyle, fontSize: '0.75rem', color: '#94a3b8' }}>{row.algo_version || '-'}</td>
                                     </tr>
                                 );
                             })}
                             {data.length === 0 && (
                                 <tr>
-                                    <td colSpan="16" style={{ padding: '30px', textAlign: 'center', color: '#64748b' }}>
+                                    <td colSpan="15" style={{ padding: '30px', textAlign: 'center', color: '#64748b' }}>
                                         No data found.
                                     </td>
                                 </tr>
