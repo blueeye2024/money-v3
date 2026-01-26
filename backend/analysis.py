@@ -2213,6 +2213,29 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
         except Exception as e:
             print(f"BBI Calc Error {t}: {e}")
 
+        # [Ver 7.6.2] Calculate Energy Score (Ported from Frontend MarketInsight.jsx)
+        energy_score = 0
+        try:
+            if t in ['SOXL', 'SOXS']:
+                upro_val = results.get('UPRO', {}).get('daily_change', 0)
+                soxl_val = results.get('SOXL', {}).get('daily_change', 0)
+                
+                relation_index = 0
+                if abs(upro_val) > 0.05:
+                    relation_index = (soxl_val / upro_val) * 100
+                    
+                raw_energy = (relation_index - 100) / 20.0
+                if upro_val < 0: raw_energy = -raw_energy
+                
+                raw_energy = max(-10, min(10, raw_energy))
+                
+                if t == 'SOXL':
+                    energy_score = int(raw_energy)
+                else: # SOXS
+                    energy_score = int(-raw_energy)
+        except Exception as e:
+            print(f"Energy Calc Error {t}: {e}")
+
         # [Ver 7.5.0] Revert to DB-based Score (Honoring Latched System Signals)
         # Using pure calc caused valid past signals to be ignored.
         # DB 'buy_sigX_yn' is updated by Auto Logic based on Chart, even if Manual is On.
@@ -2223,7 +2246,8 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
             techs[t], 
             v2_buy=results[t].get('v2_buy'), # Use DB Status
             v2_sell=results[t].get('v2_sell'), 
-            bbi_score=bbi_score
+            bbi_score=bbi_score,
+            energy_score=energy_score
         )
         scores[t] = score_model
         
@@ -2234,6 +2258,10 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
         # [Ver 7.6.1] Inject Full Breakdown for Backend Logic (main.py Lab Save)
         results[t]['score_breakdown'] = score_model.get('breakdown', {})
         results[t]['cheongan_details'] = score_model.get('cheongan_details', {})
+        
+        # [Fix] Ensure Dashboard BBI matches Lab Data BBI
+        if 'new_metrics' not in results[t]: results[t]['new_metrics'] = {}
+        results[t]['new_metrics']['bbi'] = bbi_score
         
         # 2. Generate Guide
         # For Guide text, we might still want to know "Real Buy" status to give context?
