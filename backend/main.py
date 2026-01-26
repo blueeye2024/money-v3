@@ -103,6 +103,11 @@ def on_startup():
                  
         scheduler.add_job(token_maintenance_job, 'interval', minutes=10)
 
+        # [Reliability] Heartbeat Logging (Every 1 hour)
+        def heartbeat_job():
+            print(f"❤️ System Heartbeat: {datetime.now()} - Scheduler is alive.")
+        scheduler.add_job(heartbeat_job, 'interval', hours=1)
+
         scheduler.start()
         print("✅ Scheduler Started: Monitor(1m), PriceUpdate(5m), Token(10m)")
         
