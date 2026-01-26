@@ -568,6 +568,11 @@ def calculate_bbi(df, period=20):
         if len(df) < 30:
             return {'bbi': 0, 'adx': 0, 'bbw_ratio': 1.0, 'status': '데이터 부족'}
         
+        # [Fix] Case-insensitive column access
+        close = df['Close'] if 'Close' in df.columns else df['close']
+        high = df['High'] if 'High' in df.columns else df['high']
+        low = df['Low'] if 'Low' in df.columns else df['low']
+        
         # 1. ADX 14일 - 추세 강도
         adx_df = ta.adx(high, low, close, length=14)
         adx = float(adx_df['ADX_14'].iloc[-1]) if adx_df is not None and 'ADX_14' in adx_df.columns else 20.0
@@ -1120,17 +1125,16 @@ def analyze_30m_box(df_30m):
 
 
 
-def check_triple_filter(ticker, data_30m, data_5m):
+def check_triple_filter(ticker, data_30m, data_5m, override_price=None, simulation_mode=False, simulation_context=None):
     """
     [Refactored V5.6] Single Source of Truth
-    - READ-ONLY from DB (populated by run_v2_signal_analysis)
-    - No Calculation of MA/Signals here.
-    - No DB Updates here.
+    - READ-ONLY from DB (Dashboard Mode)
+    - DYNAMIC CALCULATION from DataFrames (Simulation Mode)
     """
     from db import fetch_signal_status_dict, get_global_config
     import datetime
     
-    # 1. Initialize Result Dict (Frontend Contract)
+    # 1. Initialize Result Dict
     result = {
         "step1": False, "step2": False, "step3": False, "final": False, 
         "step1_color": None, "step2_color": None, "step3_color": None,
@@ -1142,12 +1146,116 @@ def check_triple_filter(ticker, data_30m, data_5m):
         "current_price": 0.0,
         "daily_change": 0.0,
         "entry_price": 0.0,
-        "name": TICKER_NAMES.get(ticker, ticker), # [FIX] Add Name for Frontend/Console
+        "name": TICKER_NAMES.get(ticker, ticker), 
         "sounds": [],
         "price_alerts": []
     }
 
-    print(f"DEBUG: Checking {ticker} (Read-Only Mode)")
+    if simulation_mode:
+        # [Simulation Mode] Calculate Signals from Dataframes 
+        # (Used by Lab / Backtest)
+        try:
+            # Context unpacking
+            sim_ctx = simulation_context or {}
+            prev_close = sim_ctx.get('prev_close', 0.0)
+            
+            # --- Get Data Subsets (Last Row) ---
+            df5 = None
+            if isinstance(data_5m, dict): df5 = data_5m.get(ticker)
+            else: df5 = data_5m
+            
+            df30 = None
+            if isinstance(data_30m, dict): df30 = data_30m.get(ticker)
+            else: df30 = data_30m
+            
+            curr_price = 0.0
+            if df5 is not None and not df5.empty:
+                curr_price = float(df5['Close'].iloc[-1])
+            elif override_price:
+                 curr_price = float(override_price)
+                 
+            result['current_price'] = curr_price
+            
+            # --- Step 1: 5m Trend (MA10 > MA30) ---
+            is_step1 = False
+            if df5 is not None and not df5.empty:
+                # Require MA columns to be present (uploaded)
+                # Flexible case: 'MA10' or 'ma10'
+                ma10_col = 'MA10' if 'MA10' in df5.columns else 'ma10'
+                ma30_col = 'MA30' if 'MA30' in df5.columns else 'ma30'
+                
+                if ma10_col in df5.columns and ma30_col in df5.columns:
+                     m10 = float(df5[ma10_col].iloc[-1])
+                     m30 = float(df5[ma30_col].iloc[-1])
+                     if m10 > m30: is_step1 = True
+            
+            result['step1'] = is_step1
+            result['step1_status'] = "진입 타점 (5m 정배열)" if is_step1 else "진입 대기"
+            if not is_step1: result['step1_color'] = "yellow"
+
+            # --- Step 2: Box Breakout / Momentum ---
+            # Condition: Current Price > Prev Close * 1.02 Or Daily Change > 2.0%
+            is_step2 = False
+            daily_change = 0.0
+            
+            if prev_close > 0:
+                daily_change = ((curr_price - prev_close) / prev_close) * 100
+            elif 'ChangePct' in df5.columns:
+                 # Fallback to column if exists (might be wrong reference but better than 0)
+                 daily_change = float(df5['ChangePct'].iloc[-1])
+            
+            result['daily_change'] = round(daily_change, 2)
+            
+            # Threshold: 1.5% as requested/implied?
+            # Prime Guide says "Box Breakout". Simplified to Momentum > 1~2%.
+            # Using 1.5% as reasonable breakout proxy without Box lines.
+            if daily_change >= 1.5:
+                is_step2 = True
+                
+            result['step2'] = is_step2
+            result['step2_status'] = "수급 돌파 (>1.5%)" if is_step2 else "모멘텀 부족"
+            
+            # --- Step 3: 30m Trend (MA10 > MA30) ---
+            is_step3 = False
+            if df30 is not None and not df30.empty:
+                ma10_col = 'MA10' if 'MA10' in df30.columns else 'ma10'
+                ma30_col = 'MA30' if 'MA30' in df30.columns else 'ma30'
+                
+                if ma10_col in df30.columns and ma30_col in df30.columns:
+                     m10 = float(df30[ma10_col].iloc[-1])
+                     m30 = float(df30[ma30_col].iloc[-1])
+                     if m10 > m30: is_step3 = True
+            
+            result['step3'] = is_step3
+            result['step3_status'] = "추세 확정 (30m 정배열)" if is_step3 else "추세 미확보"
+            if not is_step3: result['step3_color'] = "yellow"
+
+            # Final
+            result['final'] = (result['step1'] and result['step2'] and result['step3'])
+            
+            # [Sell Signal Simulation]
+            # Simple Dead Cross on 5m
+            if df5 is not None and not df5.empty:
+                ma10_col = 'MA10' if 'MA10' in df5.columns else 'ma10'
+                ma30_col = 'MA30' if 'MA30' in df5.columns else 'ma30'
+                if ma10_col in df5.columns and ma30_col in df5.columns:
+                     m10 = float(df5[ma10_col].iloc[-1])
+                     m30 = float(df5[ma30_col].iloc[-1])
+                     if m10 < m30:
+                         result['is_sell_signal'] = True
+            
+            # Metrics
+            if df30 is not None and not df30.empty:
+                 result['new_metrics'] = calculate_market_intelligence(df30)
+
+            return result
+
+        except Exception as e:
+            print(f"Simulation Error {ticker}: {e}")
+            # Fallback to empty result (safe)
+            pass
+
+    print(f"DEBUG: Checking {ticker} (Read-Only Mode / Dashboard)")
 
     try:
         # 2. Fetch Truth from DB
@@ -1160,12 +1268,16 @@ def check_triple_filter(ticker, data_30m, data_5m):
         current_price = 0.0
         daily_change = 0.0
         
-        # Try KIS Cache or Live
-        from kis_api_v2 import kis_client
-        kis_data = kis_client.get_price(ticker)
-        if kis_data and kis_data.get('price', 0) > 0:
-             current_price = float(kis_data['price'])
-             daily_change = float(kis_data.get('rate', 0))
+        if override_price is not None:
+             current_price = float(override_price)
+             # calc approx change? ignore for now or calc if prev avail
+        else:
+            # Try KIS Cache or Live
+            from kis_api_v2 import kis_client
+            kis_data = kis_client.get_price(ticker)
+            if kis_data and kis_data.get('price', 0) > 0:
+                 current_price = float(kis_data['price'])
+                 daily_change = float(kis_data.get('rate', 0))
              
         # [Ver 5.8.6] User Request: Day High based on Today's Close (Max Close / Body High)
         # Instead of High (Wick), we use the highest Close price of the day.
@@ -1181,20 +1293,43 @@ def check_triple_filter(ticker, data_30m, data_5m):
              elif hasattr(data_5m, 'columns'): df5 = data_5m
              if df5 is not None and not df5.empty:
                  # Filter: Last Day Only
-                 last_date = df5.index[-1].normalize() # 00:00:00 of last day
-                 today_df5 = df5.loc[df5.index >= last_date]
-                 if not today_df5.empty:
-                     high_candidates.append(float(today_df5['Close'].max()))
+                 try:
+                     last_date = df5.index[-1].normalize() # 00:00:00 of last day
+                 except: 
+                     # Fallback if index is not DatetimeIndex
+                     if 'candle_time' in df5.columns:
+                         last_date = pd.to_datetime(df5['candle_time'].iloc[-1]).normalize()
+                         # Temporary Index for filtering
+                         df5 = df5.set_index('candle_time', drop=False)
+                     else:
+                         last_date = None
+                 
+                 if last_date:
+                     today_df5 = df5.loc[df5.index >= last_date]
+                     if not today_df5.empty:
+                         # Use case-insensitive column
+                         c_col = 'Close' if 'Close' in today_df5.columns else 'close'
+                         high_candidates.append(float(today_df5[c_col].max()))
                  
              # 3. 30m Candles Max Close (Filtered by Date)
              df30 = None
              if isinstance(data_30m, dict): df30 = data_30m.get(ticker)
              elif hasattr(data_30m, 'columns'): df30 = data_30m
              if df30 is not None and not df30.empty:
-                 last_date_30 = df30.index[-1].normalize()
-                 today_df30 = df30.loc[df30.index >= last_date_30]
-                 if not today_df30.empty:
-                     high_candidates.append(float(today_df30['Close'].max()))
+                 try:
+                     last_date_30 = df30.index[-1].normalize()
+                 except: 
+                     if 'candle_time' in df30.columns:
+                         last_date_30 = pd.to_datetime(df30['candle_time'].iloc[-1]).normalize()
+                         df30 = df30.set_index('candle_time', drop=False)
+                     else:
+                         last_date_30 = None
+
+                 if last_date_30:
+                     today_df30 = df30.loc[df30.index >= last_date_30]
+                     if not today_df30.empty:
+                         c_col = 'Close' if 'Close' in today_df30.columns else 'close'
+                         high_candidates.append(float(today_df30[c_col].max()))
                  
         except Exception as e:
             print(f"Max Close Calc Error {ticker}: {e}")
@@ -1439,6 +1574,33 @@ def calculate_tech_indicators(df):
     except:
         return {}
 
+def calculate_market_energy(target_change, upro_change, is_bull=True):
+    """
+    [Jian 1.1] Market Energy Score Calculation
+    Logic:
+    - Relation Index (RI) = (Target Change / UPRO Change) * 100
+    - Raw Energy = (RI - 100) / 20
+    - If UPRO Change < 0 (Bear Market), Energy uses inverse sign (or logic tweak depending on implementation)
+      Front-end: if (uproChange < 0) rawEnergy = -rawEnergy;
+      Then Energy = trunc(rawEnergy) (for Bull) or trunc(-rawEnergy) (for Bear)
+    """
+    if abs(upro_change) < 0.05: return 0 # Avoid division by zero equivalent
+    
+    relation_index = (target_change / upro_change) * 100
+    raw_energy = (relation_index - 100) / 20.0
+    
+    if upro_change < 0:
+        raw_energy = -raw_energy
+        
+    # Clamp -10 to 10
+    raw_energy = max(-10, min(10, raw_energy))
+    
+    # Final Score based on Ticker Type
+    if is_bull:
+        return int(raw_energy)
+    else:
+        return int(-raw_energy)
+
 def generate_expert_commentary(ticker, res, tech, regime):
     rsi = tech.get('rsi', 50)
     macd = tech.get('macd', 0)
@@ -1517,21 +1679,10 @@ def get_evaluation_label(score):
     else: return "매도/리스크 관리 (Sell/Risk)"
 
 
-def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None, bbi_score=0):
+def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None, bbi_score=0, energy_score=0, strict_sum=False):
     """
     V4.0 안티그래비티 스코어 시스템 (Antigravity Score System)
-    
-    [청안 지수] V2 신호 기반 (Max 60점)
-    - 1단계만: 20점, 2단계까지: 30점, 3단계 완료: 60점
-    
-    [안티그래비티 보조지표] 비대칭 가감점 (+40 ~ -80점)
-    - RSI: +10 ~ -20
-    - MACD: +10 ~ -20
-    - Vol Ratio: +10 ~ -20
-    - ATR: +10 ~ -20
-    
-    [총점 범위] -80 ~ +100점
-    [매수 기준] 90+: 강력매수, 70+: 매수, 60+: 매수추천, 60미만: 관망
+    strict_sum: If True, disables penalties and range capping (returns raw sum of visible components).
     """
     if not res: return {"score": 0, "breakdown": {}, "evaluation": "데이터 부족"}
 
@@ -1543,8 +1694,11 @@ def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None, bbi_score=0):
         "vol": 0,         # Vol Ratio 점수
         "atr": 0,         # ATR 점수
         "bbi": 0,         # [Ver 6.5.8] BBI 점수
+        "energy": 0,      # [Ver 7.2] Market Energy
         "total": 0
     }
+    
+    breakdown['energy'] = energy_score
     
     # ================================================
     # 1. 청안 지수 (V2 Signal Base) - Max 60점
@@ -1554,47 +1708,37 @@ def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None, bbi_score=0):
     sig2 = v2_buy and v2_buy.get('buy_sig2_yn') == 'Y'
     sig3 = v2_buy and v2_buy.get('buy_sig3_yn') == 'Y'
     
-    # ================================================
-    # 1. 청안 지수 (V2 Signal Base) - Max 70점 (Cumulative)
-    # ================================================
-    cheongan_score = 0
-    sig1 = v2_buy and v2_buy.get('buy_sig1_yn') == 'Y'
-    sig2 = v2_buy and v2_buy.get('buy_sig2_yn') == 'Y'
-    sig3 = v2_buy and v2_buy.get('buy_sig3_yn') == 'Y'
-    
     # [Jian 1.1] Cumulative Scoring
     if sig1: cheongan_score += 20
-    if sig2: cheongan_score += 10  # 2차 10점
+    if sig2: cheongan_score += 20  # 2차 20점 (User Feedback)
     if sig3: cheongan_score += 20  # 3차 20점
     
-    # [Ver 6.4.7] Strict cumulative scoring
     breakdown['cheongan'] = cheongan_score
     
     # ================================================
-    # 1-B. 매도 감점 (Sell Penalty) [Jian 1.2 개선]
-    # Level 1: -10점 (5분봉 DC + RSI < 45)
-    # Level 2: -20점 (30분봉 DC 또는 RSI < 30)
-    # Level 3: -30점 (수동 지정가 도달)
+    # 1-B. 매도 감점 (Sell Penalty) - DISABLED in strict_sum mode
     # ================================================
-    rsi = tech.get('rsi', 50)
-    is_30m_dc = tech.get('is_30m_dc', False)  # 30분봉 데드크로스
-    
     sell_penalty = 0
-    if v2_sell:
-        if v2_sell.get('sell_sig3_yn') == 'Y':
-            sell_penalty = -30  # Level 3: 추세 이탈 확정
-        elif is_30m_dc or rsi < 30:
-            sell_penalty = -20  # Level 2: 강력 경고 (30분 DC 또는 과매도)
-        elif v2_sell.get('sell_sig1_yn') == 'Y' and rsi < 45:
-            sell_penalty = -10  # Level 1: 경고 (5분 DC + 약세 RSI)
-        elif v2_sell.get('sell_sig1_yn') == 'Y':
-            sell_penalty = -5   # 5분 DC만 (RSI 양호 시 가벼운 감점)
+    if not strict_sum:
+        rsi = tech.get('rsi', 50)
+        is_30m_dc = tech.get('is_30m_dc', False)  # 30분봉 데드크로스
+        
+        if v2_sell:
+            if v2_sell.get('sell_sig3_yn') == 'Y':
+                sell_penalty = -30  # Level 3: 추세 이탈 확정
+            elif is_30m_dc or rsi < 30:
+                sell_penalty = -20  # Level 2: 강력 경고 (30분 DC 또는 과매도)
+            elif v2_sell.get('sell_sig1_yn') == 'Y' and rsi < 45:
+                sell_penalty = -10  # Level 1: 경고 (5분 DC + 약세 RSI)
+            elif v2_sell.get('sell_sig1_yn') == 'Y':
+                sell_penalty = -5   # 5분 DC만 (RSI 양호 시 가벼운 감점)
+    
     breakdown['sell_penalty'] = sell_penalty
     
     # ================================================
-    # 2. 안티그래비티 보조지표 (+32 ~ -32점) [Jian 1.1]
+    # 2. 안티그래비티 보조지표 (+32 ~ -32점)
     # ================================================
-    # rsi already defined above
+    rsi = tech.get('rsi', 50)
     macd = tech.get('macd', 0)
     macd_sig = tech.get('macd_sig', 0)
     
@@ -1604,7 +1748,7 @@ def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None, bbi_score=0):
     current_price = res.get('current_price', 0)
     daily_change = res.get('daily_change', 0)
     
-    # ---- A. RSI 채점 (+8 ~ -4) [Jian 1.1] ----
+    # ---- A. RSI 채점 (+8 ~ -4) ----
     rsi_score = 0
     if 55 <= rsi < 70:
         rsi_score = 8    # 상승 추세
@@ -1620,10 +1764,8 @@ def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None, bbi_score=0):
         rsi_score = -4   # 과매도
     breakdown['rsi'] = rsi_score
     
-    # ---- B. MACD 채점 (+8 ~ -8) [Ver 6.4.11] ----
+    # ---- B. MACD 채점 (+8 ~ -8) ----
     macd_score = 0
-    macd_hist = macd - macd_sig
-    
     if macd > macd_sig and macd > 0:
         macd_score = 8    # 골든크로스 + 양수
     elif macd > macd_sig:
@@ -1634,7 +1776,7 @@ def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None, bbi_score=0):
         macd_score = -8   # 강력 하락
     breakdown['macd'] = macd_score
     
-    # ---- C. Vol Ratio 채점 (+8 ~ -8) [Jian 1.1] ----
+    # ---- C. Vol Ratio 채점 (+8 ~ -8) ----
     vol_score = 0
     if vol_ratio > 2.5 and daily_change < 0:
         vol_score = -8    # 투매
@@ -1652,7 +1794,7 @@ def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None, bbi_score=0):
         vol_score = -3    # 매수세 부족
     breakdown['vol'] = vol_score
     
-    # ---- D. ATR 채점 (+8 ~ -8) [Ver 6.4.11] ----
+    # ---- D. ATR 채점 (+8 ~ -8) ----
     atr_score = 0
     atr_ratio = (atr / current_price) if current_price > 0 else 0
     
@@ -1667,18 +1809,19 @@ def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None, bbi_score=0):
     breakdown['atr'] = atr_score
     
     # [Ver 6.5.8] F. BBI 채점 (+10 ~ -10)
-    # BBI Score is passed directly (Range -10 to +10)
     breakdown['bbi'] = bbi_score
 
     # ================================================
     # 3. 총점 계산
     # ================================================
-    indicator_total = breakdown['rsi'] + breakdown['macd'] + breakdown['vol'] + breakdown['atr'] + breakdown['bbi']
+    indicator_total = breakdown['rsi'] + breakdown['macd'] + breakdown['vol'] + breakdown['atr'] + breakdown['bbi'] + breakdown['energy']
     sell_penalty = breakdown.get('sell_penalty', 0)
     total_score = breakdown['cheongan'] + indicator_total + sell_penalty
     
-    # 범위 제한: -80 ~ 100
-    total_score = max(-80, min(100, total_score))
+    # 범위 제한: -80 ~ 100 (Disable in strict_sum)
+    if not strict_sum:
+        total_score = max(-80, min(100, total_score))
+        
     breakdown['total'] = total_score
     
     # ================================================
@@ -1702,8 +1845,7 @@ def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None, bbi_score=0):
             "sig1": 20 if sig1 else 0,
             "sig2": 10 if sig2 else 0,
             "sig3": 20 if sig3 else 0,
-            "energy": max(-10, min(10, breakdown.get('energy', 0))) # Pass raw energy if needed, but handled in frontend currently. Let's pass 0 for now or calculate here?
-            # Actually frontend calculates energy itself. Let's just pass signal points.
+            "energy": energy_score
         }
     }
 

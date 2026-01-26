@@ -542,10 +542,7 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                                         <span style={{ fontWeight: '900', fontSize: '1.2rem', color: color }}>{realTotalScore}점</span>
                                     </div>
 
-                                    {/* Guide Commentary */}
-                                    <div style={{ whiteSpace: 'pre-wrap', lineHeight: '1.7', fontSize: '0.88rem', color: isSoxl ? '#cffafe' : '#f3e8ff', fontFamily: "'Noto Sans KR', sans-serif", background: 'rgba(0,0,0,0.15)', padding: '12px', borderRadius: '8px', borderLeft: `3px solid ${color}`, height: '160px', overflowY: 'auto' }}>
-                                        {guideText}
-                                    </div>
+
                                 </div>
                             )
                         })}

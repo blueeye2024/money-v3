@@ -72,6 +72,39 @@ def upsert_daily_asset(record_date, total_assets, daily_return_pct=None, daily_p
             """
             cursor.execute(sql, (record_date, total_assets, daily_change, daily_change_pct, daily_return_pct, daily_pnl, note))
         conn.commit()
+
+        # [Fix] Update Global Config 'total_capital' if this is the latest record
+        # This ensures the Dashboard Summary Card updates immediately.
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT MAX(record_date) as max_date FROM daily_assets")
+                row = cursor.fetchone()
+                max_date = row['max_date']
+                
+                # Check if current record_date is >= max_date
+                # Handle string vs date comparison
+                is_latest = False
+                if not max_date:
+                    is_latest = True
+                else:
+                    input_date = str(record_date)
+                    db_max = str(max_date)
+                    if input_date >= db_max:
+                        is_latest = True
+                
+                if is_latest:
+                     # Direct update to avoid circular import from db.py
+                     import json
+                     val_cap = json.dumps(float(total_assets))
+                     sql_cap = "INSERT INTO global_config (key_name, value_json) VALUES ('total_capital', %s) ON DUPLICATE KEY UPDATE value_json=%s"
+                     cursor.execute(sql_cap, (val_cap, val_cap))
+                     # Must commit this change!
+                     conn.commit()
+                     print(f"Synced Total Capital to {total_assets} (Latest Date: {record_date})")
+
+        except Exception as e:
+            print(f"Sync Capital Error: {e}")
+
         return True
     except Exception as e:
         print(f"Upsert Daily Asset Error: {e}")

@@ -1165,7 +1165,7 @@ def update_holding(ticker, qty_change_or_new_qty, price, memo=None, is_reset=Fal
     finally:
         conn.close()
 
-def update_holding_info(ticker, data):
+# def update_holding_info(ticker, data):
     """
     [Ver 6.5] Direct Update of Managed Stock Info (No Journal Transaction)
     Updates: Qty, AvgPrice, Category, Group, Memo, Strategy, etc.
@@ -1239,10 +1239,26 @@ def add_managed_stock(data):
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
+            # Calculate derived fields
+            avg_buy = float(data.get('avg_buy_price', 0))
+            if 'quantity' in data:
+                 qty = int(data['quantity'])
+                 total_buy = qty * avg_buy
+            else:
+                 total_buy = float(data.get('total_buy_amount', 0))
+                 qty = int(total_buy / avg_buy) if avg_buy > 0 else 0
+
+            # Handle Dates
+            exp_buy = data.get('expected_buy_date')
+            if not exp_buy: exp_buy = None
+            exp_sell = data.get('expected_sell_date')
+            if not exp_sell: exp_sell = None
+
             sql = """
             INSERT INTO managed_stocks 
-            (ticker, name, group_name, buy_strategy, sell_strategy, target_ratio, scenario_yield, memo)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            (ticker, name, group_name, buy_strategy, sell_strategy, target_ratio, scenario_yield, memo,
+             total_buy_amount, avg_buy_price, target_sell_price, expected_buy_date, expected_sell_date, is_holding, quantity, avg_price)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """
             cursor.execute(sql, (
                 data['ticker'],
@@ -1252,9 +1268,17 @@ def add_managed_stock(data):
                 data['sell_strategy'],
                 data['target_ratio'],
                 data.get('scenario_yield', 0),
-                data.get('memo', '')
+                data.get('memo', ''),
+                total_buy,
+                avg_buy,
+                data.get('target_sell_price', 0),
+                exp_buy,
+                exp_sell,
+                data.get('is_holding', 'N'),
+                qty,
+                avg_buy
             ))
-        conn.commit()
+            conn.commit()
         return True
     except Exception as e:
         print(f"Add Managed Stock Error: {e}")
@@ -1266,10 +1290,32 @@ def update_managed_stock(id, data):
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
+            # Calculate derived fields for legacy compatibility
+            # Priority: Quantity if present (frontend v2), else derive from Total
+            avg_buy = float(data.get('avg_buy_price', 0))
+            
+            if 'quantity' in data:
+                 qty = int(data['quantity'])
+                 # Sync Total Buy to ensure consistency (Total = Qty * Price)
+                 total_buy = qty * avg_buy
+            else:
+                 total_buy = float(data.get('total_buy_amount', 0))
+                 qty = int(total_buy / avg_buy) if avg_buy > 0 else 0
+            
+            # Handle Dates (allow None or Empty string)
+            exp_buy = data.get('expected_buy_date')
+            if not exp_buy: exp_buy = None
+            
+            exp_sell = data.get('expected_sell_date')
+            if not exp_sell: exp_sell = None
+
             sql = """
             UPDATE managed_stocks 
             SET ticker=%s, name=%s, group_name=%s, buy_strategy=%s, sell_strategy=%s, 
-                target_ratio=%s, scenario_yield=%s, memo=%s
+                target_ratio=%s, scenario_yield=%s, memo=%s,
+                total_buy_amount=%s, avg_buy_price=%s, target_sell_price=%s,
+                expected_buy_date=%s, expected_sell_date=%s, is_holding=%s,
+                quantity=%s, avg_price=%s
             WHERE id=%s
             """
             cursor.execute(sql, (
@@ -1281,6 +1327,14 @@ def update_managed_stock(id, data):
                 data['target_ratio'],
                 data.get('scenario_yield', 0),
                 data.get('memo', ''),
+                total_buy,
+                avg_buy,
+                data.get('target_sell_price', 0),
+                exp_buy,
+                exp_sell,
+                data.get('is_holding', 'N'),
+                qty,
+                avg_buy, # Sync avg_price with avg_buy_price
                 id
             ))
         conn.commit()
@@ -3201,7 +3255,7 @@ def migrate_v64_add_group_name_to_managed_stocks():
         conn.close()
 
 # [Ver 6.6] Update Holding Info (Meta Data)
-def update_holding_info(ticker, category=None, group_name=None, is_holding=None, target_sell_price=None, expected_sell_date=None, strategy_memo=None, manual_qty=None, manual_price=None):
+def update_holding_info(ticker, category=None, group_name=None, is_holding=None, target_sell_price=None, expected_sell_date=None, strategy_memo=None, manual_qty=None, manual_price=None, quantity=None, qty=None, price=None, **kwargs):
     """Update metadata for a holding in managed_stocks"""
     conn = get_connection()
     try:
@@ -3233,6 +3287,15 @@ def update_holding_info(ticker, category=None, group_name=None, is_holding=None,
                     cols.append("manual_qty"); vals.append("%s"); p.append(manual_qty)
                 if manual_price is not None:
                     cols.append("manual_price"); vals.append("%s"); p.append(manual_price)
+
+                # [Ver 7.5] Real Quantity
+                if quantity is not None:
+                    cols.append("quantity"); vals.append("%s"); p.append(quantity)
+                
+                # [Ver 7.5] Avg Price
+                if price is not None:
+                    cols.append("avg_price"); vals.append("%s"); p.append(price)
+                    cols.append("avg_buy_price"); vals.append("%s"); p.append(price)
                     
                 sql = f"INSERT INTO managed_stocks ({', '.join(cols)}) VALUES ({', '.join(vals)})"
                 cursor.execute(sql, p)
@@ -3276,6 +3339,18 @@ def update_holding_info(ticker, category=None, group_name=None, is_holding=None,
             if manual_price is not None:
                 fields.append("manual_price = %s")
                 params.append(manual_price)
+
+            # [Ver 7.5] Actual Quantity Override
+            if quantity is not None:
+                fields.append("quantity = %s")
+                params.append(quantity)
+            
+            # [Ver 7.5] Avg Price (Buy Price) Override
+            if price is not None:
+                fields.append("avg_price = %s")  # Legacy column
+                fields.append("avg_buy_price = %s") # V2 column
+                params.append(price)
+                params.append(price)
             
             if not fields:
                 return True, "No changes"

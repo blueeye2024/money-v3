@@ -122,11 +122,14 @@ const JournalPage = () => {
                     isHolding = (tx.qty || 0) > 0;
                 }
 
-                // Stats (Transactions priority for Qty/Price, fallback to Manual for Watchlist)
-                let qty = tx.qty || 0;
-                let avgPrice = parseFloat(tx.avg_price || 0);
+                // Stats (Meta priority for Holdings, Fallback to Transactions)
+                // Stats (Meta priority for Holdings, Fallback to Transactions)
+                // [Modified] Use Managed Stock metadata first if available (allows editing)
+                // Explicit check for undefined/null to allow 0 as a valid value
+                let qty = (meta.quantity !== undefined && meta.quantity !== null) ? meta.quantity : (tx.qty || 0);
+                let avgPrice = (meta.avg_buy_price !== undefined && meta.avg_buy_price !== null) ? parseFloat(meta.avg_buy_price) : parseFloat(tx.avg_price || 0);
 
-                if (!qty && !isHolding && meta.manual_qty) {
+                if (qty === 0 && !isHolding && meta.manual_qty) {
                     // Watchlist Simulation
                     qty = meta.manual_qty;
                     avgPrice = parseFloat(meta.manual_price || 0);
@@ -250,7 +253,10 @@ const JournalPage = () => {
                 expected_sell_date: form.expected_sell_date || null,
                 strategy_memo: form.strategy_memo || '',
                 manual_qty: form.qty ? parseInt(form.qty) : 0,
-                manual_price: form.price ? parseFloat(form.price) : 0
+                manual_price: form.price ? parseFloat(form.price) : 0,
+                quantity: form.qty ? parseInt(form.qty) : 0,
+                avg_buy_price: form.price ? parseFloat(form.price) : 0,
+                price: form.price ? parseFloat(form.price) : 0 // [Critical Fix] Send 'price' for backend mapping
             };
 
             await axios.put(`/api/holdings/${form.ticker}`, dataToSend);
@@ -861,7 +867,7 @@ const JournalPage = () => {
                                     <div>
                                         <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', color: '#64748b', fontWeight: '700' }}>분류 (Category)</label>
                                         <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} style={{ width: '100%', padding: '0.7rem', borderRadius: '10px', border: '1px solid #cbd5e1', fontSize: '0.9rem', backgroundColor: 'white' }}>
-                                            {['전략', '핵심', '배당', '성장', '단기', '기타'].map(c => <option key={c} value={c}>{c}</option>)}
+                                            {['광물 및 원자재', '장기보유', '단타', '이벤트', '전략주', '기타'].map(c => <option key={c} value={c}>{c}</option>)}
                                         </select>
                                     </div>
                                 </div>

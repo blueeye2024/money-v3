@@ -15,3 +15,4 @@ pyjwt
 bcrypt
 pandas_ta
 python-multipart
+openpyxl

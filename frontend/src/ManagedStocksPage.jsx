@@ -10,7 +10,8 @@ const ManagedStocksPage = () => {
     const [formData, setFormData] = useState({
         ticker: '',
         name: '',
-        group_name: '',
+        group_name: '기타', // Default
+        quantity: 0,
         total_buy_amount: 0,
         avg_buy_price: 0,
         target_sell_price: 0,
@@ -46,7 +47,8 @@ const ManagedStocksPage = () => {
             setFormData({
                 ticker: stock.ticker,
                 name: stock.name || '',
-                group_name: stock.group_name || '',
+                group_name: stock.group_name || '기타',
+                quantity: stock.quantity || 0,
                 total_buy_amount: stock.total_buy_amount || 0,
                 avg_buy_price: stock.avg_buy_price || 0,
                 target_sell_price: stock.target_sell_price || 0,
@@ -62,7 +64,8 @@ const ManagedStocksPage = () => {
             setFormData({
                 ticker: '',
                 name: '',
-                group_name: '',
+                group_name: '기타',
+                quantity: 0,
                 total_buy_amount: 0,
                 avg_buy_price: 0,
                 target_sell_price: 0,
@@ -84,11 +87,23 @@ const ManagedStocksPage = () => {
 
     const handleInputChange = (e) => {
         const { name, value } = e.target;
-        const numericFields = ['target_ratio', 'scenario_yield', 'total_buy_amount', 'avg_buy_price', 'target_sell_price'];
-        setFormData(prev => ({
-            ...prev,
-            [name]: numericFields.includes(name) ? parseFloat(value) || 0 : value
-        }));
+        const numericFields = ['target_ratio', 'scenario_yield', 'total_buy_amount', 'avg_buy_price', 'target_sell_price', 'quantity'];
+
+        setFormData(prev => {
+            const newData = {
+                ...prev,
+                [name]: numericFields.includes(name) ? parseFloat(value) || 0 : value
+            };
+
+            // Auto-calculate Total if Quantity or Price changes
+            if (name === 'quantity' || name === 'avg_buy_price') {
+                const qty = name === 'quantity' ? (parseFloat(value) || 0) : prev.quantity;
+                const price = name === 'avg_buy_price' ? (parseFloat(value) || 0) : prev.avg_buy_price;
+                newData.total_buy_amount = qty * price;
+            }
+
+            return newData;
+        });
     };
 
     const handleSave = async (e) => {
@@ -353,18 +368,25 @@ const ManagedStocksPage = () => {
 
                             <div style={{ flex: 1 }}>
                                 <label style={{ display: 'block', marginBottom: '5px', fontSize: '0.85rem', color: '#888' }}>Group (분류)</label>
-                                <input
+                                <select
                                     name="group_name" value={formData.group_name} onChange={handleInputChange} required
-                                    placeholder="EX) 레버리지" style={{ width: '100%', padding: '0.6rem', background: 'rgba(0,0,0,0.2)', border: '1px solid #444', color: 'white' }}
-                                />
+                                    style={{ width: '100%', padding: '0.6rem', background: 'rgba(0,0,0,0.2)', border: '1px solid #444', color: 'white' }}
+                                >
+                                    <option value="광물 및 원자재">광물 및 원자재</option>
+                                    <option value="장기보유">장기보유</option>
+                                    <option value="단타">단타</option>
+                                    <option value="이벤트">이벤트</option>
+                                    <option value="전략주">전략주</option>
+                                    <option value="기타">기타</option>
+                                </select>
                             </div>
 
                             <div style={{ display: 'flex', gap: '1rem' }}>
                                 <div style={{ flex: 1 }}>
-                                    <label style={{ display: 'block', marginBottom: '5px', fontSize: '0.85rem', color: '#888' }}>총 매수 금액 (원)</label>
+                                    <label style={{ display: 'block', marginBottom: '5px', fontSize: '0.85rem', color: '#888' }}>보유 수량 (Quantity)</label>
                                     <input
-                                        type="number" name="total_buy_amount" value={formData.total_buy_amount} onChange={handleInputChange}
-                                        placeholder="EX) 1000000" style={{ width: '100%', padding: '0.6rem', background: 'rgba(0,0,0,0.2)', border: '1px solid #444', color: 'white' }}
+                                        type="number" name="quantity" value={formData.quantity} onChange={handleInputChange}
+                                        placeholder="EX) 50" style={{ width: '100%', padding: '0.6rem', background: 'rgba(0,0,0,0.2)', border: '1px solid #444', color: 'white' }}
                                     />
                                 </div>
                                 <div style={{ flex: 1 }}>
@@ -374,6 +396,14 @@ const ManagedStocksPage = () => {
                                         placeholder="EX) 50.25" style={{ width: '100%', padding: '0.6rem', background: 'rgba(0,0,0,0.2)', border: '1px solid #444', color: 'white' }}
                                     />
                                 </div>
+                            </div>
+
+                            <div style={{ marginTop: '-10px', marginBottom: '10px' }}>
+                                <label style={{ display: 'block', marginBottom: '5px', fontSize: '0.85rem', color: '#888' }}>총 매수 금액 (자동계산/원)</label>
+                                <input
+                                    type="number" name="total_buy_amount" value={formData.total_buy_amount} readOnly
+                                    style={{ width: '100%', padding: '0.6rem', background: 'rgba(255,255,255,0.05)', border: '1px solid #444', color: '#aaa', cursor: 'not-allowed' }}
+                                />
                             </div>
 
                             <div style={{ display: 'flex', gap: '1rem' }}>

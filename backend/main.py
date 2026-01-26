@@ -38,6 +38,10 @@ app.mount("/uploads", StaticFiles(directory="../frontend/public/uploads"), name=
 app.include_router(reports.router)
 app.include_router(events.router)
 app.include_router(trading.router)
+from routers import crypto
+app.include_router(crypto.router)
+from routers import lab
+app.include_router(lab.router)
 
 # 1. Initialize DB & Scheduler
 @app.on_event("startup")
@@ -146,6 +150,10 @@ class HoldingUpdateModel(BaseModel):
     target_sell_price: Optional[float] = None
     expected_sell_date: Optional[str] = None # Expecting 'YYYY-MM-DD'
     strategy_memo: Optional[str] = None
+    manual_qty: Optional[int] = None
+    manual_price: Optional[float] = None
+    quantity: Optional[int] = None
+    price: Optional[float] = None
 
 @app.put("/api/holdings/{ticker}")
 def update_holding_endpoint(ticker: str, data: HoldingUpdateModel):
@@ -158,7 +166,11 @@ def update_holding_endpoint(ticker: str, data: HoldingUpdateModel):
         is_holding=data.is_holding,
         target_sell_price=data.target_sell_price,
         expected_sell_date=data.expected_sell_date,
-        strategy_memo=data.strategy_memo
+        strategy_memo=data.strategy_memo,
+        manual_qty=data.manual_qty,
+        manual_price=data.manual_price,
+        quantity=data.quantity,
+        price=data.price or data.avg_price # Valid mappings
     )
     
     if success:
@@ -1000,8 +1012,10 @@ def remove_holding_endpoint(ticker: str):
 # [Ver 6.5] Holding Update Model (Direct, No Journal)
 class HoldingUpdateModel(BaseModel):
     qty: Optional[int] = 0
+    quantity: Optional[int] = None # [Ver 7.5] Real Quantity
+    manual_qty: Optional[int] = None # [Ver 6.8] Sim Quantity
+    manual_price: Optional[float] = None
     price: Optional[float] = 0
-    category: Optional[str] = "기타"
     group_name: Optional[str] = ""
     is_holding: Optional[bool] = True
     expected_sell_date: Optional[str] = None
@@ -1011,7 +1025,8 @@ class HoldingUpdateModel(BaseModel):
 @app.put("/api/holdings/{ticker}")
 def update_holding_endpoint(ticker: str, data: HoldingUpdateModel):
     from db import update_holding_info
-    success, msg = update_holding_info(ticker, data.dict())
+    # Unpack dict to keyword args
+    success, msg = update_holding_info(ticker, **data.dict())
     if success:
         return {"status": "success", "message": msg}
     else:

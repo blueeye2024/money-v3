@@ -1,346 +1,596 @@
 
-from fastapi import APIRouter, BackgroundTasks
-from pydantic import BaseModel
-import datetime
+from fastapi import APIRouter, File, UploadFile, HTTPException
 import pandas as pd
-import numpy as np
-import requests
-import json
-import uuid
-import time
-from db import get_connection
-from kis_api_v2 import kis_client
-from analysis import calculate_tech_indicators, calculate_holding_score, check_triple_filter, calculate_bbi, get_cross_history
+import io
+import datetime
+from db_lab import init_lab_tables, bulk_insert_lab_data
+from analysis import calculate_tech_indicators, calculate_holding_score, calculate_market_energy, calculate_bbi, check_triple_filter
+
+def clean_score(val):
+    if pd.isna(val): return 0
+    return int(val)
 
 router = APIRouter(prefix="/api/lab", tags=["lab"])
 
-# --- Models ---
-class SimRequest(BaseModel):
-    ticker: str
-    date: str # YYYY-MM-DD
+# Ensure tables exist on module load (or first call)
+try:
+    init_lab_tables()
+except:
+    pass
 
-# --- Helpers ---
+@router.post("/upload")
+async def upload_lab_data(file: UploadFile = File(...), period: str = "30m", ticker: str = "SOXL"):
+    """
+    Excel Upload for Lab Data.
+    period: '30m' or '5m'
+    ticker: Target ticker if not in file (default SOXL)
+    """
+    if period not in ['30m', '5m']:
+        raise HTTPException(status_code=400, detail="Invalid period. Use '30m' or '5m'.")
 
-def get_kst_time_range(target_date_str):
-    """
-    Returns (start_dt, end_dt) in datetime objects
-    Target: 09:00 KST of Date ~ 09:00 KST of Date+1
-    """
-    base_date = datetime.datetime.strptime(target_date_str, "%Y-%m-%d")
-    # KST is target
-    # But usually we work in "Native" time for KIS (Local Exchange Time or KST?)
-    # KIS returns data with KST dates usually.
-    # Let's assume KST for now.
-    start_dt = base_date.replace(hour=9, minute=0, second=0)
-    end_dt = start_dt + datetime.timedelta(hours=24) # Next day 9am
-    return start_dt, end_dt
+    # Read File
+    try:
+        contents = await file.read()
+        df = pd.read_excel(io.BytesIO(contents))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to read Excel file: {str(e)}")
 
-def fetch_historical_candles_paginated(ticker, start_dt, end_dt):
-    """
-    Fetch enough 5m candles to cover start_dt ~ end_dt.
-    We fetch backwards from 'NOW' (or recent file) using KIS API.
-    Since KIS 'inquire-time-itemchartprice' is 'recent first', we paginate using NEXT key.
-    """
-    candles = []
-    next_key = ""
-    
-    # Safety limit
-    max_pages = 50 
-    
-    # We need to fetch until the earliest candle is BEFORE start_dt (minus buffer)
-    # Let's aim for start_dt - 10 hours buffer for moving averages
-    target_stop_dt = start_dt - datetime.timedelta(hours=20)
-    
-    token = kis_client.ensure_fresh_token()
-    access_token = kis_client.access_token
-    
-    exchange = "NAS" # Default, logic from kis_api can verify
-    # Use internal map logic if needed, or just default. 
-    # Calling kis_client.get_minute_candles wrapper handles exchange daytime logic?
-    # But we want raw pagination.
-    # Let's borrow exchange logic
-    from kis_api_v2 import get_exchange_code
-    exchange = get_exchange_code(ticker)
-    
-    # We ignore "Daytime" logic here because we are fetching HISTORY regardless of time of day?
-    # KIS API usually works with specific exchange codes.
-    # For backtest, standard NAS/NYS is safer.
-    
-    headers = {
-        "content-type": "application/json; charset=utf-8",
-        "authorization": f"Bearer {access_token}",
-        "appkey": kis_client.APP_KEY,
-        "appsecret": kis_client.APP_SECRET,
-        "tr_id": "HHDFS76950200"
+    # Expected Columns Mapping (User Specific)
+    col_map = {
+        '일자': 'Date', '시간': 'Time', 
+        '시가': 'Open', '고가': 'High', '저가': 'Low', '종가': 'Close', 
+        '거래량': 'Volume',
+        '10': 'MA10', # Specific User Request
+        '30': 'MA30', # Specific User Request
+        '등락률': 'ChangePct'
     }
     
-    print(f"  [LAB] Fetching history for {ticker} ({exchange}) since {target_stop_dt}...")
+    df.rename(columns=col_map, inplace=True)
     
-    for i in range(max_pages):
-        params = {
-            "AUTH": "", "EXCD": exchange, "SYMB": ticker,
-            "NMIN": "5", "PINC": "1", "NEXT": next_key, "NREC": "120", "KEYB": ""
-        }
-        
+    # Check Required
+    # Note: Ticker is properly NOT required in file now, we use param.
+    required = ['Date', 'Time', 'Open', 'High', 'Low', 'Close', 'Volume']
+    missing = [c for c in required if c not in df.columns]
+    
+    if missing:
+         raise HTTPException(status_code=400, detail=f"Missing required columns: {missing}")
+
+    # Process Data
+    data_to_insert = []
+    processed_count = 0
+    
+    target_ticker = ticker.strip().upper()
+    
+    for _, row in df.iterrows():
         try:
-            res = requests.get(f"{kis_client.URL_BASE}/uapi/overseas-price/v1/quotations/inquire-time-itemchartprice", headers=headers, params=params, timeout=5.0)
-            if res.status_code == 200:
-                data = res.json()
-                if data['rt_cd'] == '0':
-                    batch = data['output2']
-                    if not batch: break
-                    
-                    # Process timestamps to check if we reached limit
-                    # kymd: YYYYMMDD, khms: HHMMSS
-                    last_c = batch[-1]
-                    last_dt_str = f"{last_c['kymd']}{last_c['khms']}"
-                    last_dt = datetime.datetime.strptime(last_dt_str, "%Y%m%d%H%M%S")
-                    
-                    candles.extend(batch)
-                    
-                    # print(f"    Page {i}: Got {len(batch)} candles. Oldest: {last_dt}")
-                    
-                    if last_dt < target_stop_dt:
-                        # Reached far enough
-                        break
-                        
-                    # Get Next Key? KIS API returns headers or output1?
-                    # Wait, KIS Foreign Stock Minute API usually doesn't return NEXT key in header?
-                    # It puts it in output1? No.
-                    # Usually for Minute chart, we might not have 'NEXT' key support in this specific TR?
-                    # HHDFS76950200 doc says: "NEXT" : "Next Key". 
-                    # Where is it returned? It is often in header 'tr_cont_key' or body?
-                    # Let's check headers.
-                    tr_cont = res.headers.get('tr_cont')
-                    tr_cont_key = res.headers.get('tr_cont_key')
-                    
-                    # print(f"    Headers: tr_cont={tr_cont} key={tr_cont_key}")
-                    
-                    if tr_cont == 'M' or tr_cont == 'D': # M/D means More Data
-                        next_key = tr_cont_key
-                    else:
-                        break # No more data
-                else:
-                    print(f"API Error: {data['msg1']}")
-                    break
+            # 1. Ticker (Use param if col missing)
+            row_ticker = row.get('Ticker', target_ticker)
+            if pd.isna(row_ticker): row_ticker = target_ticker
+            
+            # 2. DateTime
+            d_val = row['Date']
+            t_val = row['Time']
+            
+            if pd.isna(d_val) or pd.isna(t_val): continue 
+            
+            d_str = ""
+            # Handle Date
+            if isinstance(d_val, pd.Timestamp):
+                 d_str = d_val.strftime("%Y-%m-%d")
+            elif isinstance(d_val, datetime.datetime):
+                d_str = d_val.strftime("%Y-%m-%d")
             else:
-                break
-        except Exception as e:
-            print(f"Fetch Error: {e}")
-            break
+                d_str = str(d_val).split(' ')[0].replace('/', '-')
             
-        time.sleep(0.1)
-        
-    # Convert to DataFrame
-    raw_data = []
-    for c in candles:
-        # KST assumtion from KIS
-        dt = datetime.datetime.strptime(f"{c['kymd']}{c['khms']}", "%Y%m%d%H%M%S")
-        raw_data.append({
-            'time': dt,
-            'open': float(c['open']),
-            'high': float(c['high']),
-            'low': float(c['low']),
-            'close': float(c['last']),
-            'volume': float(c['vol'])
-        })
-        
-    df = pd.DataFrame(raw_data)
-    if df.empty: return df
-    
-    df = df.sort_values('time').reset_index(drop=True)
-    return df
-
-def resample_30m(df_5m):
-    """Upsample 5m to 30m"""
-    if df_5m.empty: return pd.DataFrame()
-    
-    df = df_5m.set_index('time').copy()
-    
-    # Resample logic
-    # 30T = 30 minutes
-    # OHLCV aggregation
-    df_30 = df.resample('30min').agg({
-        'open': 'first',
-        'high': 'max',
-        'low': 'min',
-        'close': 'last',
-        'volume': 'sum'
-    }).dropna()
-    
-    df_30 = df_30.reset_index()
-    return df_30
-
-# --- Core Task ---
-
-def run_simulation(sim_id: str, ticker: str, target_date: str):
-    conn = get_connection()
-    try:
-        start_dt, end_dt = get_kst_time_range(target_date)
-        print(f"🚀 [LAB] Sim {sim_id}: Fetching Data for {ticker} ({start_dt} ~ {end_dt})")
-        
-        # 1. Fetch
-        df_5m_all = fetch_historical_candles_paginated(ticker, start_dt, end_dt)
-        if df_5m_all.empty:
-            print("❌ No data found.")
-            return
-
-        print(f"  Data Loaded: {len(df_5m_all)} candles. Range: {df_5m_all.iloc[0]['time']} ~ {df_5m_all.iloc[-1]['time']}")
-        
-        # 2. Iterate (Replay)
-        # We only care about scoring candles that fall inside [start_dt, end_dt]
-        # But we need previous data for indicators.
-        
-        mask = (df_5m_all['time'] >= start_dt) & (df_5m_all['time'] <= end_dt)
-        target_indices = df_5m_all[mask].index
-        
-        results_to_save = []
-        
-        for idx in target_indices:
-            # Slice: History up to this candle
-            # Use at least 200 candles if available for MA calculation
-            slice_start = max(0, idx - 300) 
-            snapshot_5m = df_5m_all.iloc[slice_start : idx+1].copy()
-            
-            current_time = snapshot_5m.iloc[-1]['time']
-            current_price = snapshot_5m.iloc[-1]['close']
-            
-            # --- Analysis Logic ---
-            
-            # A. Calc Indicators (5m)
-            tech_5m = calculate_tech_indicators(snapshot_5m)
-            
-            # B. Calc 30m Indicators
-            # Resample strictly from the snapshot
-            snapshot_30m = resample_30m(snapshot_5m)
-            # tech_30m = calculate_tech_indicators(snapshot_30m) # Used inside check_triple_filter?
-            
-            # C. Triple Filter V2
-            # check_triple_filter expects DICT of DataFrames? No, params are data_30m, data_5m
-            # But check_triple_filter function in analysis.py:
-            # def check_triple_filter(ticker, data_30m, data_5m):
-            # It expects data_30m and data_5m to be DICTIONARIES of dataframes keyed by ticker: { 'SOXL': df }
-            # So we wrap them.
-            
-            d30 = {ticker: snapshot_30m}
-            d5 = {ticker: snapshot_5m}
-            
-            # Also it fetches 'current_price' inside?
-            # It uses `data_5m[ticker].iloc[-1]['close']`
-            
-            v2_res = check_triple_filter(ticker, d30, d5)
-            
-            # D. Holding Score V4
-            # calculate_holding_score(res, tech, v2_buy, v2_sell, bbi_score)
-            
-            # V2 Buy/Sell Status extraction
-            # v2_res contains 'final', 'step1', 'metrics' etc.
-            # We need to simulate the 'v2_buy' status DB object?
-            # calculate_holding_score uses v2_buy_info dict: { 'buy_sig1_yn': 'Y', ... }
-            # v2_res returns the CURRENT status.
-            # In live system, these are cumulative/persistent in DB.
-            # In Backtest, since we are replay-ing each candle, the 'current status' IS the status of that moment.
-            # So if v2_res['step1'] is True, buy_sig1_yn is Y.
-            
-            # construct mock v2_buy/sell
-            mock_v2_buy = {
-                'buy_sig1_yn': 'Y' if v2_res.get('step1') else 'N',
-                'buy_sig2_yn': 'Y' if v2_res.get('step2') else 'N',
-                'buy_sig3_yn': 'Y' if v2_res.get('step3') else 'N',
-            }
-            # For Sell, V2 logic returns 'sell_signal' flags?
-            # check_triple_filter returns 'sell_step1', 'sell_step2', 'sell_step3'?
-            # Let's check keys in v2_res. It usually has 'steps': [T, F, F] for buy?
-            # Actually check_triple_filter implementation details:
-            # It returns: { 'final': bool, 'step1': bool, ..., 'sell_step1': bool ... }
-            
-            mock_v2_sell = {
-                'sell_sig1_yn': 'Y' if v2_res.get('sell_step1') else 'N',
-                'sell_sig2_yn': 'Y' if v2_res.get('sell_step2') else 'N', # Trailing Stop logic might be complex in backtest
-                'sell_sig3_yn': 'Y' if v2_res.get('sell_step3') else 'N',
-            }
-            
-            # BBI
-            bbi_val = 0
-            if not snapshot_30m.empty:
-                bbi_res = calculate_bbi(snapshot_30m)
-                bbi_val = bbi_res.get('bbi', 0)
+            # Handle Time
+            t_str = ""
+            if isinstance(t_val, pd.Timestamp):
+                 t_str = t_val.strftime("%H:%M:%S")
+            elif isinstance(t_val, datetime.time):
+                t_str = t_val.strftime("%H:%M:%S")
+            else:
+                t_str = str(t_val).strip()
+                # Fix "HH:MM" -> "HH:MM:00"
+                if len(t_str) == 5 and t_str.count(':') == 1:
+                    t_str += ":00"
                 
-            # Score
-            score_data = calculate_holding_score(
-                v2_res, 
-                tech_5m, 
-                mock_v2_buy, 
-                mock_v2_sell, 
-                bbi_score=bbi_val
-            )
+            # Combine
+            full_dt_str = f"{d_str} {t_str}"
+            try:
+                candle_time = datetime.datetime.strptime(full_dt_str, "%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                 print(f"Skipping Bad Date Format: {full_dt_str}")
+                 continue
             
-            # Save Row
-            bd = score_data.get('breakdown', {})
+            # 3. Values
+            o = float(row['Open'])
+            h = float(row['High'])
+            l = float(row['Low'])
+            c = float(row['Close'])
+            v = int(row['Volume'])
+            ma10 = float(row.get('MA10', 0) or 0)
+            ma30 = float(row.get('MA30', 0) or 0)
             
-            # Identify active signal step (text)
-            sig_text = []
-            if mock_v2_buy['buy_sig3_yn'] == 'Y': sig_text.append("Buy L3")
-            elif mock_v2_buy['buy_sig2_yn'] == 'Y': sig_text.append("Buy L2")
-            elif mock_v2_buy['buy_sig1_yn'] == 'Y': sig_text.append("Buy L1")
+            # Change Pct (Optional / Calc)
+            chg = 0.0
+            if 'ChangePct' in row:
+                chg = float(row['ChangePct'] or 0)
             
-            if mock_v2_sell['sell_sig3_yn'] == 'Y': sig_text.append("Sell L3")
-            elif mock_v2_sell['sell_sig1_yn'] == 'Y': sig_text.append("Sell L1")
+            data_to_insert.append((row_ticker, candle_time, o, h, l, c, v, ma10, ma30, chg))
+            processed_count += 1
             
-            
-            results_to_save.append((
-                sim_id,
-                ticker,
-                current_time.strftime('%Y-%m-%d %H:%M:%S'),
-                current_price,
-                v2_res.get('daily_change', 0),
-                score_data.get('score', 0),
-                bd.get('cheongan', 0),
-                bd.get('rsi', 0),
-                bd.get('macd', 0),
-                bd.get('vol', 0),
-                bd.get('atr', 0),
-                bd.get('bbi', 0),
-                ", ".join(sig_text)
-            ))
-            
-        print(f"  Simulation Completed. Saving {len(results_to_save)} rows...")
-        
-        # Batch Insert
-        if results_to_save:
-            with conn.cursor() as cursor:
-                sql = """
-                    INSERT INTO backtest_results 
-                    (simulation_id, ticker, candle_time, price, change_pct, total_score, 
-                     cheongan_score, rsi, macd, vol_ratio, atr, bbi, signal_step)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """
-                cursor.executemany(sql, results_to_save)
-            conn.commit()
-            print("✅ DB Save Success")
-            
-    except Exception as e:
-        print(f"❌ Sim Error: {e}")
-        import traceback
-        traceback.print_exc()
-    finally:
-        conn.close()
+        except Exception as row_e:
+            print(f"Skipping Bad Row: {row} -> {row_e}")
+            continue
+
+    # Insert to DB
+    table_name = "lab_data_30m" if period == "30m" else "lab_data_5m"
+    try:
+        inserted = bulk_insert_lab_data(table_name, data_to_insert)
+        return {
+            "status": "success", 
+            "message": f"Processed {processed_count} rows. Inserted/Updated {inserted} records into {table_name}.",
+            "total_rows": len(df)
+        }
+    except Exception as db_e:
+        raise HTTPException(status_code=500, detail=f"DB Error: {str(db_e)}")
 
 
-@router.post("/simulate")
-def request_simulation(req: SimRequest, background_tasks: BackgroundTasks):
-    sim_id = str(uuid.uuid4())[:8]
-    background_tasks.add_task(run_simulation, sim_id, req.ticker, req.date)
-    return {"status": "success", "message": "Simulation started", "simulation_id": sim_id}
-
-@router.get("/results/{sim_id}")
-def get_results(sim_id: str):
+@router.get("/data/{period}")
+def get_lab_data(period: str, page: int = 1, limit: int = 50, ticker: str = None, date_from: str = None, date_to: str = None, status: str = "ALL"):
+    """
+    View loaded data with Pagination & Filtering.
+    """
+    from db import get_connection
+    table = "lab_data_30m" if period == "30m" else "lab_data_5m"
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
-            sql = "SELECT * FROM backtest_results WHERE simulation_id = %s ORDER BY candle_time ASC"
-            cursor.execute(sql, (sim_id,))
+            # Base Query
+            where_clauses = ["1=1"]
+            params = []
+            
+            if ticker and ticker != "ALL":
+                where_clauses.append("ticker = %s")
+                params.append(ticker)
+                
+            if date_from:
+                where_clauses.append("candle_time >= %s")
+                params.append(date_from)
+            
+            if date_to:
+                where_clauses.append("candle_time <= %s")
+                params.append(date_to + " 23:59:59") # End of day
+
+            # [Status Filter]
+            if status == "COMPLETE":
+                where_clauses.append("total_score != 0")
+            elif status == "INCOMPLETE":
+                where_clauses.append("total_score = 0")
+                
+            where_sql = " AND ".join(where_clauses)
+            
+            # Count Total
+            count_sql = f"SELECT COUNT(*) as cnt FROM {table} WHERE {where_sql}"
+            cursor.execute(count_sql, tuple(params))
+            total_rows = cursor.fetchone()['cnt']
+            
+            # Fetch Page
+            offset = (page - 1) * limit
+            sql = f"SELECT * FROM {table} WHERE {where_sql} ORDER BY candle_time DESC LIMIT %s OFFSET %s"
+            cursor.execute(sql, tuple(params + [limit, offset]))
             rows = cursor.fetchall()
-            return {"status": "success", "data": rows}
+            
+            return {
+                "status": "success", 
+                "data": rows, 
+                "pagination": {
+                    "page": page,
+                    "limit": limit,
+                    "total": total_rows,
+                    "total_pages": (total_rows + limit - 1) // limit
+                }
+            }
     finally:
         conn.close()
+
+@router.delete("/data/{period}")
+def delete_lab_data(period: str, ids: str): # ids="1,2,3"
+    """
+    Bulk Delete by IDs.
+    """
+    from db import get_connection
+    table = "lab_data_30m" if period == "30m" else "lab_data_5m"
+    
+    if not ids:
+        raise HTTPException(status_code=400, detail="No IDs provided")
+        
+    id_list = [int(x) for x in ids.split(',')]
+    if not id_list:
+         return {"status": "error", "message": "No valid IDs"}
+
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            format_strings = ','.join(['%s'] * len(id_list))
+            sql = f"DELETE FROM {table} WHERE id IN ({format_strings})"
+            cursor.execute(sql, tuple(id_list))
+            deleted = cursor.rowcount
+            conn.commit()
+            return {"status": "success", "message": f"Deleted {deleted} rows."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+@router.post("/calculate")
+async def calculate_score(period: str = "30m", ticker: str = "SOXL", offset: int = 0, limit: int = 1000000, only_missing: bool = False, ids: str = None):
+    """
+    Calculate scores with Batching & Partial Update support.
+    offset/limit: applied to the list of rows to be calculated.
+    only_missing: if True, only process rows where total_score=0.
+    ids: comma separated list of IDs to calculate specific rows (overrides offset/limit)
+    """
+    from db_lab import bulk_update_scores
+    from db import get_connection
+    from analysis import calculate_tech_indicators, calculate_holding_score, check_triple_filter, calculate_bbi, calculate_market_intelligence
+    import json
+    
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            # 1. Select Target Rows (Limit/Offset/Condition)
+            table = "lab_data_30m" if period == "30m" else "lab_data_5m"
+            
+            params = []
+            where_clauses = ["ticker=%s"]
+            params.append(ticker)
+            
+            # [IDs override]
+            if ids:
+                id_list = [int(x) for x in ids.split(',') if x.strip()]
+                if id_list:
+                    format_strings = ','.join(['%s'] * len(id_list))
+                    where_clauses.append(f"id IN ({format_strings})")
+                    params.extend(id_list)
+                    # When IDs provided, ignore limit/offset/only_missing
+                    sql = f"SELECT id, candle_time FROM {table} WHERE {' AND '.join(where_clauses)} ORDER BY candle_time ASC"
+                    cursor.execute(sql, tuple(params))
+                    target_rows = cursor.fetchall()
+            else:
+                if only_missing:
+                    where_clauses.append("total_score = 0")
+                
+                # Fetch IDs and Times
+                # Use params properly
+                sql = f"SELECT id, candle_time FROM {table} WHERE {' AND '.join(where_clauses)} ORDER BY candle_time ASC LIMIT %s OFFSET %s"
+                cursor.execute(sql, tuple(params + [limit, offset]))
+                target_rows = cursor.fetchall()
+            
+            # Also load ALL data for History Context
+            # Optimization: Load ALL data once for context?
+            # If batch is small (200), loading 5000 rows context is fine.
+            # If database grows to 1M, we need smarter context loading.
+            # For now, load ALL for the ticker to ensure robust history lookups (simple & correct).
+            # If memory issue, we can optimize later to load only needed range.
+            
+            cursor.execute("SELECT * FROM lab_data_30m WHERE ticker=%s ORDER BY candle_time ASC", (ticker,))
+            all_30 = pd.DataFrame(cursor.fetchall())
+            
+            cursor.execute("SELECT * FROM lab_data_5m WHERE ticker=%s ORDER BY candle_time ASC", (ticker,))
+            all_5m = pd.DataFrame(cursor.fetchall())
+            
+            # [Energy] Fetch UPRO data for context
+            # [Energy] Fetch UPRO data for context (Use Main Table for matching period)
+            cursor.execute(f"SELECT candle_time, open, close FROM {table} WHERE ticker='UPRO' ORDER BY candle_time ASC")
+            all_upro = pd.DataFrame(cursor.fetchall())
+            
+    finally:
+        conn.close()
+        
+    if not target_rows:
+        return {"status": "success", "message": "No rows to process.", "updated_count": 0, "total_processed": 0}
+
+    # Pre-process DataFrames
+    # DB columns are usually lowercase. Analysis expects Capitalized or is mixed.
+    # We standardize to Capitalized for compatibility with pandas_ta default.
+    column_map = {'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close', 'volume': 'Volume', 'ma10': 'MA10', 'ma30': 'MA30'}
+    
+    if not all_30.empty: 
+        all_30['candle_time'] = pd.to_datetime(all_30['candle_time'])
+        all_30.rename(columns=column_map, inplace=True)
+        # Type Cast to Float
+        cols = ['Open', 'High', 'Low', 'Close', 'Volume', 'MA10', 'MA30']
+        for c in cols:
+            if c in all_30.columns:
+                all_30[c] = all_30[c].astype(float)
+        
+        all_30.set_index('candle_time', drop=False, inplace=True)
+        all_30.sort_index(inplace=True)
+
+    if not all_5m.empty: 
+        all_5m['candle_time'] = pd.to_datetime(all_5m['candle_time'])
+        all_5m.rename(columns=column_map, inplace=True)
+        # Type Cast to Float
+        cols = ['Open', 'High', 'Low', 'Close', 'Volume', 'MA10', 'MA30']
+        for c in cols:
+            if c in all_5m.columns:
+                all_5m[c] = all_5m[c].astype(float)
+                
+        all_5m.set_index('candle_time', drop=False, inplace=True)
+        all_5m.sort_index(inplace=True)
+        
+    # Process UPRO Map
+    upro_map = {}
+    if not all_upro.empty:
+        all_upro['candle_time'] = pd.to_datetime(all_upro['candle_time'])
+        all_upro.rename(columns=column_map, inplace=True)
+        # Type Cast
+        cols = ['Open', 'Close']
+        for c in cols:
+            if c in all_upro.columns: 
+                all_upro[c] = all_upro[c].astype(float)
+                
+        all_upro.set_index('candle_time', inplace=True)
+        upro_map = all_upro[['Open', 'Close']].to_dict(orient='index') # {Timestamp: {'Open':..., 'Close':...}}
+    
+    # Algo Version
+    ALGO_VER = "Jian Ver 1.0"
+    updates = []
+    
+    print(f"[LAB] Batch Calc: {len(target_rows)} rows. (Offset {offset}, Limit {limit}, MissingOnly {only_missing})")
+
+    # [Ver 8.0] Single-Source Simulation: 30m Data is Dynamically Generated from 5m.
+    # PrevClose for Daily Change is fetched via YFinance if not local.
+    
+    import yfinance as yf
+    # import pandas as pd # Removed to avoid UnboundLocalError
+    import logging
+    logger = logging.getLogger("uvicorn")
+
+    # 1. Build PrevClose Map (Robust External Source)
+    prev_close_map = {} 
+    
+    try:
+        # Fetch 1mo history for ticker to get reliable daily closes
+        # This solves "First candle of uploaded file doesn't know prev close"
+        # Only fetch if we have a valid ticker
+        if ticker in ['SOXL', 'SOXS', 'UPRO', 'TQQQ', 'SQQQ']:
+            # Fetch 3mo to be safe
+            logger.info(f"Fetching YFinance history for {ticker} (PrevClose)...")
+            yf_ticker = yf.Ticker(ticker)
+            # Standard Session Close
+            hist = yf_ticker.history(period="3mo")
+            # Convert to dict {date: close}
+            # History index is (Date, or Datetime). normalize().
+            for dt, row in hist.iterrows():
+                prev_close_map[dt.date()] = row['Close']
+            logger.info(f"YFinance Map Built: {len(prev_close_map)} days.")
+    except Exception as e:
+        logger.warning(f"YFinance Fetch Error: {e}")
+        # Fallback to local data (last close of prev regular session)
+        if not all_5m.empty:
+            try:
+                reg_session_df = all_5m.between_time('09:30', '16:00')
+                daily_closes = reg_session_df.groupby(reg_session_df.index.date)['Close'].last()
+                prev_close_map.update(daily_closes.to_dict())  # Merge local as fallback
+            except: pass
+
+    import math
+    def clean_score(val):
+        """Ensure score is valid int"""
+        if val is None: return 0
+        try:
+            f = float(val)
+            if math.isnan(f) or math.isinf(f): return 0
+            return int(f)
+        except: return 0
+
+    for index, target in enumerate(target_rows):
+        curr_time = pd.to_datetime(target['candle_time'])
+        row_id = target['id']
+        
+        # 2. Get 5m Subset (The only truth)
+        if not all_5m.empty:
+            subset_5m = all_5m.loc[all_5m.index <= curr_time].tail(400) # Need enough for 30m resample
+        else:
+            subset_5m = pd.DataFrame()
+            
+        if len(subset_5m) < 1: continue
+
+        # 3. Dynamic 30m Generation (The 'C3' Source)
+        # Resample 5m -> 30m
+        # Rule: closed='right', label='right' for standard candles?
+        # 30m candle at 10:00 includes 09:35, 40, 45, 50, 55, 10:00.
+        # We need to simulate "What did the 30m chart look like at 'curr_time'?"
+        # If curr_time is 09:35, the 09:30-10:00 candle is INCOMPLETE. 
+        # But signals are usually checked on completed candles or live?
+        # Dashboard checks latest available 30m candle. 
+        # If 09:35, the latest CLOSED 30m candle is 09:30. The CURRENT forming is 10:00.
+        # That matches 'Live' behavior.
+        
+        try:
+            # Resample logic
+            sim_30m = subset_5m.resample('30min').agg({
+                'Open': 'first',
+                'High': 'max',
+                'Low': 'min',
+                'Close': 'last',
+                'Volume': 'sum'
+            }).dropna()
+            
+            # Calculate MA10, MA30 for this synthetic 30m
+            # Using simple moving average
+            sim_30m['MA10'] = sim_30m['Close'].rolling(window=10).mean()
+            sim_30m['MA30'] = sim_30m['Close'].rolling(window=30).mean()
+            
+            # Calculate Tech? (MACD, RSI needed for full score?)
+            # Actually, calculate_tech_indicators is called on 'main_subset'.
+            # If period='5m', main is 5m.
+            # But 'check_triple_filter' needs 30m context for Step 3.
+            # So we pass sim_30m as 'data_30m'.
+        except Exception as e:
+            logger.warning(f"Resample Error {row_id}: {e}")
+            sim_30m = pd.DataFrame()
+            
+        main_subset = subset_5m
+
+        t5 = calculate_tech_indicators(main_subset) if not main_subset.empty else {}
+        t30 = calculate_tech_indicators(sim_30m) if not sim_30m.empty else {}
+        
+        current_close = main_subset['Close'].iloc[-1]
+        current_open = main_subset['Open'].iloc[-1]
+        
+        # [Fix] Determine Prev Close for this candle's date
+        curr_date = curr_time.date()
+        date_keys = sorted(list(prev_close_map.keys()))
+        target_prev_close = 0.0
+
+        # Load UPRO Context (Optional, for Energy)
+        try:
+             # Find Close of Previous Date
+             past_dates = [d for d in date_keys if d < curr_date]
+             if past_dates:
+                 prev_date = past_dates[-1]
+                 target_prev_close = float(prev_close_map[prev_date])
+             else:
+                 target_prev_close = current_open
+        except:
+             target_prev_close = current_open
+             
+        target_change = 0
+        if target_prev_close > 0:
+            target_change = ((current_close - target_prev_close) / target_prev_close) * 100
+            
+        upro_change = 0
+
+        # [Fix] Explicitly Calculate 5m Moving Averages (MA10, MA30, MA12)
+        # Reverted to MA30 per user request ("10/30 Matches Guideline")
+        # Added MA12 for C2 Signal
+        if not main_subset.empty and len(main_subset) >= 30:
+            closes = main_subset['Close']
+            ma10_5_val = closes.rolling(window=10).mean().iloc[-1]
+            ma30_5_val = closes.rolling(window=30).mean().iloc[-1]
+            ma12_5_val = closes.rolling(window=12).mean().iloc[-1]
+        elif not main_subset.empty and len(main_subset) >= 12:
+             # Fallback if length < 30 but >= 12
+            closes = main_subset['Close']
+            ma10_5_val = closes.rolling(window=10).mean().iloc[-1] if len(closes) >= 10 else 0
+            ma30_5_val = 0
+            ma12_5_val = closes.rolling(window=12).mean().iloc[-1]
+        else:
+            ma10_5_val = 0
+            ma30_5_val = 0
+            ma12_5_val = 0
+
+        # [Ver 8.1] Signal Simulation (Trend Maintenance)
+        # 1. Sig 1 (5m Trend) -> 10/30 Golden Cross or Alignment
+        sig1 = (ma10_5_val > 0) and (ma30_5_val > 0) and (ma10_5_val >= ma30_5_val)
+        
+        # 3. Sig 3 (30m Trend - from Simulated 30m)
+        ma10_30 = t30.get('ma10', 0)
+        ma30_30 = t30.get('ma30', 0)
+        if not sim_30m.empty:
+             r = sim_30m.iloc[-1]
+             m10 = r.get('MA10', 0)
+             m30 = r.get('MA30', 0)
+             if m10 > 0: ma10_30 = m10
+             if m30 > 0: ma30_30 = m30
+        sig3 = (ma10_30 > 0) and (ma30_30 > 0) and (ma10_30 >= ma30_30)
+        
+        # 2. Sig 2 (Breakout / Maintenance) -> Award if Price > 5m MA12
+        sig2 = (ma12_5_val > 0) and (current_close > ma12_5_val)
+        
+        mock_v2_buy = {
+            'buy_sig1_yn': 'Y' if sig1 else 'N',
+            'buy_sig2_yn': 'Y' if sig2 else 'N',
+            'buy_sig3_yn': 'Y' if sig3 else 'N',
+        }
+        
+        # [Fix] Change Pct Calculation
+        change_pct = 0.0
+        oc = 0
+        cc = 0
+        if not main_subset.empty:
+             oc = main_subset['Open'].iloc[-1]
+             cc = main_subset['Close'].iloc[-1]
+             if oc > 0:
+                 change_pct = round(((cc - oc) / oc) * 100, 2)
+
+        # [Fix] Calculate Market Intelligence (Vol, ATR, RSI, Pivot)
+        # Use the same timeframe as tech indicators (30m simulated or 5m raw)
+        target_df = sim_30m if period == '30m' else main_subset
+        metrics = calculate_market_intelligence(target_df) if not target_df.empty else {}
+        
+        # Mock v2_res with metrics for scoring function
+        v2_res = {
+            'new_metrics': metrics,
+            'current_price': current_close,
+            'daily_change': change_pct # Use computed change_pct
+        } 
+        
+        mock_v2_sell = {
+            'sell_sig1_yn': 'N',
+            'sell_sig2_yn': 'N',
+            'sell_sig3_yn': 'N',
+        }
+        
+        # BBI (Currently 0 as per previous request, but structure is here)
+        # bbi_res = calculate_bbi(main_subset)
+        # bbi_score = 10 if bbi_res.get('status') == 'BREAKOUT' else 0
+        
+        # Energy
+        energy_target_change = target_change
+        is_bull_ticker = (ticker in ['SOXL', 'TQQQ', 'UPRO', 'BULZ'])
+        if not is_bull_ticker and target_change != 0:
+             energy_target_change = -target_change
+             
+        energy_score = calculate_market_energy(energy_target_change, upro_change, is_bull=is_bull_ticker)
+
+        score_data = calculate_holding_score(
+            v2_res, t30 if period == '30m' else t5, mock_v2_buy, mock_v2_sell, bbi_score=0, energy_score=energy_score,
+            strict_sum=False 
+        )
+        
+        bd = score_data.get('breakdown', {})
+        if offset == 0 and index < 3:
+             logger.info(f"DEBUG SCORE {ticker} {curr_time}: {score_data}")
+        
+        s_c1 = 20 if mock_v2_buy['buy_sig1_yn'] == 'Y' else 0
+        s_c2 = 20 if mock_v2_buy['buy_sig2_yn'] == 'Y' else 0 
+        s_c3 = 20 if mock_v2_buy['buy_sig3_yn'] == 'Y' else 0
+        
+        s_en = clean_score(bd.get('energy', 0)) 
+        s_atr = clean_score(bd.get('atr', 0))
+        s_bbi = clean_score(bd.get('bbi', 0)) 
+        
+        s_rsi = clean_score(bd.get('rsi', 0))
+        s_macd = clean_score(bd.get('macd', 0))
+        s_vol = clean_score(bd.get('vol', 0))
+        
+        # Recalculate Total manually if needed, or trust score_data
+        # If strict_sum=False, total might include what is available.
+        total = s_c1 + s_c2 + s_c3 + s_en + s_atr + s_rsi + s_macd + s_vol + s_bbi # Added s_bbi
+        
+        calc_at = datetime.datetime.now()
+        
+        updates.append((
+            total, s_c1, s_c2, s_c3, s_en, s_atr, s_bbi, s_rsi, s_macd, s_vol, ALGO_VER, calc_at, 
+            change_pct, # Added Change Pct
+            row_id
+        ))
+
+    # Bulk Update
+    table_name = "lab_data_30m" if period == "30m" else "lab_data_5m"
+    try:
+        updated = bulk_update_scores(table_name, updates)
+    except Exception as e:
+        print(f"Bulk Update Error: {e}")
+        # fallback
+        updated = 0
+    
+    return {
+        "status": "success", 
+        "message": f"Processed {len(updates)} rows.",
+        "updated_count": updated
+    }
