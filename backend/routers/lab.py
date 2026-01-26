@@ -136,6 +136,32 @@ async def upload_lab_data(file: UploadFile = File(...), period: str = "30m", tic
         raise HTTPException(status_code=500, detail=f"DB Error: {str(db_e)}")
 
 
+@router.get("/config")
+def get_lab_config():
+    """Get Lab Buy/Sell Thresholds"""
+    from db import get_global_config
+    return {
+        "lab_buy_score": get_global_config("lab_buy_score", 70),
+        "lab_sell_score": get_global_config("lab_sell_score", 50)
+    }
+
+from pydantic import BaseModel
+class LabConfig(BaseModel):
+    lab_buy_score: int
+    lab_sell_score: int
+
+@router.post("/config")
+def set_lab_config(config: LabConfig):
+    """Set Lab Buy/Sell Thresholds"""
+    from db import set_global_config
+    try:
+        set_global_config("lab_buy_score", config.lab_buy_score)
+        set_global_config("lab_sell_score", config.lab_sell_score)
+        return {"status": "success", "message": "Thresholds saved."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/data/{period}")
 def get_lab_data(period: str, page: int = 1, limit: int = 50, ticker: str = None, date_from: str = None, date_to: str = None, status: str = "ALL"):
     """

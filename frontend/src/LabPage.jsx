@@ -1,37 +1,90 @@
 
 import React, { useState, useEffect } from 'react';
 import Swal from 'sweetalert2';
-
+import {
+    LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine
+} from 'recharts';
 
 const LabPage = () => {
-    // State
-    const [period, setPeriod] = useState('5m'); // Default 5m (Single Source)
-    const [ticker, setTicker] = useState('SOXL');
-    const [statusFilter, setStatusFilter] = useState('ALL'); // Dead code, but removing usage below first. Wait, I should remove it.
+    // UI State
+    const [period, setPeriod] = useState('5m');
+    const [activeTab, setActiveTab] = useState('list'); // 'list' or 'chart'
 
+    // Config State
+    const [buyScore, setBuyScore] = useState(70);
+    const [sellScore, setSellScore] = useState(50);
+    const [configLoading, setConfigLoading] = useState(false);
+
+    // List View State
+    const [ticker, setTicker] = useState('SOXL');
     const [page, setPage] = useState(1);
     const [data, setData] = useState([]);
     const [pagination, setPagination] = useState({});
     const [loading, setLoading] = useState(false);
-
     const [selectedIds, setSelectedIds] = useState([]);
 
-    // Custom Ticker Edit Mode (Optional, keep or replace with Select)
-    // User requested: "Select from SOXL, SOXS, UPRO"
+    // Chart View State
+    const [chartData, setChartData] = useState({ SOXL: [], SOXS: [] });
+    const [chartLoading, setChartLoading] = useState(false);
 
     // Filter
     const [dateFrom, setDateFrom] = useState(new Date().toISOString().split('T')[0]);
     const [dateTo, setDateTo] = useState(new Date().toISOString().split('T')[0]);
 
-    // Fetch existing data on mount/period/page/filter change
+    // Initial Load
     useEffect(() => {
-        fetchData();
-    }, [period, page, ticker, statusFilter]); // Auto-fetch on filter change? Yes usually better UX.
+        fetchConfig();
+        fetchData(); // Load List Initial
+    }, []);
 
+    // Effect: Tab Switch or Filter Change
+    useEffect(() => {
+        if (activeTab === 'list') {
+            fetchData();
+        } else {
+            fetchChartData();
+        }
+    }, [activeTab, period, page, ticker, dateFrom, dateTo]); // page/ticker only affects list, but simple trigger is fine
+
+    // --- API: Config ---
+    const fetchConfig = async () => {
+        try {
+            const res = await fetch('/api/lab/config');
+            const json = await res.json();
+            if (json) {
+                setBuyScore(json.lab_buy_score);
+                setSellScore(json.lab_sell_score);
+            }
+        } catch (e) {
+            console.error("Config Fetch Error", e);
+        }
+    };
+
+    const saveConfig = async () => {
+        setConfigLoading(true);
+        try {
+            const res = await fetch('/api/lab/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ lab_buy_score: buyScore, lab_sell_score: sellScore })
+            });
+            const json = await res.json();
+            if (json.status === 'success') {
+                Swal.fire('Saved', 'Thresholds saved successfully.', 'success');
+            } else {
+                Swal.fire('Error', json.detail || 'Failed to save', 'error');
+            }
+        } catch (e) {
+            Swal.fire('Error', 'Network Error', 'error');
+        }
+        setConfigLoading(false);
+    };
+
+    // --- API: Data ---
     const fetchData = async () => {
+        if (activeTab !== 'list') return;
         setLoading(true);
         try {
-            // [Req] Pagination 10
             let url = `/api/lab/data/${period}?page=${page}&limit=10&ticker=${ticker}`;
             if (dateFrom) url += `&date_from=${dateFrom}`;
             if (dateTo) url += `&date_to=${dateTo}`;
@@ -41,7 +94,7 @@ const LabPage = () => {
             if (json.status === 'success') {
                 setData(json.data);
                 setPagination(json.pagination);
-                setSelectedIds([]); // Clear selection on refresh
+                setSelectedIds([]);
             }
         } catch (e) {
             console.error(e);
@@ -49,17 +102,40 @@ const LabPage = () => {
         setLoading(false);
     };
 
+    const fetchChartData = async () => {
+        if (activeTab !== 'chart') return;
+        setChartLoading(true);
+        try {
+            // Fetch both SOXL and SOXS for the range
+            // Limit 10000 to get full range chart
+            const fetchOne = async (t) => {
+                let url = `/api/lab/data/${period}?page=1&limit=5000&ticker=${t}`;
+                if (dateFrom) url += `&date_from=${dateFrom}`;
+                if (dateTo) url += `&date_to=${dateTo}`;
+                const res = await fetch(url);
+                const json = await res.json();
+                return json.status === 'success' ? json.data.reverse() : []; // Reverse for Chart (Old -> New)
+            };
 
+            const [soxl, soxs] = await Promise.all([fetchOne('SOXL'), fetchOne('SOXS')]);
+            setChartData({ SOXL: soxl, SOXS: soxs });
 
+        } catch (e) {
+            console.error(e);
+        }
+        setChartLoading(false);
+    }
+
+    // --- Handlers ---
     const handleDelete = async () => {
         if (selectedIds.length === 0) return;
         const result = await Swal.fire({
-            title: '삭제',
-            text: `선택한 ${selectedIds.length}개 데이터를 삭제합니다.`,
+            title: 'Delete',
+            text: `Delete ${selectedIds.length} items?`,
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#ef4444',
-            confirmButtonText: '삭제'
+            confirmButtonText: 'Delete'
         });
 
         if (result.isConfirmed) {
@@ -68,7 +144,7 @@ const LabPage = () => {
                 const res = await fetch(`/api/lab/data/${period}?ids=${ids}`, { method: 'DELETE' });
                 const json = await res.json();
                 if (json.status === 'success') {
-                    Swal.fire('삭제 완료', json.message, 'success');
+                    Swal.fire('Deleted', json.message, 'success');
                     fetchData();
                 } else {
                     Swal.fire('Error', json.message, 'error');
@@ -78,8 +154,6 @@ const LabPage = () => {
             }
         }
     };
-
-
 
     const toggleSelect = (id) => {
         if (selectedIds.includes(id)) setSelectedIds(selectedIds.filter(x => x !== id));
@@ -91,165 +165,243 @@ const LabPage = () => {
         else setSelectedIds(data.map(d => d.id));
     };
 
+    // --- Chart Components ---
+    const CustomTooltip = ({ active, payload, label }) => {
+        if (active && payload && payload.length) {
+            const d = payload[0].payload;
+            return (
+                <div style={{ background: 'rgba(30, 41, 59, 0.9)', border: '1px solid #475569', padding: '10px', borderRadius: '4px', fontSize: '0.8rem' }}>
+                    <p style={{ color: '#94a3b8', marginBottom: '5px' }}>{new Date(d.candle_time).toLocaleString()}</p>
+                    <p style={{ color: '#fbbf24', fontWeight: 'bold' }}>Score: {d.total_score}</p>
+                    <p style={{ color: '#fff' }}>Price: ${d.close}</p>
+                </div>
+            );
+        }
+        return null;
+    };
+
+    const renderChart = (tickerName, dataPoints) => (
+        <div style={{ flex: 1, minWidth: '0', background: '#1e293b', padding: '15px', borderRadius: '12px' }}>
+            <h3 style={{ marginTop: 0, marginBottom: '15px', color: tickerName === 'SOXL' ? '#4ade80' : '#f87171', borderBottom: '1px solid #334155', paddingBottom: '10px' }}>
+                {tickerName} (Total Score)
+            </h3>
+            <div style={{ height: '400px' }}>
+                <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={dataPoints}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                        <XAxis
+                            dataKey="candle_time"
+                            tickFormatter={(t) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            stroke="#94a3b8"
+                            fontSize={12}
+                        />
+                        <YAxis domain={[-40, 100]} stroke="#94a3b8" fontSize={12} />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Legend />
+                        <ReferenceLine y={buyScore} label="Buy" stroke="#ef4444" strokeDasharray="3 3" />
+                        <ReferenceLine y={sellScore} label="Sell" stroke="#3b82f6" strokeDasharray="3 3" />
+                        <Line
+                            type="monotone"
+                            dataKey="total_score"
+                            stroke={tickerName === 'SOXL' ? '#4ade80' : '#f87171'}
+                            strokeWidth={2}
+                            dot={false}
+                            activeDot={{ r: 6 }}
+                        />
+                    </LineChart>
+                </ResponsiveContainer>
+            </div>
+        </div>
+    );
+
     return (
         <div style={{ padding: '20px', minHeight: '100vh', background: '#0f172a', color: '#fff' }}>
             {/* Header Toolbar */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid #334155', paddingBottom: '15px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
                     <h2 style={{ margin: 0, color: '#38bdf8' }}>🧪 Lab 2.0</h2>
-                    <div style={{ display: 'flex', background: '#1e293b', borderRadius: '6px', padding: '6px 12px', fontSize: '0.9rem', color: '#94a3b8' }}>
-                        {/* Text Removed */}
+
+                    {/* Tab Switcher */}
+                    <div style={{ display: 'flex', background: '#1e293b', borderRadius: '6px', padding: '4px' }}>
+                        <button
+                            onClick={() => setActiveTab('list')}
+                            style={{ ...tabStyle, background: activeTab === 'list' ? '#334155' : 'transparent' }}
+                        >
+                            📋 List
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('chart')}
+                            style={{ ...tabStyle, background: activeTab === 'chart' ? '#334155' : 'transparent' }}
+                        >
+                            📈 Chart
+                        </button>
                     </div>
                 </div>
 
-                {/* Right Actions */}
-                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                    {/* [Req] Ticker Radio */}
-                    <div style={{ display: 'flex', gap: '5px', background: '#1e293b', padding: '4px', borderRadius: '6px', border: '1px solid #475569' }}>
-                        {['SOXL', 'SOXS'].map(t => (
-                            <label key={t} style={{
-                                cursor: 'pointer', padding: '4px 10px', borderRadius: '4px',
-                                background: ticker === t ? '#3b82f6' : 'transparent',
-                                color: ticker === t ? '#fff' : '#94a3b8',
-                                fontWeight: ticker === t ? 'bold' : 'normal',
-                                fontSize: '0.9rem'
-                            }}>
-                                <input
-                                    type="radio"
-                                    name="ticker"
-                                    value={t}
-                                    checked={ticker === t}
-                                    onChange={() => setTicker(t)}
-                                    style={{ display: 'none' }}
-                                />
-                                {t}
-                            </label>
-                        ))}
+                {/* Right Actions: Config & Refresh */}
+                <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+                    {/* Config Inputs */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#1e293b', padding: '6px 12px', borderRadius: '6px', fontSize: '0.9rem' }}>
+                        <span style={{ color: '#ef4444' }}>Buy Line:</span>
+                        <input
+                            type="number"
+                            value={buyScore}
+                            onChange={(e) => setBuyScore(Number(e.target.value))}
+                            style={miniInputStyle}
+                        />
+                        <span style={{ color: '#3b82f6', marginLeft: '5px' }}>Sell Line:</span>
+                        <input
+                            type="number"
+                            value={sellScore}
+                            onChange={(e) => setSellScore(Number(e.target.value))}
+                            style={miniInputStyle}
+                        />
+                        <button onClick={saveConfig} disabled={configLoading} style={{ ...btnStyle, fontSize: '0.8rem', padding: '4px 8px', marginLeft: '5px' }}>
+                            {configLoading ? 'Saving...' : '💾 Save'}
+                        </button>
                     </div>
 
-
-
-                    <button onClick={() => fetchData()} style={{ background: '#334155', border: 'none', color: '#fff', padding: '8px', borderRadius: '6px', cursor: 'pointer' }}>
+                    <button onClick={() => activeTab === 'list' ? fetchData() : fetchChartData()} style={{ background: '#334155', border: 'none', color: '#fff', padding: '8px', borderRadius: '6px', cursor: 'pointer' }}>
                         🔄
                     </button>
                 </div>
             </div>
 
-            {/* Filter & Pagination Bar */}
+            {/* Filter Bar */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                     <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={inputStyle} />
                     <span style={{ color: '#64748b' }}>~</span>
                     <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} style={inputStyle} />
-
-
-
-                    <button onClick={() => { setPage(1); fetchData(); }} style={btnStyle}>🔍 Search</button>
+                    <button onClick={() => activeTab === 'list' ? fetchData() : fetchChartData()} style={btnStyle}>🔍 Search</button>
                 </div>
 
-                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                    {selectedIds.length > 0 && (
-                        <button onClick={handleDelete} style={{ ...btnStyle, background: '#ef4444' }}>
-                            🗑️ Delete ({selectedIds.length})
-                        </button>
-                    )}
-                    <span style={{ fontSize: '0.9rem', color: '#94a3b8' }}>
-                        Pg {pagination.page} / {pagination.total_pages} (T:{pagination.total})
-                    </span>
-                    <button disabled={page <= 1} onClick={() => setPage(page - 1)} style={pageBtnStyle}>◀</button>
-                    <button disabled={page >= pagination.total_pages} onClick={() => setPage(page + 1)} style={pageBtnStyle}>▶</button>
-                </div>
+                {/* List Specific Controls */}
+                {activeTab === 'list' && (
+                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                        {/* Ticker Radio */}
+                        <div style={{ display: 'flex', gap: '5px', background: '#1e293b', padding: '4px', borderRadius: '6px', border: '1px solid #475569' }}>
+                            {['SOXL', 'SOXS'].map(t => (
+                                <label key={t} style={{
+                                    cursor: 'pointer', padding: '4px 10px', borderRadius: '4px',
+                                    background: ticker === t ? '#3b82f6' : 'transparent',
+                                    color: ticker === t ? '#fff' : '#94a3b8',
+                                    fontWeight: ticker === t ? 'bold' : 'normal',
+                                    fontSize: '0.9rem'
+                                }}>
+                                    <input type="radio" name="ticker" value={t} checked={ticker === t} onChange={() => setTicker(t)} style={{ display: 'none' }} />
+                                    {t}
+                                </label>
+                            ))}
+                        </div>
+
+                        {selectedIds.length > 0 && (
+                            <button onClick={handleDelete} style={{ ...btnStyle, background: '#ef4444' }}>
+                                🗑️ Delete ({selectedIds.length})
+                            </button>
+                        )}
+                        <span style={{ fontSize: '0.9rem', color: '#94a3b8' }}>
+                            Pg {pagination.page} / {pagination.total_pages} (T:{pagination.total})
+                        </span>
+                        <button disabled={page <= 1} onClick={() => setPage(page - 1)} style={pageBtnStyle}>◀</button>
+                        <button disabled={page >= pagination.total_pages} onClick={() => setPage(page + 1)} style={pageBtnStyle}>▶</button>
+                    </div>
+                )}
             </div>
 
-            {/* Data Grid */}
-            <div style={{ background: '#1e293b', borderRadius: '12px', overflow: 'hidden' }}>
-                <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-                        <thead>
-                            <tr style={{ background: '#0f172a', color: '#94a3b8' }}>
-                                <th style={{ ...thStyle, width: '40px', textAlign: 'center' }}>
-                                    <input type="checkbox" onChange={toggleSelectAll} checked={data.length > 0 && selectedIds.length === data.length} />
-                                </th>
-
-                                <th style={thStyle}>Time (US)</th>
-                                <th style={thStyle}>Close</th>
-                                <th style={thStyle}>Chg(%)</th>
-                                <th style={{ ...thStyle, color: '#fbbf24' }}>Total</th>
-                                <th style={thStyle}>C1</th>
-                                <th style={thStyle}>C2</th>
-                                <th style={thStyle}>C3</th>
-                                <th style={thStyle}>Eng</th>
-                                <th style={thStyle}>RSI</th>
-                                <th style={thStyle}>MACD</th>
-                                <th style={thStyle}>Vol</th>
-                                <th style={thStyle}>ATR</th>
-                                <th style={thStyle}>Ver</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {data.map((row) => {
-                                // [Req] Highlight Red if Total != Sum
-                                // Note: DB might include sell_penalty in total but not stored?
-                                // Assuming Sum Match is expected.
-                                const sum = (row.score_cheongan_1 || 0) + (row.score_cheongan_2 || 0) + (row.score_cheongan_3 || 0) +
-                                    (row.score_energy || 0) + (row.score_rsi || 0) + (row.score_macd || 0) +
-                                    (row.score_vol || 0) + (row.score_atr || 0);
-
-                                // Loose check for sell_penalty? 
-                                // [Req] Allow 1 point tolerance for rounding differences
-                                const isMismatch = Math.abs(row.total_score - sum) > 1;
-                                // If total is 0, it might just be uncalc. isMismatch might not be useful then.
-                                // If uncalc, Sum is 0, Total 0 -> Match.
-                                // If calc, Sum should match Total (unless penalty).
-                                // User requested "Red" for mismatch.
-                                // Let's highlight incomplete/mismatch.
-
-                                const isSelected = selectedIds.includes(row.id);
-                                const rowBg = isMismatch && row.total_score !== 0 ? 'rgba(239, 68, 68, 0.15)' : isSelected ? '#334155' : 'transparent';
-
-                                return (
-                                    <tr key={row.id} style={{ borderBottom: '1px solid #334155', background: rowBg }}>
-                                        <td style={{ ...tdStyle, textAlign: 'center' }}>
-                                            <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(row.id)} />
-                                        </td>
-
-                                        <td style={tdStyle}>{new Date(row.candle_time).toLocaleString()}</td>
-                                        <td style={tdStyle}>{row.close}</td>
-                                        <td style={{ ...tdStyle, color: row.change_pct > 0 ? '#4ade80' : row.change_pct < 0 ? '#f87171' : '#fff' }}>
-                                            {row.change_pct}%
-                                        </td>
-                                        <td style={{ ...tdStyle, color: isMismatch ? '#f87171' : '#fbbf24', fontWeight: 'bold' }}>{row.total_score}</td>
-                                        <td style={tdStyle}>{row.score_cheongan_1}</td>
-                                        <td style={tdStyle}>{row.score_cheongan_2}</td>
-                                        <td style={tdStyle}>{row.score_cheongan_3}</td>
-                                        <td style={tdStyle}>{row.score_energy}</td>
-                                        <td style={tdStyle}>{row.score_rsi}</td>
-                                        <td style={tdStyle}>{row.score_macd}</td>
-                                        <td style={tdStyle}>{row.score_vol}</td>
-                                        <td style={tdStyle}>{row.score_atr}</td>
-                                        <td style={{ ...tdStyle, fontSize: '0.75rem', color: '#94a3b8' }}>{row.algo_version || '-'}</td>
-                                    </tr>
-                                );
-                            })}
-                            {data.length === 0 && (
-                                <tr>
-                                    <td colSpan="15" style={{ padding: '30px', textAlign: 'center', color: '#64748b' }}>
-                                        No data found.
-                                    </td>
+            {/* Content Area */}
+            {activeTab === 'list' ? (
+                // --- LIST VIEW ---
+                <div style={{ background: '#1e293b', borderRadius: '12px', overflow: 'hidden' }}>
+                    <div style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                            <thead>
+                                <tr style={{ background: '#0f172a', color: '#94a3b8' }}>
+                                    <th style={{ ...thStyle, width: '40px', textAlign: 'center' }}>
+                                        <input type="checkbox" onChange={toggleSelectAll} checked={data.length > 0 && selectedIds.length === data.length} />
+                                    </th>
+                                    <th style={thStyle}>Time (US)</th>
+                                    <th style={thStyle}>Close</th>
+                                    <th style={thStyle}>Chg(%)</th>
+                                    <th style={{ ...thStyle, color: '#fbbf24' }}>Total</th>
+                                    <th style={thStyle}>C1</th>
+                                    <th style={thStyle}>C2</th>
+                                    <th style={thStyle}>C3</th>
+                                    <th style={thStyle}>Eng</th>
+                                    <th style={thStyle}>RSI</th>
+                                    <th style={thStyle}>MACD</th>
+                                    <th style={thStyle}>Vol</th>
+                                    <th style={thStyle}>ATR</th>
+                                    <th style={thStyle}>Ver</th>
                                 </tr>
-                            )}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                {data.map((row) => {
+                                    const sum = (row.score_cheongan_1 || 0) + (row.score_cheongan_2 || 0) + (row.score_cheongan_3 || 0) +
+                                        (row.score_energy || 0) + (row.score_rsi || 0) + (row.score_macd || 0) +
+                                        (row.score_vol || 0) + (row.score_atr || 0);
+
+                                    const isMismatch = Math.abs(row.total_score - sum) > 1;
+                                    const isSelected = selectedIds.includes(row.id);
+                                    const rowBg = isMismatch && row.total_score !== 0 ? 'rgba(239, 68, 68, 0.15)' : isSelected ? '#334155' : 'transparent';
+
+                                    return (
+                                        <tr key={row.id} style={{ borderBottom: '1px solid #334155', background: rowBg }}>
+                                            <td style={{ ...tdStyle, textAlign: 'center' }}>
+                                                <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(row.id)} />
+                                            </td>
+                                            <td style={tdStyle}>{new Date(row.candle_time).toLocaleString()}</td>
+                                            <td style={tdStyle}>{row.close}</td>
+                                            <td style={{ ...tdStyle, color: row.change_pct > 0 ? '#4ade80' : row.change_pct < 0 ? '#f87171' : '#fff' }}>
+                                                {row.change_pct}%
+                                            </td>
+                                            <td style={{ ...tdStyle, color: isMismatch ? '#f87171' : '#fbbf24', fontWeight: 'bold' }}>{row.total_score}</td>
+                                            <td style={tdStyle}>{row.score_cheongan_1}</td>
+                                            <td style={tdStyle}>{row.score_cheongan_2}</td>
+                                            <td style={tdStyle}>{row.score_cheongan_3}</td>
+                                            <td style={tdStyle}>{row.score_energy}</td>
+                                            <td style={tdStyle}>{row.score_rsi}</td>
+                                            <td style={tdStyle}>{row.score_macd}</td>
+                                            <td style={tdStyle}>{row.score_vol}</td>
+                                            <td style={tdStyle}>{row.score_atr}</td>
+                                            <td style={{ ...tdStyle, fontSize: '0.75rem', color: '#94a3b8' }}>{row.algo_version || '-'}</td>
+                                        </tr>
+                                    );
+                                })}
+                                {data.length === 0 && (
+                                    <tr>
+                                        <td colSpan="15" style={{ padding: '30px', textAlign: 'center', color: '#64748b' }}>
+                                            No data found.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
-            </div>
+            ) : (
+                // --- CHART VIEW ---
+                <div style={{ display: 'flex', gap: '20px' }}>
+                    {chartLoading ? (
+                        <div style={{ width: '100%', textAlign: 'center', padding: '50px', color: '#94a3b8' }}>Loading Charts...</div>
+                    ) : (
+                        <>
+                            {renderChart('SOXL', chartData.SOXL)}
+                            {renderChart('SOXS', chartData.SOXS)}
+                        </>
+                    )}
+                </div>
+            )}
         </div>
     );
 };
 
-const tabStyle = { padding: '6px 15px', border: 'none', color: '#fff', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9rem' };
+// Styles
+const tabStyle = { padding: '6px 15px', border: 'none', color: '#fff', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9rem', borderRadius: '4px' };
 const btnStyle = { background: '#334155', border: 'none', color: '#fff', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' };
 const pageBtnStyle = { background: '#1e293b', border: '1px solid #475569', color: '#fff', width: '30px', height: '30px', borderRadius: '4px', cursor: 'pointer' };
 const inputStyle = { background: '#1e293b', border: '1px solid #475569', color: '#fff', padding: '5px', borderRadius: '4px' };
+const miniInputStyle = { width: '50px', background: '#0f172a', border: '1px solid #475569', color: '#fff', padding: '2px 5px', borderRadius: '3px', marginLeft: '5px' };
 const thStyle = { padding: '10px', textAlign: 'left', whiteSpace: 'nowrap' };
 const tdStyle = { padding: '8px 10px', borderBottom: '1px solid #334155' };
 
