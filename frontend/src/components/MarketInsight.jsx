@@ -463,7 +463,12 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                                                             </span>
                                                         </div>
                                                         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
-                                                            <span style={{ color: '#ccc' }}>2차 (+1%)</span>
+                                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                                <span style={{ color: '#ccc' }}>2차: 상승 지속(1h)</span>
+                                                                <span style={{ fontSize: '0.65rem', color: '#64748b' }}>
+                                                                    (MA12: ${Number(scoreObj.cheongan_details?.sig2_price || 0).toFixed(2)})
+                                                                </span>
+                                                            </div>
                                                             <span style={{ color: (scoreObj.cheongan_details?.sig2 || 0) > 0 ? '#4ade80' : '#64748b', fontWeight: 'bold' }}>
                                                                 {(scoreObj.cheongan_details?.sig2 || 0) > 0 ? `+${scoreObj.cheongan_details?.sig2}` : '0'}
                                                             </span>

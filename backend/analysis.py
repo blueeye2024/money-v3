@@ -317,9 +317,13 @@ def update_market_data(tickers=None, override_period=None):
                 if isinstance(new_30m.columns, pd.MultiIndex) and ticker in new_30m.columns: df = new_30m[ticker]
                 elif not isinstance(new_30m.columns, pd.MultiIndex) and len(target_list) == 1: df = new_30m
                 
+                if df is None: df = pd.DataFrame()
+                
                 # [STITCH KIS CANDLES for 30m] (Fix Daytime Gap)
-                if df is not None and not df.empty:
-                     df = stitch_kis_candles(ticker, df, 30)
+                # Even if YF failed (empty), try KIS
+                try:
+                    df = stitch_kis_candles(ticker, df, 30)
+                except Exception as e: print(f"Stitch 30m Error {ticker}: {e}")
 
                 if df is not None and not df.empty: 
                     # [Ver 5.8] Regression Protection
@@ -342,7 +346,7 @@ def update_market_data(tickers=None, override_period=None):
                     temp_30m[ticker] = df
                     # DB Save (Deprecated No-op but kept for interface)
                     # Note: If we reverted to Old Cache, we probably shouldn't re-save?
-                    # Or saving is harmless (ON DUPLICATE UPDATE).
+                    # Or saving is harmless (ONOT_APPLICABLE UPDATE).
                     print(f"    💾 DEBUG: Calling save_market_candles for {ticker} 30m. Len={len(df)}")
                     save_market_candles(ticker, '30m', df, 'yfinance')
             except Exception as e: print(f"Save 30m Error {ticker}: {e}")
@@ -353,9 +357,12 @@ def update_market_data(tickers=None, override_period=None):
                 if isinstance(new_5m.columns, pd.MultiIndex) and ticker in new_5m.columns: df = new_5m[ticker]
                 elif not isinstance(new_5m.columns, pd.MultiIndex) and len(target_list) == 1: df = new_5m
                 
+                if df is None: df = pd.DataFrame()
+
                 # [STITCH KIS CANDLES]
-                if df is not None and not df.empty:
-                     df = stitch_kis_candles(ticker, df, 5)
+                try:
+                    df = stitch_kis_candles(ticker, df, 5)
+                except Exception as e: print(f"Stitch 5m Error {ticker}: {e}")
 
                 if df is not None and not df.empty: 
                     # [Ver 5.8] Regression Protection (5m)
@@ -1148,7 +1155,8 @@ def check_triple_filter(ticker, data_30m, data_5m, override_price=None, simulati
         "entry_price": 0.0,
         "name": TICKER_NAMES.get(ticker, ticker), 
         "sounds": [],
-        "price_alerts": []
+        "price_alerts": [],
+        "ma12": 0.0
     }
 
     if simulation_mode:
@@ -1397,7 +1405,29 @@ def check_triple_filter(ticker, data_30m, data_5m, override_price=None, simulati
         
         if df30 is not None and not df30.empty:
             result['new_metrics'] = calculate_market_intelligence(df30)
-
+            
+        # 7. MA12 Calculation for Frontend Display
+        # [Ver 7.6] Add MA12 to result for Dashboard Action Plan "Maintenance" Price
+        print(f"DEBUG {ticker} Checking DF5: {type(df5)} Empty={df5.empty if df5 is not None else 'None'}")
+        
+        if df5 is not None and not df5.empty:
+            try:
+                ma12_series = df5['Close'].rolling(window=12).mean()
+                val = float(ma12_series.iloc[-1])
+                
+                if pd.isna(val):
+                    val = 0.0
+                    print(f"DEBUG {ticker} MA12 is NaN (Len: {len(df5)}) Head: {df5['Close'].head().tolist()}")
+                else:
+                    print(f"DEBUG {ticker} MA12 Calculated: {val} (Len: {len(df5)})")
+                    
+                result['ma12'] = val
+            except Exception as e:
+                print(f"DEBUG {ticker} MA12 Calc Error: {e}")
+                result['ma12'] = 0.0
+        else:
+            print(f"DEBUG {ticker} DF5 Missing or Empty - MA12 Skipped")
+            
         # 7. Add Data Time for UI (Safe Fallback)
         last_time_str = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         try:
@@ -1718,20 +1748,23 @@ def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None, bbi_score=0, e
     # ================================================
     # 1-B. 매도 감점 (Sell Penalty) - DISABLED in strict_sum mode
     # ================================================
+    # ================================================
+    # 1-B. 매도 감점 (Sell Penalty) - DISABLED (User Request Ver 7.6)
+    # ================================================
     sell_penalty = 0
-    if not strict_sum:
-        rsi = tech.get('rsi', 50)
-        is_30m_dc = tech.get('is_30m_dc', False)  # 30분봉 데드크로스
-        
-        if v2_sell:
-            if v2_sell.get('sell_sig3_yn') == 'Y':
-                sell_penalty = -30  # Level 3: 추세 이탈 확정
-            elif is_30m_dc or rsi < 30:
-                sell_penalty = -20  # Level 2: 강력 경고 (30분 DC 또는 과매도)
-            elif v2_sell.get('sell_sig1_yn') == 'Y' and rsi < 45:
-                sell_penalty = -10  # Level 1: 경고 (5분 DC + 약세 RSI)
-            elif v2_sell.get('sell_sig1_yn') == 'Y':
-                sell_penalty = -5   # 5분 DC만 (RSI 양호 시 가벼운 감점)
+    # if not strict_sum:
+    #     rsi = tech.get('rsi', 50)
+    #     is_30m_dc = tech.get('is_30m_dc', False)  # 30분봉 데드크로스
+    #     
+    #     if v2_sell:
+    #         if v2_sell.get('sell_sig3_yn') == 'Y':
+    #             sell_penalty = -30  # Level 3: 추세 이탈 확정
+    #         elif is_30m_dc or rsi < 30:
+    #             sell_penalty = -20  # Level 2: 강력 경고 (30분 DC 또는 과매도)
+    #         elif v2_sell.get('sell_sig1_yn') == 'Y' and rsi < 45:
+    #             sell_penalty = -10  # Level 1: 경고 (5분 DC + 약세 RSI)
+    #         elif v2_sell.get('sell_sig1_yn') == 'Y':
+    #             sell_penalty = -5   # 5분 DC만 (RSI 양호 시 가벼운 감점)
     
     breakdown['sell_penalty'] = sell_penalty
     
@@ -1814,7 +1847,8 @@ def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None, bbi_score=0, e
     # ================================================
     # 3. 총점 계산
     # ================================================
-    indicator_total = breakdown['rsi'] + breakdown['macd'] + breakdown['vol'] + breakdown['atr'] + breakdown['bbi'] + breakdown['energy']
+    # [Ver 7.6] BBI Excluded from Total Score (Reference Only)
+    indicator_total = breakdown['rsi'] + breakdown['macd'] + breakdown['vol'] + breakdown['atr'] + breakdown['energy']
     sell_penalty = breakdown.get('sell_penalty', 0)
     total_score = breakdown['cheongan'] + indicator_total + sell_penalty
     
@@ -1843,9 +1877,10 @@ def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None, bbi_score=0, e
         "new_metrics": new_metrics,
         "cheongan_details": {
             "sig1": 20 if sig1 else 0,
-            "sig2": 10 if sig2 else 0,
+            "sig2": 20 if sig2 else 0,
             "sig3": 20 if sig3 else 0,
-            "energy": energy_score
+            "energy": energy_score,
+            "sig2_price": res.get('ma12', 0)
         }
     }
 
@@ -2447,6 +2482,10 @@ def run_v2_signal_analysis():
             prev_ma10_5 = df_5['ma10'].iloc[-2]
             prev_ma30_5 = df_5['ma30'].iloc[-2]
             
+            # [Ver 7.6] Add MA12 for C2 Signal
+            df_5['ma12'] = df_5['Close'].rolling(window=12).mean()
+            ma12_5 = df_5['ma12'].iloc[-1]
+            
             # 30m Indicators
             ma10_30 = df_30['ma10'].iloc[-1]
             ma30_30 = df_30['ma30'].iloc[-1]
@@ -2511,9 +2550,8 @@ def run_v2_signal_analysis():
             # │  1차: 5분봉 골든크로스 (MA10 > MA30)                              │
             # │       → 단기 상승 추세 시작                                       │
             # │                                                                  │
-            # │  2차: 상승 지속 +1% (1차 신호가 대비)                             │
-            # │       → 자동: 1차 발생가 × 1.01                                  │
-            # │       → 수동: 사용자 지정가 돌파 시                               │
+            # │  2차: 5분봉 가격 지지 (Price > MA12)                             │
+            # │       → [Ver 7.6] 트렌드 지지선 확보 (Simple Support)            │
             # │                                                                  │
             # │  3차: 30분봉 골든크로스 (MA10 > MA30)                             │
             # │       → 중기 상승 추세 확정                                       │
@@ -2580,10 +2618,8 @@ def run_v2_signal_analysis():
                         except: pass
             
             # ────────────────────────────────────────────────────────────────
-            # SIGNAL 2: 상승 지속 +1% (자동 + 수동)
-            # [Ver 7.2] Independent Logic:
-            # - Entry: Requires Sig 1 ON + Price >= Target
-            # - Exit: Requires Price < Target (Independent of Sig 1)
+            # SIGNAL 2: 5분봉 MA12 지지 (Price > MA12)
+            # [Ver 7.6] Simple MA12 Support Filter
             # ────────────────────────────────────────────────────────────────
             if buy_record:
                 sig2_manual = buy_record.get('is_manual_buy2') == 'Y'
@@ -2594,38 +2630,40 @@ def run_v2_signal_analysis():
                     is_sig2_met = (curr_price >= float(custom_target))
                     sig2_reason = f"지정가 돌파 (${custom_target})"
                 else:
-                    # 자동: 1차 신호가 대비 +1%
-                    sig1_price = float(buy_record.get('buy_sig1_price') or 0)
-                    if sig1_price > 0:
-                        target_price = sig1_price * 1.01
-                        # [Fix] Target Price Consistency
-                        # If Sig 2 is ALREADY ON, stick to the target price that triggered it?
-                        # But 'buy_sig1_price' is static for this cycle.
-                        is_sig2_met = (curr_price >= target_price)
-                        sig2_reason = f"+1% (${sig1_price:.2f}→${target_price:.2f})"
-                    else:
-                        is_sig2_met = False
-                        sig2_reason = "1차 신호 대기"
+                    # 자동: [New Standard] Price > 5m MA12
+                    # Note: ma12 is calculated above
+                    is_sig2_met = (curr_price > ma12_5)
+                    sig2_reason = f"상승지속 1h (${ma12_5:.2f})"
                 
-                # Refactored Logic
+                # Logic
                 if is_sig2_met:
-                    # Condition Met (Price >= Target)
+                    # Condition Met
                     if buy_record['buy_sig2_yn'] == 'N':
-                        # Entry Attempt: Must have Sig 1 active to START Signal 2
+                        # Entry Attempt: Must have Sig 1 active to START Signal 2 (Sequential)
+                        # User wants Sig 2 independent? Request says "Price > MA12" only.
+                        # But Lab says "Sig 2 = Sig 1".
+                        # Dashboard context: usually sequential or weighted.
+                        # Guide V2.1 says "Price > MA12".
+                        # Let's allow it if Sig 1 is ON (Sequential usually safer for scoring structure),
+                        # OR treat as independent bonus?
+                        # User request: "2차 매수신호 수정 : 현재가가 ... 위에 있으면 신호 발생"
+                        # Doesn't explicitly say "regardless of 1st signal".
+                        # But to be score-additive, it should probably be independent or semi-independent.
+                        # Existing code had "Requires Sig 1".
+                        # Let's keep "Requires Sig 1" for ENTRY to keep the "Tower" concept (Base -> Mid -> Top).
+                        # But EXIT (Off) is strictly condition-based.
+                        
                         if buy_record['buy_sig1_yn'] == 'Y':
                              if save_v2_buy_signal(ticker, 'sig2', curr_price):
                                  print(f"🚀 {ticker} Signal 2 ON ({sig2_reason})")
                                  log_history(manage_id, ticker, "2차매수신호", sig2_reason, curr_price)
                                  sounds_to_play.add(('buy2', ticker))
-                    else:
-                        # Already ON: Maintain (regardless of Sig 1)
-                        pass
                 else:
-                    # Condition Lost (Price < Target)
+                    # Condition Lost (Price <= MA12)
                     if buy_record['buy_sig2_yn'] == 'Y':
                         try:
                             save_v2_buy_signal(ticker, 'sig2', 0, 'N')
-                            print(f"📉 {ticker} Signal 2 OFF (Price dropped < Target)")
+                            print(f"📉 {ticker} Signal 2 OFF (Price <= MA12)")
                         except: pass
             
             # ────────────────────────────────────────────────────────────────

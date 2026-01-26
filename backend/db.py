@@ -2045,36 +2045,9 @@ def update_stock_prices():
                             change_pct = price_data.get('rate', 0.0) # KIS returns 'rate'
                             source = "KIS"
                         else:
-                            # 2. Skip fallback for SOXS/SOXL? No, user wants ALL.
-                            # Fallback to YFinance (Extended Hours)
-                            # print(f"  ⚠️ KIS Failed for {ticker}. Trying YF...")
-                            try:
-                                t = yf.Ticker(ticker)
-                                # Get fast info first
-                                fast_info = t.fast_info
-                                last_price = fast_info.last_price
-                                
-                                # Check Pre/Post market if available
-                                # yfinance often needs history(period="1d", interval="1m", prepost=True) to see latest
-                                df = t.history(period="1d", interval="1m", prepost=True)
-                                if not df.empty:
-                                    last_price = float(df['Close'].iloc[-1])
-                                    source = "YF(Ext)"
-                                    # Try to calc change pct
-                                    try:
-                                        prev_close = float(fast_info.previous_close)
-                                        if prev_close > 0:
-                                            change_pct = ((last_price - prev_close) / prev_close) * 100
-                                    except:
-                                        pass
-                                else:
-                                    source = "YF(Fast)" # Fallback to last close
-                                    
-                                if last_price and last_price > 0:
-                                    current_price = last_price
-                            except Exception as e:
-                                # print(f"  ❌ YF Failed: {e}")
-                                pass
+                            # [User Request] Always use KIS for 10s Realtime. No YF Fallback.
+                            # print(f"  ⚠️ KIS Failed for {ticker}. Skipping.")
+                            pass
                         
                         if current_price and current_price > 0:
                             # 현재가 업데이트 (managed_stocks)

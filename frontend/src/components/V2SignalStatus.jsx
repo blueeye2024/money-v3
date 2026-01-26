@@ -14,7 +14,7 @@ const getCleanTicker = (title) => {
 
 const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: propMetrics, bbi, isBear = false, onRefresh }) => {
     // Derived values
-    const { current_price, daily_change, change_pct } = renderInfo || {};
+    const { current_price, daily_change, change_pct, ma12 } = renderInfo || {};
     const displayChange = change_pct ?? daily_change;
     const cleanTicker = useMemo(() => getCleanTicker(title), [title]);
 
@@ -310,7 +310,7 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
     // SELL: 매도 신호 (1차: 5분봉 DC, 2차: Trailing Stop, 3차: 30분봉 DC)
     const getSteps = (type) => type === 'BUY' ? [
         { key: 'buy_sig1_yn', label: '1차: 5분봉 GC', desc: '추세 시작', rawKey: 'buy1' },
-        { key: 'buy_sig2_yn', label: '2차: 상승 지속(+1%)', desc: '모멘텀 확인', rawKey: 'buy2' },
+        { key: 'buy_sig2_yn', label: '2차: 상승 지속(1h)', desc: '모멘텀 확인', rawKey: 'buy2' },
         { key: 'buy_sig3_yn', label: '3차: 30분봉 GC', desc: '추세 확정', rawKey: 'buy3' }
     ] : [
         { key: 'sell_sig1_yn', label: '1차: 5분봉 DC', desc: '단기 조정', rawKey: 'sell1' },
@@ -409,19 +409,20 @@ const V2SignalStatus = ({ title, buyStatus, sellStatus, renderInfo, metrics: pro
                         );
                     } else {
                         // INACTIVE STATE
-                        if (step.key === 'buy_sig2_yn' && isSig1Active && stepType === 'BUY') {
-                            // Case: Sig1 Active, Sig2 Inactive -> Show Expected Target (+1%)
-                            const sig1Price = parseFloat(data?.buy_sig1_price || 0);
-                            if (sig1Price > 0) {
-                                const targetPrice = sig1Price * 1.01;
-                                infoContent = (
-                                    <span style={{ color: '#fbbf24', fontWeight: 'bold', fontSize: '0.75rem' }}>
-                                        예상 ${targetPrice.toFixed(2)}
-                                    </span>
-                                );
-                            } else {
-                                infoContent = step.desc;
-                            }
+                        if (step.key === 'buy_sig2_yn' && stepType === 'BUY') {
+                            // [Ver 7.6] Show MA12 Price Always (User Request)
+                            infoContent = (
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                    <span style={{ fontSize: '0.7rem' }}>{step.desc}</span>
+                                    {ma12 > 0 ? (
+                                        <span style={{ fontSize: '0.65rem', color: '#fbbf24', fontWeight: 'bold' }}>
+                                            (MA12: ${Number(ma12).toFixed(2)})
+                                        </span>
+                                    ) : (
+                                        <span style={{ fontSize: '0.65rem', color: '#64748b' }}>(Calc...)</span>
+                                    )}
+                                </div>
+                            );
                         } else if (manualTarget) {
                             // Manual Target Set
                             infoContent = <span style={{ color: '#fbbf24', fontWeight: 'bold', fontSize: '0.8rem' }}>🎯 ${Number(manualTarget).toFixed(2)}</span>;
