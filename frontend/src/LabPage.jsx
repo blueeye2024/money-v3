@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Swal from 'sweetalert2';
-import { useDropzone } from 'react-dropzone';
+
 
 const LabPage = () => {
     // State
@@ -12,7 +12,7 @@ const LabPage = () => {
     const [data, setData] = useState([]);
     const [pagination, setPagination] = useState({});
     const [loading, setLoading] = useState(false);
-    const [uploading, setUploading] = useState(false);
+
     const [selectedIds, setSelectedIds] = useState([]);
 
     // Custom Ticker Edit Mode (Optional, keep or replace with Select)
@@ -48,111 +48,7 @@ const LabPage = () => {
         setLoading(false);
     };
 
-    // --- Batch Calculation Logic ---
-    const handleCalculateAction = async () => {
-        // [Req] Support Partial Scoring via Checkbox
-        const isSelectionMode = selectedIds.length > 0;
 
-        let confirmText = isSelectionMode
-            ? `선택한 ${selectedIds.length}개 데이터를 채점하시겠습니까?`
-            : '전체 채점 혹은 미완료 채점을 선택하세요.';
-
-        // If selection, no need for complex popup, just confirm.
-        if (isSelectionMode) {
-            const result = await Swal.fire({
-                title: '선택 채점',
-                text: confirmText,
-                icon: 'question',
-                showCancelButton: true,
-                confirmButtonColor: '#3b82f6',
-                confirmButtonText: '채점 실행'
-            });
-            if (!result.isConfirmed) return;
-
-            // Execute Selection Calc
-            setLoading(true);
-            try {
-                // Send IDs as comma separated
-                const idsStr = selectedIds.join(',');
-                const res = await fetch(`/api/lab/calculate?period=${period}&ticker=${ticker}&ids=${idsStr}`, {
-                    method: 'POST'
-                });
-                const json = await res.json();
-                if (json.status === 'success') {
-                    Swal.fire('완료', `선택된 ${json.updated_count}개 채점 완료`, 'success');
-                    fetchData();
-                } else {
-                    Swal.fire('Error', json.message, 'error');
-                }
-            } catch (e) {
-                Swal.fire('Error', e.message, 'error');
-            }
-            setLoading(false);
-            return;
-        }
-
-        // Standard Batch Logic (Existing)
-        const { value: calcType } = await Swal.fire({
-            title: '채점 옵션 선택',
-            input: 'radio',
-            inputOptions: {
-                'all': '전체 채점',
-                'missing': '미완료 부분 채점'
-            },
-            inputValue: 'missing',
-            showCancelButton: true,
-            confirmButtonColor: '#3b82f6',
-            confirmButtonText: '실행',
-            cancelButtonText: '취소'
-        });
-
-        if (!calcType) return;
-        const onlyMissing = (calcType === 'missing');
-
-        // Start Batch Process
-        setLoading(true);
-        const BATCH_SIZE = 200; // Keep batch buffer
-        let totalProcessed = 0;
-
-        Swal.fire({
-            title: '채점 진행 중...',
-            html: '준비 중...',
-            allowOutsideClick: false,
-            didOpen: () => {
-                Swal.showLoading();
-            }
-        });
-
-        try {
-            for (let i = 0; i < 1000; i++) {
-                // Determine Offset
-                // If onlyMissing: as we process, they disappear from "Total=0" set. So offset 0 is correct.
-                // If All: we update in place, so offset increases.
-                let currentOffset = onlyMissing ? 0 : (i * BATCH_SIZE);
-
-                const res = await fetch(`/api/lab/calculate?period=${period}&ticker=${ticker}&offset=${currentOffset}&limit=${BATCH_SIZE}&only_missing=${onlyMissing}`, {
-                    method: 'POST'
-                });
-                const json = await res.json();
-                if (json.status !== 'success') throw new Error(json.message);
-
-                const count = json.updated_count || 0;
-                totalProcessed += count;
-
-                Swal.update({ html: `현재 <b>${totalProcessed}</b>개 처리 완료...<br>(Batch ${i + 1})` });
-
-                if (count === 0 && json.message.includes("No rows")) break;
-                if (count < BATCH_SIZE) break;
-            }
-
-            Swal.fire('채점 완료!', `총 ${totalProcessed}개 데이터 처리가 끝났습니다.`, 'success');
-            fetchData();
-
-        } catch (e) {
-            Swal.fire('Error', e.message || 'Unknown error', 'error');
-        }
-        setLoading(false);
-    };
 
     const handleDelete = async () => {
         if (selectedIds.length === 0) return;
@@ -182,38 +78,7 @@ const LabPage = () => {
         }
     };
 
-    // File Upload Handler
-    const onDrop = async (acceptedFiles) => {
-        if (acceptedFiles.length === 0) return;
-        const file = acceptedFiles[0];
-        setUploading(true);
 
-        const formData = new FormData();
-        formData.append('file', file);
-
-        try {
-            const res = await fetch(`/api/lab/upload?period=${period}&ticker=${ticker}`, {
-                method: 'POST',
-                body: formData
-            });
-            const json = await res.json();
-            if (res.ok) {
-                Swal.fire('업로드 성공', json.message, 'success');
-                fetchData();
-            } else {
-                Swal.fire('업로드 실패', json.detail || 'Unknown error', 'error');
-            }
-        } catch (e) {
-            Swal.fire('Error', 'Network error during upload', 'error');
-        }
-        setUploading(false);
-    };
-
-    const { getRootProps, getInputProps, isDragActive } = useDropzone({
-        onDrop,
-        multiple: false,
-        accept: { 'application/vnd.ms-excel': ['.xls', '.xlsx'] }
-    });
 
     const toggleSelect = (id) => {
         if (selectedIds.includes(id)) setSelectedIds(selectedIds.filter(x => x !== id));
@@ -249,14 +114,7 @@ const LabPage = () => {
                         <option value="UPRO">UPRO</option>
                     </select>
 
-                    <div {...getRootProps()} style={{ cursor: 'pointer', background: isDragActive ? '#334155' : '#1e293b', padding: '8px 12px', borderRadius: '6px', fontSize: '0.9rem', border: '1px dashed #64748b' }}>
-                        <input {...getInputProps()} />
-                        {uploading ? '⏳...' : '📁 Upload'}
-                    </div>
 
-                    <button onClick={handleCalculateAction} style={{ background: '#3b82f6', border: 'none', color: '#fff', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 2px 5px rgba(0,0,0,0.2)' }}>
-                        ⚡ 채점 ({selectedIds.length > 0 ? selectedIds.length : 'All'})
-                    </button>
 
                     <button onClick={() => fetchData()} style={{ background: '#334155', border: 'none', color: '#fff', padding: '8px', borderRadius: '6px', cursor: 'pointer' }}>
                         🔄
