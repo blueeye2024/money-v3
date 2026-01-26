@@ -1790,6 +1790,37 @@ def get_strategy_perf(strategy_id: int):
                 perf['strategy'][key] = str(perf['strategy'][key])
     return perf
 
+# --- Auto Trading Log Endpoints (Ver 5.9.3) ---
+@app.get("/api/trading/status")
+def api_get_trading_status():
+    from db import get_open_trade
+    trades = []
+    for t in ['SOXL', 'SOXS']:
+        row = get_open_trade(t)
+        if row:
+            # Serialise
+            for k in ['entry_time', 'exit_time', 'created_at']:
+                if row.get(k): row[k] = row[k].isoformat()
+            
+            for k in ['entry_price', 'exit_price', 'profit_pct']:
+               if row.get(k): row[k] = float(row[k])
+            trades.append(row)
+    return trades
+
+@app.get("/api/trading/history")
+def api_get_trading_history(limit: int = 50):
+    from db import get_trade_history
+    rows = get_trade_history(limit)
+    # Serialize
+    result = []
+    for row in rows:
+         for k in ['entry_time', 'exit_time', 'created_at']:
+                if row.get(k): row[k] = row[k].isoformat()
+         for k in ['entry_price', 'exit_price', 'profit_pct']:
+               if row.get(k): row[k] = float(row[k])
+         result.append(row)
+    return result
+
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=9100, reload=True)
 

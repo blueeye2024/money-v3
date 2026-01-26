@@ -138,6 +138,75 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
     const { market_regime } = market;
     const regimeDetails = market_regime?.details;
 
+    // [Helper] Calculate Prime Score (Extracted for Audio Logic)
+    const calculatePrimeScore = (ticker, regimeDetails) => {
+        if (!regimeDetails) return 0;
+
+        const guideData = regimeDetails.prime_guide || {};
+        const scoreObj = guideData.scores?.[ticker] || { score: 0, breakdown: {} };
+        const isSoxl = ticker === 'SOXL';
+
+        // Energy Score Logic
+        const soxlChange = regimeDetails.soxl?.daily_change || 0;
+        const uproChange = regimeDetails.upro?.daily_change || 0;
+
+        let relationIndex = 0;
+        if (Math.abs(uproChange) > 0.05) {
+            relationIndex = (soxlChange / uproChange) * 100;
+        }
+
+        // S = (RI - 100) / 20 (Cap ±10)
+        let rawEnergy = (relationIndex - 100) / 20;
+        if (uproChange < 0) rawEnergy = -rawEnergy;
+        rawEnergy = Math.max(-10, Math.min(10, rawEnergy));
+        const energyScore = isSoxl ? Math.trunc(rawEnergy) : Math.trunc(-rawEnergy);
+
+        const d = scoreObj.cheongan_details || {};
+        const pureSum = (d.sig1 || 0) + (d.sig2 || 0) + (d.sig3 || 0);
+        const cheonganWithEnergy = pureSum + energyScore;
+
+        const indicatorTotal = (scoreObj.breakdown?.rsi || 0) + (scoreObj.breakdown?.macd || 0) +
+            (scoreObj.breakdown?.vol || 0) + (scoreObj.breakdown?.atr || 0);
+        const sellPenalty = scoreObj.breakdown?.sell_penalty || 0;
+
+        return cheonganWithEnergy + indicatorTotal + sellPenalty;
+    };
+
+    // [New] Audio Alert Logic
+    const prevScores = React.useRef({ SOXL: null, SOXS: null });
+
+    React.useEffect(() => {
+        if (!regimeDetails || isMuted) return;
+
+        ['SOXL', 'SOXS'].forEach(ticker => {
+            const currentScore = calculatePrimeScore(ticker, regimeDetails);
+            const prevScore = prevScores.current[ticker];
+
+            if (prevScore !== null) {
+                // SOXL Logic
+                if (ticker === 'SOXL') {
+                    if (prevScore <= 60 && currentScore > 60) {
+                        new Audio('/sounds/call60.mp3').play().catch(e => console.error(e));
+                    }
+                    if (prevScore >= 40 && currentScore < 40) {
+                        new Audio('/sounds/call40.mp3').play().catch(e => console.error(e));
+                    }
+                }
+                // SOXS Logic
+                if (ticker === 'SOXS') {
+                    if (prevScore <= 60 && currentScore > 60) {
+                        new Audio('/sounds/put60.mp3').play().catch(e => console.error(e));
+                    }
+                    if (prevScore >= 40 && currentScore < 40) {
+                        new Audio('/sounds/put40.mp3').play().catch(e => console.error(e));
+                    }
+                }
+            }
+            // Update Previous Score
+            prevScores.current[ticker] = currentScore;
+        });
+    }, [regimeDetails, isMuted]);
+
     const [v2Status, setV2Status] = React.useState({ SOXL: null, SOXS: null });
     const [todayStrategy, setTodayStrategy] = React.useState('');
     const [showJournal, setShowJournal] = React.useState(false);
@@ -841,19 +910,34 @@ const SystemTradingPanel = () => {
     const formatDate = (isoString) => {
         if (!isoString) return '-';
         const d = new Date(isoString);
-        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        // US Time Format (MM-DD)
+        return new Intl.DateTimeFormat('en-US', {
+            month: '2-digit', day: '2-digit',
+            timeZone: 'America/New_York'
+        }).format(d);
     };
 
     const formatTime = (isoString) => {
         if (!isoString) return '-';
         const d = new Date(isoString);
-        return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+        // US Time Format (HH:mm)
+        return new Intl.DateTimeFormat('en-US', {
+            hour: '2-digit', minute: '2-digit',
+            hour12: false,
+            timeZone: 'America/New_York'
+        }).format(d);
     };
 
     const formatFullDateTime = (isoString) => {
         if (!isoString) return '-';
         const d = new Date(isoString);
-        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}-${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+        // US Time Format (MM-DD HH:mm)
+        return new Intl.DateTimeFormat('en-US', {
+            month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit',
+            hour12: false,
+            timeZone: 'America/New_York'
+        }).format(d);
     }
 
     const renderTable = (ticker, data) => (
@@ -889,9 +973,9 @@ const SystemTradingPanel = () => {
                                 <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                                     <td style={{ padding: '8px' }}>{formatDate(trade.entry_time)}</td>
                                     <td style={{ padding: '8px' }}>{formatTime(trade.entry_time)}</td>
-                                    <td style={{ padding: '8px', color: '#ddd' }}>70점 매수</td>
+                                    <td style={{ padding: '8px', color: '#ddd' }}>60점 매수</td>
                                     <td style={{ padding: '8px' }}>{trade.status === 'CLOSED' ? formatFullDateTime(trade.exit_time) : '-'}</td>
-                                    <td style={{ padding: '8px' }}>{trade.status === 'CLOSED' ? '50점 매도' : '-'}</td>
+                                    <td style={{ padding: '8px' }}>{trade.status === 'CLOSED' ? '40점 매도' : '-'}</td>
                                     <td style={{ padding: '8px', textAlign: 'right', color: trade.status === 'CLOSED' ? profitColor : '#aaa', fontWeight: 'bold' }}>
                                         {trade.status === 'CLOSED' ? `${trade.profit_pct}%` : 'Running'}
                                     </td>

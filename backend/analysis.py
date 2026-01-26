@@ -2315,13 +2315,105 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
                  log_market_history(log_data)   # Archive for analysis
         except Exception as e:
              print(f"Log Strategy Error {t}: {e}")
+
+        # [NEW] Score Threshold Logging (60/40) - Persistent History
+        # User Request: "60점 돌파 / 40점 하향 돌파 시 가격과 미국 시간 등록"
+        # + [Ver 5.9.3] Auto Trading Log (System Trade)
+        try:
+            from db import save_signal, get_open_trade, start_trade, end_trade
+            global _PREV_SCORES
+            if '_PREV_SCORES' not in globals(): _PREV_SCORES = {}
+            
+            curr_score = score_model.get('score', 0)
+            prev_score = _PREV_SCORES.get(t, None)
+            
+            # --- 1. Score Crossing Log (For Audio & Signal History) ---
+            if prev_score is not None:
+                us_time = datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=-5))).strftime("%Y-%m-%d %H:%M") # EST/EDT approx
+                
+                # Check 60 Break (Up)
+                if prev_score <= 60 and curr_score > 60:
+                    msg = f"점수 60점 돌파! ({prev_score}->{curr_score}) [US: {us_time}]"
+                    save_signal({
+                        'ticker': t,
+                        'name': "BULL TOWER" if t == 'SOXL' else "BEAR TOWER",
+                        'signal_type': "SCORE_UP_60",
+                        'position': msg,
+                        'current_price': curr_price,
+                        'signal_time_raw': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        'is_sent': False,
+                        'score': curr_score,
+                        'interpretation': f"매수 강화구간 진입 (US {us_time})"
+                    })
+                    print(f"✅ {t} Score > 60 Logged")
+
+                # Check 40 Break (Down)
+                if prev_score >= 40 and curr_score < 40:
+                    msg = f"점수 40점 이탈! ({prev_score}->{curr_score}) [US: {us_time}]"
+                    save_signal({
+                        'ticker': t,
+                        'name': "BULL TOWER" if t == 'SOXL' else "BEAR TOWER",
+                        'signal_type': "SCORE_DOWN_40",
+                        'position': msg,
+                        'current_price': curr_price,
+                        'signal_time_raw': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        'is_sent': False,
+                        'score': curr_score,
+                        'interpretation': f"매수 약화구간 진입 (US {us_time})"
+                    })
+                    print(f"✅ {t} Score < 40 Logged")
+
+            # --- 2. Auto Trading Log (Persistent Table) ---
+            # Buy if Score >= 60 and No Open Trade
+            # Sell if Score <= 40 and Open Trade Exists
+            
+            open_trade = get_open_trade(t)
+            
+            if open_trade is None:
+                if curr_score >= 60:
+                    if start_trade(t, curr_price):
+                        print(f"🚀 [Auto-Trade] Buy {t} at {curr_price} (Score: {curr_score})")
+                        # Optional: Log Signal
+                        save_signal({
+                           'ticker': t,
+                           'name': f"{t} SYSTEM BUY",
+                           'signal_type': "AUTO_TRADE_BUY",
+                           'position': f"System Buy @ {curr_price} (Score {curr_score})",
+                           'current_price': curr_price,
+                           'signal_time_raw': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                           'is_sent': False,
+                           'score': curr_score,
+                           'interpretation': "시스템 매수 진입"
+                        })
+            
+            else: # Holding Position
+                if curr_score <= 40:
+                    if end_trade(t, curr_price):
+                        print(f"📉 [Auto-Trade] Sell {t} at {curr_price} (Score: {curr_score})")
+                        save_signal({
+                           'ticker': t,
+                           'name': f"{t} SYSTEM SELL",
+                           'signal_type': "AUTO_TRADE_SELL",
+                           'position': f"System Sell @ {curr_price} (Score {curr_score})",
+                           'current_price': curr_price,
+                           'signal_time_raw': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                           'is_sent': False,
+                           'score': curr_score,
+                           'interpretation': "시스템 매도 청산"
+                        })
+
+            # Update Previous Score
+            _PREV_SCORES[t] = curr_score
+            
+        except Exception as e:
+            print(f"Score/AutoTrade Log Error {t}: {e}")
         
     # Get Filtered History
     recent_history = get_filtered_history_v2()
     # recent_news = get_market_news_v2()
     
     # [Ver 5.8.2] Dynamic Version String
-    version_str = f"Ver 5.8.7 (Updated: {datetime.now().strftime('%Y-%m-%d %H:%M')})"
+    version_str = f"Ver 8.0.0 (Updated: {datetime.now().strftime('%Y-%m-%d %H:%M')})"
     
     details = {
         "version": version_str,

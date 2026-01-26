@@ -2209,6 +2209,68 @@ def get_managed_stock_price(ticker):
     finally:
         conn.close()
 
+# --- Auto Trading Log Functions (Ver 5.9.3) ---
+def get_open_trade(ticker):
+    """Check if there is an active OPEN trade for the ticker"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            sql = "SELECT * FROM trade_history WHERE ticker=%s AND status='OPEN' ORDER BY id DESC LIMIT 1"
+            cursor.execute(sql, (ticker,))
+            return cursor.fetchone()
+    finally:
+        conn.close()
+
+def start_trade(ticker, price):
+    """Start a new auto-trade (Buy)"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            # Check if already open (Double-check)
+            cursor.execute("SELECT 1 FROM trade_history WHERE ticker=%s AND status='OPEN'", (ticker,))
+            if cursor.fetchone(): return False
+            
+            sql = """
+            INSERT INTO trade_history (ticker, entry_time, entry_price, status, created_at)
+            VALUES (%s, NOW(), %s, 'OPEN', NOW())
+            """
+            cursor.execute(sql, (ticker, price))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Start Trade Error: {e}")
+        return False
+    finally:
+        conn.close()
+
+def end_trade(ticker, price):
+    """End an existing auto-trade (Sell)"""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            # Get Open Trade
+            cursor.execute("SELECT id, entry_price FROM trade_history WHERE ticker=%s AND status='OPEN' ORDER BY id DESC LIMIT 1", (ticker,))
+            row = cursor.fetchone()
+            if not row: return False # No open trade to close
+            
+            trade_id = row['id']
+            entry_price = float(row['entry_price'])
+            profit_pct = ((float(price) - entry_price) / entry_price) * 100
+            
+            sql = """
+            UPDATE trade_history 
+            SET exit_time=NOW(), exit_price=%s, profit_pct=%s, status='CLOSED'
+            WHERE id=%s
+            """
+            cursor.execute(sql, (price, profit_pct, trade_id))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"End Trade Error: {e}")
+        return False
+    finally:
+        conn.close()
+
 def get_trade_history(limit=50):
     """Get recent trades for UI"""
     conn = get_connection()
