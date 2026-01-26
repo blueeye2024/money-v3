@@ -7,7 +7,8 @@ const LabPage = () => {
     // State
     const [period, setPeriod] = useState('5m'); // Default 5m (Single Source)
     const [ticker, setTicker] = useState('SOXL');
-    const [statusFilter, setStatusFilter] = useState('ALL'); // ALL, COMPLETE, INCOMPLETE
+    const [statusFilter, setStatusFilter] = useState('ALL'); // Dead code, but removing usage below first. Wait, I should remove it.
+
     const [page, setPage] = useState(1);
     const [data, setData] = useState([]);
     const [pagination, setPagination] = useState({});
@@ -19,8 +20,8 @@ const LabPage = () => {
     // User requested: "Select from SOXL, SOXS, UPRO"
 
     // Filter
-    const [dateFrom, setDateFrom] = useState('');
-    const [dateTo, setDateTo] = useState('');
+    const [dateFrom, setDateFrom] = useState(new Date().toISOString().split('T')[0]);
+    const [dateTo, setDateTo] = useState(new Date().toISOString().split('T')[0]);
 
     // Fetch existing data on mount/period/page/filter change
     useEffect(() => {
@@ -30,8 +31,8 @@ const LabPage = () => {
     const fetchData = async () => {
         setLoading(true);
         try {
-            // [Req] Pagination 20
-            let url = `/api/lab/data/${period}?page=${page}&limit=20&ticker=${ticker}&status=${statusFilter}`;
+            // [Req] Pagination 10
+            let url = `/api/lab/data/${period}?page=${page}&limit=10&ticker=${ticker}`;
             if (dateFrom) url += `&date_from=${dateFrom}`;
             if (dateTo) url += `&date_to=${dateTo}`;
 
@@ -97,22 +98,34 @@ const LabPage = () => {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
                     <h2 style={{ margin: 0, color: '#38bdf8' }}>🧪 Lab 2.0</h2>
                     <div style={{ display: 'flex', background: '#1e293b', borderRadius: '6px', padding: '6px 12px', fontSize: '0.9rem', color: '#94a3b8' }}>
-                        <span>Analysis Source: <b>5m Candle</b> (Auto-30m Gen)</span>
+                        {/* Text Removed */}
                     </div>
                 </div>
 
                 {/* Right Actions */}
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                    {/* [Req] Ticker Select */}
-                    <select
-                        value={ticker}
-                        onChange={(e) => setTicker(e.target.value)}
-                        style={{ background: '#1e293b', color: '#fff', padding: '6px 10px', borderRadius: '6px', border: '1px solid #475569', fontWeight: 'bold' }}
-                    >
-                        <option value="SOXL">SOXL</option>
-                        <option value="SOXS">SOXS</option>
-                        <option value="UPRO">UPRO</option>
-                    </select>
+                    {/* [Req] Ticker Radio */}
+                    <div style={{ display: 'flex', gap: '5px', background: '#1e293b', padding: '4px', borderRadius: '6px', border: '1px solid #475569' }}>
+                        {['SOXL', 'SOXS'].map(t => (
+                            <label key={t} style={{
+                                cursor: 'pointer', padding: '4px 10px', borderRadius: '4px',
+                                background: ticker === t ? '#3b82f6' : 'transparent',
+                                color: ticker === t ? '#fff' : '#94a3b8',
+                                fontWeight: ticker === t ? 'bold' : 'normal',
+                                fontSize: '0.9rem'
+                            }}>
+                                <input
+                                    type="radio"
+                                    name="ticker"
+                                    value={t}
+                                    checked={ticker === t}
+                                    onChange={() => setTicker(t)}
+                                    style={{ display: 'none' }}
+                                />
+                                {t}
+                            </label>
+                        ))}
+                    </div>
 
 
 
@@ -129,22 +142,7 @@ const LabPage = () => {
                     <span style={{ color: '#64748b' }}>~</span>
                     <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} style={inputStyle} />
 
-                    {/* [Req] Status Filter */}
-                    <div style={{ display: 'flex', background: '#1e293b', borderRadius: '4px', overflow: 'hidden', marginLeft: '10px' }}>
-                        {['ALL', 'COMPLETE', 'INCOMPLETE'].map(st => (
-                            <button
-                                key={st}
-                                onClick={() => setStatusFilter(st)}
-                                style={{
-                                    padding: '6px 12px', border: 'none', cursor: 'pointer', fontSize: '0.8rem',
-                                    background: statusFilter === st ? '#64748b' : 'transparent',
-                                    color: statusFilter === st ? '#fff' : '#94a3b8'
-                                }}
-                            >
-                                {st === 'ALL' ? '전체' : st === 'COMPLETE' ? '완료' : '미완료'}
-                            </button>
-                        ))}
-                    </div>
+
 
                     <button onClick={() => { setPage(1); fetchData(); }} style={btnStyle}>🔍 Search</button>
                 </div>
@@ -172,7 +170,7 @@ const LabPage = () => {
                                 <th style={{ ...thStyle, width: '40px', textAlign: 'center' }}>
                                     <input type="checkbox" onChange={toggleSelectAll} checked={data.length > 0 && selectedIds.length === data.length} />
                                 </th>
-                                <th style={thStyle}>Status</th>
+
                                 <th style={thStyle}>Time (US)</th>
                                 <th style={thStyle}>Close</th>
                                 <th style={thStyle}>Chg(%)</th>
@@ -214,14 +212,7 @@ const LabPage = () => {
                                         <td style={{ ...tdStyle, textAlign: 'center' }}>
                                             <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(row.id)} />
                                         </td>
-                                        <td style={tdStyle}>
-                                            {/* [Req] "updated" text instead of icon */}
-                                            {row.calculated_at ? (
-                                                <span style={{ color: '#4ade80', fontSize: '0.75rem' }}>updated</span>
-                                            ) : (
-                                                <span style={{ color: '#64748b', fontSize: '0.75rem' }}>-</span>
-                                            )}
-                                        </td>
+
                                         <td style={tdStyle}>{new Date(row.candle_time).toLocaleString()}</td>
                                         <td style={tdStyle}>{row.close}</td>
                                         <td style={{ ...tdStyle, color: row.change_pct > 0 ? '#4ade80' : row.change_pct < 0 ? '#f87171' : '#fff' }}>
