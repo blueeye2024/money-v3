@@ -199,3 +199,66 @@ def bulk_update_scores(table_name, update_list):
         conn.close()
         
     return updated_count
+
+def save_realtime_lab_data(data_list):
+    """
+    [User Request] Save Real-time Action Plan Scores to lab_data_5m (Algo Version)
+    data_list: List of dicts {
+        ticker, candle_time (US), open, high, low, close, volume, 
+        ma10, ma30, change_pct, 
+        scores: {total, sig1, sig2, sig3, energy, atr, bbi, rsi, macd, vol}
+    }
+    """
+    if not data_list: return 0
+    
+    conn = get_connection()
+    inserted_count = 0
+    
+    try:
+        with conn.cursor() as cursor:
+            # Prepare SQL for lab_data_5m
+            sql = """
+                INSERT INTO lab_data_5m 
+                (ticker, candle_time, open, high, low, close, volume, ma10, ma30, change_pct,
+                 total_score, score_cheongan_1, score_cheongan_2, score_cheongan_3,
+                 score_energy, score_atr, score_bbi, score_rsi, score_macd, score_vol,
+                 algo_version, calculated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s, %s,
+                        'true', NOW())
+                ON DUPLICATE KEY UPDATE
+                open=VALUES(open), high=VALUES(high), low=VALUES(low), close=VALUES(close),
+                volume=VALUES(volume), ma10=VALUES(ma10), ma30=VALUES(ma30), change_pct=VALUES(change_pct),
+                total_score=VALUES(total_score),
+                score_cheongan_1=VALUES(score_cheongan_1), score_cheongan_2=VALUES(score_cheongan_2), score_cheongan_3=VALUES(score_cheongan_3),
+                score_energy=VALUES(score_energy), score_atr=VALUES(score_atr), score_bbi=VALUES(score_bbi),
+                score_rsi=VALUES(score_rsi), score_macd=VALUES(score_macd), score_vol=VALUES(score_vol),
+                algo_version='true', calculated_at=NOW()
+            """
+            
+            params = []
+            for item in data_list:
+                scores = item.get('scores', {})
+                params.append((
+                    item['ticker'], item['candle_time'], 
+                    item.get('open', 0), item.get('high', 0), item.get('low', 0), item['close'], item.get('volume', 0),
+                    item.get('ma10', 0), item.get('ma30', 0), item.get('change_pct', 0),
+                    scores.get('total', 0),
+                    scores.get('sig1', 0), scores.get('sig2', 0), scores.get('sig3', 0),
+                    scores.get('energy', 0), scores.get('atr', 0), scores.get('bbi', 0),
+                    scores.get('rsi', 0), scores.get('macd', 0), scores.get('vol', 0)
+                ))
+            
+            if params:
+                cursor.executemany(sql, params)
+                conn.commit()
+                inserted_count = len(params)
+                print(f"✅ Real-time Lab Data Saved: {inserted_count} rows")
+            
+    except Exception as e:
+        print(f"❌ Save Realtime Lab Data Error: {e}")
+    finally:
+        conn.close()
+        
+    return inserted_count

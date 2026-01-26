@@ -348,6 +348,71 @@ def monitor_signals():
         # Force update cache in background job so frontend gets fast cached data
         full_report = run_analysis(force_update=True)
         stocks_data = full_report.get('stocks', [])
+
+        # [User Request] Lab Data Auto Save (Every 5 mins)
+        # 10s polling -> Trigger at :00, :05, ... (+- buffer?) 
+        # Since this runs every 60s, checking 'minute % 5 == 0' works ONLY IF it aligns.
+        # But scheduler runs at :00 seconds? No, depends on start time.
+        # However, checking current minute % 5 == 0 is the standard way. 
+        # To avoid multiple triggers in same minute (if loop takes long?), we trust 60s interval.
+        now_dt = datetime.now()
+        if now_dt.minute % 5 == 0:
+            print(f"🧪 [Lab Data] 5m Auto-Save Triggered (Time: {now_dt.strftime('%H:%M:%S')})")
+            try:
+                from db_lab import save_realtime_lab_data
+                import pytz
+                
+                # Calc US Time
+                utc = pytz.utc
+                eastern = pytz.timezone('US/Eastern')
+                now_utc = datetime.now(utc)
+                now_est = now_utc.astimezone(eastern)
+                candle_time_us = now_est.replace(second=0, microsecond=0)
+                
+                lab_save_list = []
+                for s in stocks_data:
+                    if 'score' not in s: continue
+                    
+                    details = s.get('cheongan_details', {})
+                    breakdown = s.get('score_breakdown', {})
+                    
+                    # [Ver 7.6.1] Fixed Key Mapping (from analysis.py breakdown)
+                    s_energy = breakdown.get('energy', 0)
+                    s_atr = breakdown.get('atr', 0)
+                    s_bbi = breakdown.get('bbi', 0)
+                    s_rsi = breakdown.get('rsi', 0)
+                    s_macd = breakdown.get('macd', 0)
+                    s_vol = breakdown.get('vol', 0) # Correct key is 'vol'
+
+                    lab_save_list.append({
+                        'ticker': s.get('ticker'),
+                        'candle_time': candle_time_us,
+                        'open': 0, 'high': 0, 'low': 0, 
+                        'close': s.get('current_price', 0),
+                        'volume': 0,
+                        'ma10': s.get('ma10', 0),
+                        'ma30': s.get('ma30', 0),
+                        'change_pct': s.get('change_pct', 0) or s.get('daily_change', 0),
+                        'scores': {
+                            'total': s.get('score', 0),
+                            'sig1': details.get('sig1', 0),
+                            'sig2': details.get('sig2', 0),
+                            'sig3': details.get('sig3', 0),
+                            'energy': s_energy,
+                            'atr': s_atr,
+                            'bbi': s_bbi,
+                            'rsi': s_rsi,
+                            'macd': s_macd,
+                            'vol': s_vol
+                        }
+                    })
+                
+                if lab_save_list:
+                    save_realtime_lab_data(lab_save_list)
+                    
+            except Exception as e:
+                print(f"❌ Lab Auto-Save Failed: {e}")
+
         
         for stock_res in stocks_data:
             ticker = stock_res['ticker']

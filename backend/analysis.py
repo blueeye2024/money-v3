@@ -2231,6 +2231,10 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
         results[t]['score'] = score_model.get('score', 0)
         results[t]['score_eval'] = score_model.get('evaluation', '')
         
+        # [Ver 7.6.1] Inject Full Breakdown for Backend Logic (main.py Lab Save)
+        results[t]['score_breakdown'] = score_model.get('breakdown', {})
+        results[t]['cheongan_details'] = score_model.get('cheongan_details', {})
+        
         # 2. Generate Guide
         # For Guide text, we might still want to know "Real Buy" status to give context?
         # But usually Guide should also be objective. 
