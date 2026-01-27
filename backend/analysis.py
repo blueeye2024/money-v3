@@ -2325,8 +2325,14 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
             if '_PREV_SCORES' not in globals(): _PREV_SCORES = {}
             
             curr_score = score_model.get('score', 0)
+            curr_price = results[t].get('current_price', 0)
             prev_score = _PREV_SCORES.get(t, None)
+            prev_score = _PREV_SCORES.get(t, None)
+            open_trade = get_open_trade(t)
             
+            # [DEBUG]
+            print(f"🕵️ [DEBUG] {t} Score: {curr_score}, Prev: {prev_score}, OpenTrade: {open_trade}")
+
             # --- 1. Score Crossing Log (For Audio & Signal History) ---
             if prev_score is not None:
                 us_time = datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=-5))).strftime("%Y-%m-%d %H:%M") # EST/EDT approx
@@ -2413,7 +2419,7 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
     # recent_news = get_market_news_v2()
     
     # [Ver 5.8.2] Dynamic Version String
-    version_str = f"Ver 8.0.0 (Updated: {datetime.now().strftime('%Y-%m-%d %H:%M')})"
+    version_str = f"Ver 8.0.1 (Updated: {datetime.now().strftime('%Y-%m-%d %H:%M')})"
     
     details = {
         "version": version_str,
@@ -2610,6 +2616,13 @@ def run_v2_signal_analysis():
             df_5['ma12'] = df_5['Close'].rolling(window=12).mean()
             ma12_5 = df_5['ma12'].iloc[-1]
             
+            # [Ver 8.0.2] MA12 Zero Fix (Use previous if 0)
+            if (ma12_5 is None or float(ma12_5) <= 0) and len(df_5) > 1:
+                prev_ma12 = df_5['ma12'].iloc[-2]
+                if prev_ma12 and float(prev_ma12) > 0:
+                    ma12_5 = prev_ma12
+                    print(f"  ⚠️ {ticker} MA12 is 0 or invalid. Using Prev: {ma12_5:.2f}")
+            
             # 30m Indicators
             ma10_30 = df_30['ma10'].iloc[-1]
             ma30_30 = df_30['ma30'].iloc[-1]
@@ -2756,7 +2769,8 @@ def run_v2_signal_analysis():
                 else:
                     # 자동: [New Standard] Price > 5m MA12
                     # Note: ma12 is calculated above
-                    is_sig2_met = (curr_price > ma12_5)
+                    # [Ver 8.0.1] 0 Value Protection (Data Error Fix)
+                    is_sig2_met = (curr_price > ma12_5 and ma12_5 > 0 and curr_price > 0)
                     sig2_reason = f"상승지속 1h (${ma12_5:.2f})"
                 
                 # Logic

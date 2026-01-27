@@ -1787,7 +1787,8 @@ def save_market_candles(ticker, timeframe, df, source='yfinance'):
             
             # Debug: Print first row or match
             if index == df.index[-1] or d_hour == 4:
-                 print(f"DEBUG SAVE ROW: dt={dt} -> KST={dt_kst} H={d_hour} M={d_min}")
+                 # print(f"DEBUG SAVE ROW: dt={dt} -> KST={dt_kst} H={d_hour} M={d_min}")
+                 pass
             
             # Safe handling for NaN/None
             vol = 0
