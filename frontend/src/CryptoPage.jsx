@@ -129,12 +129,12 @@ function CryptoPage() {
     const currentLimit = priceLimits[selectedCoin] || { upper: '', lower: '' };
 
     return (
-        <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto', color: '#e2e8f0' }}>
+        <div className="crypto-container" style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto', color: '#e2e8f0' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderLeft: '4px solid #f59e0b', paddingLeft: '10px' }}>
-                <h1 style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>
+                <h1 className="crypto-title">
                     가상자산 시세 조회
                 </h1>
-                <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                <span className="crypto-update-info">
                     갱신 주기: 5분 (Source: Yahoo Finance)
                 </span>
             </div>
@@ -361,6 +361,26 @@ function CryptoPage() {
                 @keyframes spin {
                     0% { transform: rotate(0deg); }
                     100% { transform: rotate(360deg); }
+                }
+                .crypto-title {
+                    font-size: 1.5rem;
+                    font-weight: bold;
+                }
+                .crypto-update-info {
+                    font-size: 0.8rem; 
+                    color: #64748b;
+                    display: block;
+                }
+                @media (max-width: 768px) {
+                    .crypto-title {
+                        font-size: 1.2rem;
+                    }
+                    .crypto-update-info {
+                        display: none;
+                    }
+                    .crypto-container {
+                        padding: 10px !important;
+                    }
                 }
             `}</style>
         </div>

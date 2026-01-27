@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Legend, Area, ComposedChart, BarChart, Bar, Cell, PieChart, Pie } from 'recharts';
+import './AssetDashboardPage.css';
 
 const AssetDashboardPage = () => {
     const [assets, setAssets] = useState([]);
@@ -343,27 +344,19 @@ const AssetDashboardPage = () => {
     if (loading) return <div style={{ padding: '2rem', textAlign: 'center', color: '#fff' }}>Loading...</div>;
 
     return (
-        <div className="page-container">
-            <div className="glass-panel" style={{
-                padding: '2.5rem',
-                background: 'rgba(59, 130, 246, 0.08)',
-                borderRadius: '30px',
-                border: '1px solid rgba(147, 197, 253, 0.2)',
-                backdropFilter: 'blur(20px)',
-                boxShadow: '0 20px 60px rgba(59, 130, 246, 0.15)'
-            }}>
+        <div className="dashboard-container">
+            <div className="dashboard-glass-panel">
                 {/* Header */}
-                <div className="page-header" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '1.5rem', marginBottom: '2rem' }}>
-                    <h1 className="page-title" style={{ color: '#93c5fd' }}>💰 자산 현황</h1>
-                    <p className="page-subtitle" style={{ color: 'rgba(255,255,255,0.5)' }}>일별 자산 추이 및 목표 관리 (원화 기준)</p>
+                <div className="dashboard-header">
+                    <h1 className="dashboard-title">💰 자산 현황</h1>
+                    <p className="dashboard-subtitle">일별 자산 추이 및 목표 관리 (원화 기준)</p>
                 </div>
 
-
                 {/* Summary Cards */}
-                <div className="summary-grid" style={{ marginBottom: '2rem' }}>
-                    <div className="glass-card" style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%)', color: 'white', border: '1px solid rgba(255,255,255,0.1)' }}>
-                        <div className="card-label" style={{ color: 'rgba(255,255,255,0.8)' }}>현재 자산</div>
-                        <div className="card-value" style={{ color: 'white', fontSize: '1.4rem' }}>{latestAsset ? formatKRW(latestAsset.total_assets) : '0원'}</div>
+                <div className="dashboard-summary-grid">
+                    <div className="dashboard-card" style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%)' }}>
+                        <div className="dashboard-card-label" style={{ color: 'rgba(255,255,255,0.8)' }}>현재 자산</div>
+                        <div className="dashboard-card-value">{latestAsset ? formatKRW(latestAsset.total_assets) : '0원'}</div>
                         <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem' }}>
                             <span style={{ color: (summary.monthly_change_pct || 0) >= 0 ? '#4ade80' : '#ef4444', fontWeight: 'bold' }}>
                                 {(summary.monthly_change_pct || 0) >= 0 ? '▲' : '▼'} {Math.abs(summary.monthly_change_pct || 0).toFixed(2)}%
@@ -375,17 +368,16 @@ const AssetDashboardPage = () => {
                         </div>
                     </div>
 
-                    <div className="glass-card" style={{ background: activeGoal ? 'linear-gradient(135deg, #d4af37 0%, #a67c00 100%)' : 'linear-gradient(135deg, #64748b 0%, #475569 100%)', color: 'white' }}>
-                        <div className="card-label">목표 금액</div>
-                        <div className="card-value" style={{ fontSize: '1.4rem' }}>{activeGoal ? formatKRW(activeGoal.target_amount) : '미설정'}</div>
+                    <div className="dashboard-card" style={{ background: activeGoal ? 'linear-gradient(135deg, #d4af37 0%, #a67c00 100%)' : 'linear-gradient(135deg, #64748b 0%, #475569 100%)' }}>
+                        <div className="dashboard-card-label">목표 금액</div>
+                        <div className="dashboard-card-value">{activeGoal ? formatKRW(activeGoal.target_amount) : '미설정'}</div>
                         {activeGoal && <div style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.8)' }}>{activeGoal.goal_name}</div>}
                         {activeGoal?.target_date && <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)', marginTop: '0.25rem' }}>📅 목표일: {activeGoal.target_date}</div>}
                     </div>
 
-
-                    <div className="glass-card" style={{ background: remainingToGoal !== null && remainingToGoal <= 0 ? 'linear-gradient(135deg, #059669 0%, #047857 100%)' : 'linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%)', color: 'white' }}>
-                        <div className="card-label">목표까지</div>
-                        <div className="card-value" style={{ fontSize: '1.4rem' }}>{remainingToGoal !== null ? (remainingToGoal <= 0 ? '🎉 달성!' : formatKRW(remainingToGoal)) : '-'}</div>
+                    <div className="dashboard-card" style={{ background: remainingToGoal !== null && remainingToGoal <= 0 ? 'linear-gradient(135deg, #059669 0%, #047857 100%)' : 'linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%)' }}>
+                        <div className="dashboard-card-label">목표까지</div>
+                        <div className="dashboard-card-value">{remainingToGoal !== null ? (remainingToGoal <= 0 ? '🎉 달성!' : formatKRW(remainingToGoal)) : '-'}</div>
                         {goalProgress > 0 && (
                             <div style={{ marginTop: '0.5rem' }}>
                                 <div style={{ background: 'rgba(255,255,255,0.3)', borderRadius: '10px', height: '8px', overflow: 'hidden' }}>
@@ -395,26 +387,24 @@ const AssetDashboardPage = () => {
                             </div>
                         )}
                     </div>
-
-
                 </div>
 
                 {/* Action Buttons */}
-                <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
-                    <button className="btn-primary" onClick={() => { setShowAssetForm(!showAssetForm); if (showAssetForm) handleCloseAssetForm(); }}>{showAssetForm ? '닫기' : '📝 자산 입력'}</button>
-                    <button className="btn-secondary" onClick={() => setShowAssetList(!showAssetList)} style={{ background: 'rgba(59,130,246,0.2)', borderColor: '#3b82f6', color: '#60a5fa' }}>{showAssetList ? '목록 닫기' : '📋 자산 내역'}</button>
-                    <button className="btn-secondary" onClick={() => setShowGoalForm(!showGoalForm)} style={{ background: 'rgba(212,175,55,0.2)', borderColor: '#d4af37', color: '#d4af37' }}>{showGoalForm ? '닫기' : '🎯 목표 설정'}</button>
-                    <button className="btn-secondary" onClick={() => setShowGoalList && setShowGoalList(!showGoalList)} style={{ background: 'rgba(212,175,55,0.1)', borderColor: '#d4af37', color: '#fbbf24' }}>{showGoalList ? '목표 닫기' : '📋 목표 내역'}</button>
-                    <button className="btn-secondary" onClick={() => setShowStrategyForm(!showStrategyForm)} style={{ background: 'rgba(124,58,237,0.2)', borderColor: '#7c3aed', color: '#a78bfa' }}>{showStrategyForm ? '닫기' : '📋 전략 등록'}</button>
+                <div className="dashboard-actions">
+                    <button className="dashboard-btn-primary" onClick={() => { setShowAssetForm(!showAssetForm); if (showAssetForm) handleCloseAssetForm(); }}>{showAssetForm ? '닫기' : '📝 자산 입력'}</button>
+                    <button className="dashboard-btn-secondary" onClick={() => setShowAssetList(!showAssetList)}>{showAssetList ? '목록 닫기' : '📋 자산 내역'}</button>
+                    <button className="dashboard-btn-secondary" onClick={() => setShowGoalForm(!showGoalForm)}>{showGoalForm ? '닫기' : '🎯 목표 설정'}</button>
+                    <button className="dashboard-btn-secondary" onClick={() => setShowGoalList && setShowGoalList(!showGoalList)}>{showGoalList ? '목표 닫기' : '📋 목표 내역'}</button>
+                    <button className="dashboard-btn-secondary" onClick={() => setShowStrategyForm(!showStrategyForm)}>{showStrategyForm ? '닫기' : '📋 전략 등록'}</button>
                 </div>
 
 
                 {/* Asset List - 수정/삭제 가능 */}
                 {showAssetList && (
-                    <div className="section-panel" style={{ marginBottom: '2rem', background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)' }}>
-                        <h3 style={{ color: 'white', marginBottom: '1rem' }}>📋 자산 내역 (최근 30일)</h3>
-                        <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <div className="dashboard-section-panel">
+                        <h3 className="dashboard-section-title">📋 자산 내역 (최근 30일)</h3>
+                        <div className="dashboard-table-container">
+                            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '600px' }}>
                                 <thead>
                                     <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
                                         <th style={{ padding: '0.75rem', textAlign: 'left', color: '#94a3b8', fontSize: '0.85rem' }}>날짜</th>
@@ -448,15 +438,15 @@ const AssetDashboardPage = () => {
 
                 {/* Goal List - 목표 내역 */}
                 {showGoalList && (
-                    <div className="section-panel" style={{ marginBottom: '2rem', background: 'linear-gradient(135deg, #854d0e 0%, #a16207 100%)' }}>
-                        <h3 style={{ color: 'white', marginBottom: '1rem' }}>📋 목표 내역</h3>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div className="dashboard-section-panel">
+                        <h3 className="dashboard-section-title">📋 목표 내역</h3>
+                        <div className="dashboard-strategy-list">
                             {goals.length > 0 ? goals.map(g => {
                                 const isAchieved = latestAsset && parseFloat(latestAsset.total_assets) >= parseFloat(g.target_amount);
                                 const progress = latestAsset ? (parseFloat(latestAsset.total_assets) / parseFloat(g.target_amount) * 100) : 0;
                                 return (
-                                    <div key={g.id} style={{ background: 'rgba(255,255,255,0.1)', borderRadius: '12px', padding: '1rem', border: g.is_active ? '2px solid #fbbf24' : '1px solid rgba(255,255,255,0.1)' }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                    <div key={g.id} className="dashboard-strategy-item" style={{ border: g.is_active ? '2px solid #fbbf24' : '1px solid rgba(255,255,255,0.1)' }}>
+                                        <div className="dashboard-strategy-header">
                                             <div>
                                                 <span style={{ fontSize: '1.1rem', fontWeight: '600', color: 'white' }}>{g.goal_name}</span>
                                                 {g.is_active && <span style={{ marginLeft: '0.5rem', padding: '0.2rem 0.5rem', background: 'rgba(251,191,36,0.3)', borderRadius: '4px', fontSize: '0.7rem', color: '#fbbf24' }}>활성</span>}
@@ -472,7 +462,7 @@ const AssetDashboardPage = () => {
                                             <div style={{ background: isAchieved ? '#22c55e' : '#fbbf24', height: '100%', width: `${Math.min(progress, 100)}%`, borderRadius: '8px', transition: 'width 0.5s ease' }} />
                                         </div>
                                         {/* 버튼 영역 */}
-                                        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem', flexWrap: 'wrap' }}>
+                                        <div className="dashboard-strategy-actions" style={{ marginTop: '0.75rem' }}>
                                             {!g.is_active && <button onClick={() => handleSetActiveGoal(g.id)} style={{ padding: '0.4rem 0.8rem', background: 'rgba(251,191,36,0.2)', border: 'none', borderRadius: '6px', color: '#fbbf24', fontSize: '0.8rem', cursor: 'pointer' }}>활성화</button>}
                                             <button onClick={() => handleEditGoal(g)} style={{ padding: '0.4rem 0.8rem', background: 'rgba(96,165,250,0.2)', border: 'none', borderRadius: '6px', color: '#60a5fa', fontSize: '0.8rem', cursor: 'pointer' }}>수정</button>
                                             <button onClick={() => handleDeleteGoal(g.id)} style={{ padding: '0.4rem 0.8rem', background: 'rgba(239,68,68,0.2)', border: 'none', borderRadius: '6px', color: '#ef4444', fontSize: '0.8rem', cursor: 'pointer' }}>삭제</button>
@@ -490,36 +480,36 @@ const AssetDashboardPage = () => {
                 {/* Asset Input Form */}
 
                 {showAssetForm && (
-                    <div className="section-panel" style={{ marginBottom: '2rem', background: 'linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%)' }}>
-                        <h3 style={{ color: 'white', marginBottom: '1rem' }}>{editingAsset ? '✏️ 자산 수정' : '📝 일별 자산 입력'}</h3>
-                        <form onSubmit={handleAssetSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div className="dashboard-section-panel">
+                        <h3 className="dashboard-section-title">{editingAsset ? '✏️ 자산 수정' : '📝 일별 자산 입력'}</h3>
+                        <form onSubmit={handleAssetSubmit} className="dashboard-form">
 
-                            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-                                <div style={{ flex: 1, minWidth: '150px' }}><label style={{ display: 'block', marginBottom: '5px', color: 'rgba(255,255,255,0.8)', fontSize: '0.85rem' }}>날짜</label><input type="date" className="form-input" value={assetForm.record_date} onChange={e => setAssetForm({ ...assetForm, record_date: e.target.value })} required disabled={!!editingAsset} /></div>
-                                <div style={{ flex: 1, minWidth: '150px' }}><label style={{ display: 'block', marginBottom: '5px', color: 'rgba(255,255,255,0.8)', fontSize: '0.85rem' }}>총 자산 (원)</label><input type="number" step="1" className="form-input" value={assetForm.total_assets} onChange={e => setAssetForm({ ...assetForm, total_assets: e.target.value })} required placeholder="예: 50000000" /></div>
-                                {!editingAsset && <div style={{ flex: 1, minWidth: '150px' }}><label style={{ display: 'block', marginBottom: '5px', color: 'rgba(255,255,255,0.8)', fontSize: '0.85rem' }}>수익률 (%)</label><input type="number" step="0.01" className="form-input" value={assetForm.daily_return_pct} onChange={e => setAssetForm({ ...assetForm, daily_return_pct: e.target.value })} placeholder="예: 2.5" /></div>}
-                                {!editingAsset && <div style={{ flex: 1, minWidth: '150px' }}><label style={{ display: 'block', marginBottom: '5px', color: 'rgba(255,255,255,0.8)', fontSize: '0.85rem' }}>손익 (원)</label><input type="number" step="1" className="form-input" value={assetForm.daily_pnl} onChange={e => setAssetForm({ ...assetForm, daily_pnl: e.target.value })} placeholder="예: 500000" /></div>}
+                            <div className="dashboard-form-row">
+                                <div className="dashboard-form-group"><label className="dashboard-label">날짜</label><input type="date" className="dashboard-input" value={assetForm.record_date} onChange={e => setAssetForm({ ...assetForm, record_date: e.target.value })} required disabled={!!editingAsset} /></div>
+                                <div className="dashboard-form-group"><label className="dashboard-label">총 자산 (원)</label><input type="number" step="1" className="dashboard-input" value={assetForm.total_assets} onChange={e => setAssetForm({ ...assetForm, total_assets: e.target.value })} required placeholder="예: 50000000" /></div>
+                                {!editingAsset && <div className="dashboard-form-group"><label className="dashboard-label">수익률 (%)</label><input type="number" step="0.01" className="dashboard-input" value={assetForm.daily_return_pct} onChange={e => setAssetForm({ ...assetForm, daily_return_pct: e.target.value })} placeholder="예: 2.5" /></div>}
+                                {!editingAsset && <div className="dashboard-form-group"><label className="dashboard-label">손익 (원)</label><input type="number" step="1" className="dashboard-input" value={assetForm.daily_pnl} onChange={e => setAssetForm({ ...assetForm, daily_pnl: e.target.value })} placeholder="예: 500000" /></div>}
                             </div>
 
-                            <div><label style={{ display: 'block', marginBottom: '5px', color: 'rgba(255,255,255,0.8)', fontSize: '0.85rem' }}>메모</label><input type="text" className="form-input" value={assetForm.note} onChange={e => setAssetForm({ ...assetForm, note: e.target.value })} placeholder="참고 메모" /></div>
-                            <button type="submit" className="btn-primary" style={{ alignSelf: 'flex-end' }}>저장</button>
+                            <div><label className="dashboard-label">메모</label><input type="text" className="dashboard-input" value={assetForm.note} onChange={e => setAssetForm({ ...assetForm, note: e.target.value })} placeholder="참고 메모" /></div>
+                            <button type="submit" className="dashboard-btn-primary" style={{ alignSelf: 'flex-end' }}>저장</button>
                         </form>
                     </div>
                 )}
 
                 {/* Goal Input Form */}
                 {showGoalForm && (
-                    <div className="section-panel" style={{ marginBottom: '2rem', background: 'linear-gradient(135deg, #d4af37 0%, #a67c00 100%)' }}>
-                        <h3 style={{ color: 'white', marginBottom: '1rem' }}>{editingGoal ? '✏️ 목표 수정' : '🎯 목표 금액 설정'}</h3>
-                        <form onSubmit={editingGoal ? handleUpdateGoal : handleGoalSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-                                <div style={{ flex: 1, minWidth: '150px' }}><label style={{ display: 'block', marginBottom: '5px', color: 'rgba(255,255,255,0.8)', fontSize: '0.85rem' }}>목표명</label><input type="text" className="form-input" value={goalForm.goal_name} onChange={e => setGoalForm({ ...goalForm, goal_name: e.target.value })} required placeholder="예: 2026년 1분기 목표" /></div>
-                                <div style={{ flex: 1, minWidth: '150px' }}><label style={{ display: 'block', marginBottom: '5px', color: 'rgba(255,255,255,0.8)', fontSize: '0.85rem' }}>목표 금액 (원)</label><input type="number" step="1" className="form-input" value={goalForm.target_amount} onChange={e => setGoalForm({ ...goalForm, target_amount: e.target.value })} required placeholder="예: 100000000" /></div>
-                                <div style={{ flex: 1, minWidth: '150px' }}><label style={{ display: 'block', marginBottom: '5px', color: 'rgba(255,255,255,0.8)', fontSize: '0.85rem' }}>목표 달성일</label><input type="date" className="form-input" value={goalForm.target_date} onChange={e => setGoalForm({ ...goalForm, target_date: e.target.value })} /></div>
+                    <div className="dashboard-section-panel" style={{ background: 'linear-gradient(135deg, #d4af37 0%, #a67c00 100%)' }}>
+                        <h3 className="dashboard-section-title">{editingGoal ? '✏️ 목표 수정' : '🎯 목표 금액 설정'}</h3>
+                        <form onSubmit={editingGoal ? handleUpdateGoal : handleGoalSubmit} className="dashboard-form">
+                            <div className="dashboard-form-row">
+                                <div className="dashboard-form-group"><label className="dashboard-label">목표명</label><input type="text" className="dashboard-input" value={goalForm.goal_name} onChange={e => setGoalForm({ ...goalForm, goal_name: e.target.value })} required placeholder="예: 2026년 1분기 목표" /></div>
+                                <div className="dashboard-form-group"><label className="dashboard-label">목표 금액 (원)</label><input type="number" step="1" className="dashboard-input" value={goalForm.target_amount} onChange={e => setGoalForm({ ...goalForm, target_amount: e.target.value })} required placeholder="예: 100000000" /></div>
+                                <div className="dashboard-form-group"><label className="dashboard-label">목표 달성일</label><input type="date" className="dashboard-input" value={goalForm.target_date} onChange={e => setGoalForm({ ...goalForm, target_date: e.target.value })} /></div>
                             </div>
                             <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
                                 {editingGoal && <button type="button" onClick={() => { setEditingGoal(null); setShowGoalForm(false); setGoalForm({ goal_name: '', target_amount: '', target_date: '' }); }} style={{ padding: '0.75rem 1.5rem', background: 'rgba(100,116,139,0.3)', border: 'none', borderRadius: '8px', color: '#94a3b8', cursor: 'pointer' }}>취소</button>}
-                                <button type="submit" className="btn-primary" style={{ background: '#1e3a8a' }}>{editingGoal ? '수정' : '저장'}</button>
+                                <button type="submit" className="dashboard-btn-primary" style={{ background: '#1e3a8a' }}>{editingGoal ? '수정' : '저장'}</button>
                             </div>
                         </form>
                     </div>
@@ -528,29 +518,29 @@ const AssetDashboardPage = () => {
 
                 {/* Strategy Input Form */}
                 {showStrategyForm && (
-                    <div className="section-panel" style={{ marginBottom: '2rem', background: 'linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%)' }}>
-                        <h3 style={{ color: 'white', marginBottom: '1rem' }}>📋 전략 등록</h3>
-                        <form onSubmit={handleStrategySubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-                                <div style={{ flex: 2, minWidth: '200px' }}><label style={{ display: 'block', marginBottom: '5px', color: 'rgba(255,255,255,0.8)', fontSize: '0.85rem' }}>전략명</label><input type="text" className="form-input" value={strategyForm.strategy_name} onChange={e => setStrategyForm({ ...strategyForm, strategy_name: e.target.value })} required placeholder="예: SOXL 5분봉 GC 전략" /></div>
-                                <div style={{ flex: 1, minWidth: '150px' }}><label style={{ display: 'block', marginBottom: '5px', color: 'rgba(255,255,255,0.8)', fontSize: '0.85rem' }}>시작일</label><input type="date" className="form-input" value={strategyForm.start_date} onChange={e => setStrategyForm({ ...strategyForm, start_date: e.target.value })} required /></div>
-                                <div style={{ flex: 1, minWidth: '150px' }}><label style={{ display: 'block', marginBottom: '5px', color: 'rgba(255,255,255,0.8)', fontSize: '0.85rem' }}>종료일</label><input type="date" className="form-input" value={strategyForm.end_date} onChange={e => setStrategyForm({ ...strategyForm, end_date: e.target.value })} /></div>
+                    <div className="dashboard-section-panel" style={{ background: 'linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%)' }}>
+                        <h3 className="dashboard-section-title">📋 전략 등록</h3>
+                        <form onSubmit={handleStrategySubmit} className="dashboard-form">
+                            <div className="dashboard-form-row">
+                                <div style={{ flex: 2, minWidth: '200px' }}><label className="dashboard-label">전략명</label><input type="text" className="dashboard-input" value={strategyForm.strategy_name} onChange={e => setStrategyForm({ ...strategyForm, strategy_name: e.target.value })} required placeholder="예: SOXL 5분봉 GC 전략" /></div>
+                                <div className="dashboard-form-group"><label className="dashboard-label">시작일</label><input type="date" className="dashboard-input" value={strategyForm.start_date} onChange={e => setStrategyForm({ ...strategyForm, start_date: e.target.value })} required /></div>
+                                <div className="dashboard-form-group"><label className="dashboard-label">종료일</label><input type="date" className="dashboard-input" value={strategyForm.end_date} onChange={e => setStrategyForm({ ...strategyForm, end_date: e.target.value })} /></div>
                             </div>
-                            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-                                <div style={{ flex: 1, minWidth: '150px' }}><label style={{ display: 'block', marginBottom: '5px', color: 'rgba(255,255,255,0.8)', fontSize: '0.85rem' }}>시작 자산 (원)</label><input type="number" step="1" className="form-input" value={strategyForm.initial_assets} onChange={e => setStrategyForm({ ...strategyForm, initial_assets: e.target.value })} placeholder="예: 40000000" /></div>
-                                <div style={{ flex: 1, minWidth: '150px' }}><label style={{ display: 'block', marginBottom: '5px', color: 'rgba(255,255,255,0.8)', fontSize: '0.85rem' }}>목표 자산 (원)</label><input type="number" step="1" className="form-input" value={strategyForm.target_assets} onChange={e => setStrategyForm({ ...strategyForm, target_assets: e.target.value })} placeholder="예: 60000000" /></div>
-                                <div style={{ flex: 1, minWidth: '150px' }}><label style={{ display: 'block', marginBottom: '5px', color: 'rgba(255,255,255,0.8)', fontSize: '0.85rem' }}>목표 수익률 (%) <span style={{ fontSize: '0.7rem', color: '#a78bfa' }}>자동계산</span></label><input type="number" step="0.01" className="form-input" value={strategyForm.target_return_pct} readOnly style={{ background: 'rgba(255,255,255,0.1)', cursor: 'default' }} placeholder="자동 계산됨" /></div>
+                            <div className="dashboard-form-row">
+                                <div className="dashboard-form-group"><label className="dashboard-label">시작 자산 (원)</label><input type="number" step="1" className="dashboard-input" value={strategyForm.initial_assets} onChange={e => setStrategyForm({ ...strategyForm, initial_assets: e.target.value })} placeholder="예: 40000000" /></div>
+                                <div className="dashboard-form-group"><label className="dashboard-label">목표 자산 (원)</label><input type="number" step="1" className="dashboard-input" value={strategyForm.target_assets} onChange={e => setStrategyForm({ ...strategyForm, target_assets: e.target.value })} placeholder="예: 60000000" /></div>
+                                <div className="dashboard-form-group"><label className="dashboard-label">목표 수익률 (%) <span style={{ fontSize: '0.7rem', color: '#a78bfa' }}>자동계산</span></label><input type="number" step="0.01" className="dashboard-input" value={strategyForm.target_return_pct} readOnly style={{ background: 'rgba(255,255,255,0.1)', cursor: 'default' }} placeholder="자동 계산됨" /></div>
                             </div>
 
-                            <div><label style={{ display: 'block', marginBottom: '5px', color: 'rgba(255,255,255,0.8)', fontSize: '0.85rem' }}>설명</label><textarea className="form-input" value={strategyForm.description} onChange={e => setStrategyForm({ ...strategyForm, description: e.target.value })} placeholder="전략에 대한 간단한 설명" rows={2} style={{ resize: 'vertical' }} /></div>
-                            <button type="submit" className="btn-primary" style={{ alignSelf: 'flex-end', background: '#1e3a8a' }}>저장</button>
+                            <div><label className="dashboard-label">설명</label><textarea className="dashboard-input" value={strategyForm.description} onChange={e => setStrategyForm({ ...strategyForm, description: e.target.value })} placeholder="전략에 대한 간단한 설명" rows={2} style={{ resize: 'vertical' }} /></div>
+                            <button type="submit" className="dashboard-btn-primary" style={{ alignSelf: 'flex-end', background: '#1e3a8a' }}>저장</button>
                         </form>
                     </div>
                 )}
 
                 {/* Asset Chart - 원화 표시 */}
-                <div style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', borderRadius: '20px', padding: '2rem', marginBottom: '2rem', border: '1px solid rgba(147, 197, 253, 0.2)' }}>
-                    <h3 style={{ color: 'white', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <div className="dashboard-chart-container">
+                    <h3 className="dashboard-section-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         📈 자산 추이 {targetAmount && <span style={{ fontSize: '0.9rem', color: '#d4af37' }}>목표: {formatKRW(targetAmount)}</span>}
                     </h3>
                     {chartData.length > 0 ? (
@@ -574,19 +564,19 @@ const AssetDashboardPage = () => {
 
                 {/* Strategy List with Analysis/Edit/Delete Buttons */}
                 {strategies.length > 0 && (
-                    <div style={{ background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 100%)', borderRadius: '20px', padding: '2rem', border: '1px solid rgba(167, 139, 250, 0.2)' }}>
-                        <h3 style={{ color: 'white', marginBottom: '1.5rem' }}>📋 등록된 전략</h3>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div className="dashboard-section-panel" style={{ background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 100%)', borderColor: 'rgba(167, 139, 250, 0.2)' }}>
+                        <h3 className="dashboard-section-title">📋 등록된 전략</h3>
+                        <div className="dashboard-strategy-list">
                             {strategies.map(s => (
-                                <div key={s.id} style={{ background: 'rgba(255,255,255,0.05)', borderRadius: '12px', padding: '1.5rem', border: '1px solid rgba(167, 139, 250, 0.2)' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '1rem' }}>
+                                <div key={s.id} className="dashboard-strategy-item">
+                                    <div className="dashboard-strategy-header">
                                         <div>
                                             <span style={{ fontSize: '1.2rem', fontWeight: '700', color: 'white' }}>{s.strategy_name}</span>
                                             <span style={{ marginLeft: '0.75rem', padding: '0.25rem 0.5rem', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '600', background: s.status === 'ACTIVE' ? 'rgba(34,197,94,0.2)' : 'rgba(100,116,139,0.2)', color: s.status === 'ACTIVE' ? '#22c55e' : '#94a3b8' }}>
                                                 {s.status === 'ACTIVE' ? '진행 중' : s.status === 'COMPLETED' ? '완료' : s.status}
                                             </span>
                                         </div>
-                                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                        <div className="dashboard-strategy-actions">
                                             <button onClick={() => handleOpenAnalysis(s)} style={{ padding: '0.5rem 1rem', background: 'rgba(59,130,246,0.3)', border: 'none', borderRadius: '8px', color: '#60a5fa', fontSize: '0.85rem', fontWeight: '600', cursor: 'pointer' }}>📊 분석</button>
                                             <button onClick={() => handleOpenEdit(s)} style={{ padding: '0.5rem 1rem', background: 'rgba(251,191,36,0.2)', border: 'none', borderRadius: '8px', color: '#fbbf24', fontSize: '0.85rem', fontWeight: '600', cursor: 'pointer' }}>✏️ 수정</button>
                                             {s.status === 'ACTIVE' && (
@@ -639,29 +629,29 @@ const AssetDashboardPage = () => {
 
             {/* Strategy Edit Modal */}
             {editingStrategy && (
-                <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000, padding: '2rem' }}>
-                    <div style={{ background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 100%)', borderRadius: '24px', maxWidth: '600px', width: '100%', maxHeight: '90vh', overflowY: 'auto', border: '1px solid rgba(167, 139, 250, 0.3)' }}>
-                        <div style={{ background: 'linear-gradient(135deg, #fbbf24 0%, #d97706 100%)', padding: '2rem', borderRadius: '24px 24px 0 0', position: 'relative' }}>
+                <div className="dashboard-modal-overlay">
+                    <div className="dashboard-modal-content">
+                        <div className="dashboard-modal-header">
                             <button onClick={handleCloseEdit} style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.7)', fontSize: '1.5rem', cursor: 'pointer', padding: '0.5rem', lineHeight: 1 }}>×</button>
 
                             <h2 style={{ color: 'white', margin: 0, fontSize: '1.5rem' }}>✏️ 전략 수정</h2>
                         </div>
-                        <form onSubmit={handleUpdateStrategy} style={{ padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                            <div><label style={{ display: 'block', marginBottom: '5px', color: 'rgba(255,255,255,0.8)', fontSize: '0.85rem' }}>전략명</label><input type="text" className="form-input" value={strategyForm.strategy_name} onChange={e => setStrategyForm({ ...strategyForm, strategy_name: e.target.value })} required /></div>
-                            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-                                <div style={{ flex: 1, minWidth: '150px' }}><label style={{ display: 'block', marginBottom: '5px', color: 'rgba(255,255,255,0.8)', fontSize: '0.85rem' }}>시작일</label><input type="date" className="form-input" value={strategyForm.start_date} onChange={e => setStrategyForm({ ...strategyForm, start_date: e.target.value })} required /></div>
-                                <div style={{ flex: 1, minWidth: '150px' }}><label style={{ display: 'block', marginBottom: '5px', color: 'rgba(255,255,255,0.8)', fontSize: '0.85rem' }}>종료일</label><input type="date" className="form-input" value={strategyForm.end_date} onChange={e => setStrategyForm({ ...strategyForm, end_date: e.target.value })} /></div>
+                        <form onSubmit={handleUpdateStrategy} className="dashboard-modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            <div><label className="dashboard-label">전략명</label><input type="text" className="dashboard-input" value={strategyForm.strategy_name} onChange={e => setStrategyForm({ ...strategyForm, strategy_name: e.target.value })} required /></div>
+                            <div className="dashboard-form-row">
+                                <div className="dashboard-form-group"><label className="dashboard-label">시작일</label><input type="date" className="dashboard-input" value={strategyForm.start_date} onChange={e => setStrategyForm({ ...strategyForm, start_date: e.target.value })} required /></div>
+                                <div className="dashboard-form-group"><label className="dashboard-label">종료일</label><input type="date" className="dashboard-input" value={strategyForm.end_date} onChange={e => setStrategyForm({ ...strategyForm, end_date: e.target.value })} /></div>
                             </div>
-                            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-                                <div style={{ flex: 1, minWidth: '150px' }}><label style={{ display: 'block', marginBottom: '5px', color: 'rgba(255,255,255,0.8)', fontSize: '0.85rem' }}>시작 자산 (원)</label><input type="number" step="1" className="form-input" value={strategyForm.initial_assets} onChange={e => setStrategyForm({ ...strategyForm, initial_assets: e.target.value })} /></div>
-                                <div style={{ flex: 1, minWidth: '150px' }}><label style={{ display: 'block', marginBottom: '5px', color: 'rgba(255,255,255,0.8)', fontSize: '0.85rem' }}>목표 자산 (원)</label><input type="number" step="1" className="form-input" value={strategyForm.target_assets} onChange={e => setStrategyForm({ ...strategyForm, target_assets: e.target.value })} /></div>
-                                <div style={{ flex: 1, minWidth: '150px' }}><label style={{ display: 'block', marginBottom: '5px', color: 'rgba(255,255,255,0.8)', fontSize: '0.85rem' }}>목표 수익률 (%) <span style={{ fontSize: '0.7rem', color: '#a78bfa' }}>자동계산</span></label><input type="number" step="0.01" className="form-input" value={strategyForm.target_return_pct} readOnly style={{ background: 'rgba(255,255,255,0.1)', cursor: 'default' }} /></div>
+                            <div className="dashboard-form-row">
+                                <div className="dashboard-form-group"><label className="dashboard-label">시작 자산 (원)</label><input type="number" step="1" className="dashboard-input" value={strategyForm.initial_assets} onChange={e => setStrategyForm({ ...strategyForm, initial_assets: e.target.value })} /></div>
+                                <div className="dashboard-form-group"><label className="dashboard-label">목표 자산 (원)</label><input type="number" step="1" className="dashboard-input" value={strategyForm.target_assets} onChange={e => setStrategyForm({ ...strategyForm, target_assets: e.target.value })} /></div>
+                                <div className="dashboard-form-group"><label className="dashboard-label">목표 수익률 (%) <span style={{ fontSize: '0.7rem', color: '#a78bfa' }}>자동계산</span></label><input type="number" step="0.01" className="dashboard-input" value={strategyForm.target_return_pct} readOnly style={{ background: 'rgba(255,255,255,0.1)', cursor: 'default' }} /></div>
                             </div>
 
-                            <div><label style={{ display: 'block', marginBottom: '5px', color: 'rgba(255,255,255,0.8)', fontSize: '0.85rem' }}>설명</label><textarea className="form-input" value={strategyForm.description} onChange={e => setStrategyForm({ ...strategyForm, description: e.target.value })} rows={3} style={{ resize: 'vertical' }} /></div>
+                            <div><label className="dashboard-label">설명</label><textarea className="dashboard-input" value={strategyForm.description} onChange={e => setStrategyForm({ ...strategyForm, description: e.target.value })} rows={3} style={{ resize: 'vertical' }} /></div>
                             <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
                                 <button type="button" onClick={handleCloseEdit} style={{ padding: '0.75rem 1.5rem', background: 'rgba(100,116,139,0.3)', border: 'none', borderRadius: '8px', color: '#94a3b8', cursor: 'pointer' }}>취소</button>
-                                <button type="submit" className="btn-primary">저장</button>
+                                <button type="submit" className="dashboard-btn-primary">저장</button>
                             </div>
                         </form>
                     </div>
@@ -670,10 +660,10 @@ const AssetDashboardPage = () => {
 
             {/* Strategy Analysis Modal */}
             {selectedStrategy && (
-                <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000, padding: '2rem' }}>
-                    <div style={{ background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 100%)', borderRadius: '24px', maxWidth: '900px', width: '100%', maxHeight: '90vh', overflowY: 'auto', border: '1px solid rgba(167, 139, 250, 0.3)' }}>
+                <div className="dashboard-modal-overlay">
+                    <div className="dashboard-modal-content" style={{ maxWidth: '900px' }}>
                         {/* Modal Header */}
-                        <div style={{ background: 'linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%)', padding: '2rem', borderRadius: '24px 24px 0 0', position: 'relative' }}>
+                        <div className="dashboard-modal-header" style={{ background: 'linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%)' }}>
                             <button onClick={handleCloseAnalysis} style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.7)', fontSize: '1.5rem', cursor: 'pointer', padding: '0.5rem', lineHeight: 1 }}>×</button>
 
                             <h2 style={{ color: 'white', margin: 0, fontSize: '1.5rem' }}>📊 전략 분석: {selectedStrategy.strategy_name}</h2>
@@ -683,13 +673,13 @@ const AssetDashboardPage = () => {
                         </div>
 
                         {/* Modal Body */}
-                        <div style={{ padding: '2rem' }}>
+                        <div className="dashboard-modal-body">
                             {loadingPerformance ? (
                                 <div style={{ textAlign: 'center', padding: '3rem', color: '#a5b4fc' }}>분석 데이터 로딩 중...</div>
                             ) : strategyPerformance ? (
                                 <>
                                     {/* Performance Summary Cards */}
-                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
+                                    <div className="dashboard-performance-grid">
                                         <div style={{ background: 'rgba(255,255,255,0.05)', borderRadius: '12px', padding: '1.25rem', textAlign: 'center' }}>
                                             <div style={{ fontSize: '0.8rem', color: '#a5b4fc', marginBottom: '0.5rem' }}>총 매매</div>
                                             <div style={{ fontSize: '1.8rem', fontWeight: '700', color: 'white' }}>{strategyPerformance.total_trades || 0}건</div>

@@ -791,45 +791,46 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                                                         displayTime = `${mo}-${dy} ${hr}:${mi}`;
                                                     }
 
-                                                    // Single Line Format: MM-DD HH:mm  [Type] [Reason]  $Price
+                                                    // Single Line Format: US Time | Type | Price | Score
                                                     return (
                                                         <div key={idx} style={{
                                                             background: 'rgba(255,255,255,0.03)',
-                                                            padding: '6px 10px',
+                                                            padding: '8px 10px', // slightly more padding
                                                             borderRadius: '6px',
                                                             borderLeft: isBuy ? `3px solid ${mainColor}` : '3px solid #777',
                                                             display: 'flex',
+                                                            justifyContent: 'space-between', // Spread items
                                                             alignItems: 'center',
                                                             fontSize: '0.85rem',
-                                                            color: '#ddd',
-                                                            gap: '8px'
+                                                            color: '#ddd'
                                                         }}>
-                                                            {/* Time */}
-                                                            <span style={{ color: '#888', fontSize: '0.8rem', minWidth: '85px' }}>{displayTime}</span>
+                                                            {/* 1. Time */}
+                                                            <span style={{ color: '#888', fontSize: '0.8rem', minWidth: '80px' }}>{displayTime}</span>
 
-                                                            {/* Type */}
+                                                            {/* 2. Type */}
                                                             <span style={{
                                                                 color: isBuy ? '#4ade80' : '#f87171',
                                                                 fontWeight: 'bold',
-                                                                minWidth: '30px'
+                                                                minWidth: '35px',
+                                                                textAlign: 'center'
                                                             }}>
                                                                 {isBuy ? '매수' : '매도'}
                                                             </span>
 
-                                                            {/* Reason */}
-                                                            <span style={{
-                                                                color: '#ccc',
-                                                                flex: 1,
-                                                                whiteSpace: 'nowrap',
-                                                                overflow: 'hidden',
-                                                                textOverflow: 'ellipsis'
-                                                            }}>
-                                                                {reason}
+                                                            {/* 3. Price */}
+                                                            <span style={{ fontWeight: 'bold', color: '#fff', minWidth: '60px', textAlign: 'right' }}>
+                                                                ${Number(sig.price).toFixed(2)}
                                                             </span>
 
-                                                            {/* Price */}
-                                                            <span style={{ fontWeight: 'bold', color: '#fff' }}>
-                                                                ${Number(sig.price).toFixed(2)}
+                                                            {/* 4. Score (New) replaces Reason */}
+                                                            <span style={{
+                                                                color: '#fbbf24',
+                                                                fontWeight: 'bold',
+                                                                minWidth: '40px',
+                                                                textAlign: 'right',
+                                                                fontSize: '0.8rem'
+                                                            }}>
+                                                                {sig.total_score ?? sig.score ?? '-'}점
                                                             </span>
                                                         </div>
                                                     );

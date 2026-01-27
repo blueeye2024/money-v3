@@ -437,6 +437,13 @@ function Layout() {
             {/* 전역 알림 사운드 (항상 실행) */}
             <GlobalAlertSounds isMuted={isMuted} />
 
+            {/* Mobile Header Title - Only on Dashboard */}
+            {location.pathname === '/' && (
+                <div className="mobile-header-title">
+                    청안 프로젝트
+                </div>
+            )}
+
             <button
                 className="mobile-menu-btn"
                 onClick={() => setIsMenuOpen(!isMenuOpen)}
@@ -449,31 +456,31 @@ function Layout() {
                 <Link to="/" className="nav-link" style={{
                     color: location.pathname === '/' ? 'var(--accent-blue)' : 'var(--text-primary)',
                     fontWeight: location.pathname === '/' ? 'bold' : 'normal',
-                }}>대시보드</Link>
+                }}>📊 대시보드</Link>
                 <Link to="/crypto" className="nav-link" style={{
                     color: location.pathname === '/crypto' ? 'var(--accent-blue)' : 'var(--text-primary)',
                     fontWeight: location.pathname === '/crypto' ? 'bold' : 'normal',
-                }}>가상자산</Link>
+                }}>🪙 가상자산</Link>
                 <Link to="/daily-reports" className="nav-link" style={{
                     color: location.pathname === '/daily-reports' ? 'var(--accent-blue)' : 'var(--text-primary)',
                     fontWeight: location.pathname === '/daily-reports' ? 'bold' : 'normal',
-                }}>Daily Reports</Link>
+                }}>📑 Daily Reports</Link>
                 <Link to="/journal" className="nav-link" style={{
                     color: location.pathname === '/journal' ? 'var(--accent-blue)' : 'var(--text-primary)',
                     fontWeight: location.pathname === '/journal' ? 'bold' : 'normal',
-                }}>자산 관리</Link>
+                }}>💰 자산 관리</Link>
                 <Link to="/asset-dashboard" className="nav-link" style={{
                     color: location.pathname === '/asset-dashboard' ? 'var(--accent-blue)' : 'var(--text-primary)',
                     fontWeight: location.pathname === '/asset-dashboard' ? 'bold' : 'normal',
-                }}>목표관리</Link>
+                }}>🎯 목표관리</Link>
                 <Link to="/signals" className="nav-link" style={{
                     color: location.pathname === '/signals' ? 'var(--accent-blue)' : 'var(--text-primary)',
                     fontWeight: location.pathname === '/signals' ? 'bold' : 'normal',
-                }}>신호 포착</Link>
+                }}>📡 신호 포착</Link>
                 <Link to="/trading-journal" className="nav-link" style={{
                     color: location.pathname === '/trading-journal' ? 'var(--accent-blue)' : 'var(--text-primary)',
                     fontWeight: location.pathname === '/trading-journal' ? 'bold' : 'normal',
-                }}>매매일지</Link>
+                }}>📝 매매일지</Link>
                 <Link to="/lab" className="nav-link" style={{
                     color: location.pathname === '/lab' ? 'var(--accent-blue)' : 'var(--text-primary)',
                     fontWeight: location.pathname === '/lab' ? 'bold' : 'normal',
@@ -494,7 +501,7 @@ function Layout() {
                             marginLeft: '10px'
                         }}
                     >
-                        로그아웃
+                        🔓 로그아웃
                     </button>
                 ) : (
                     <Link to="/login" className="nav-link" style={{
@@ -505,7 +512,7 @@ function Layout() {
                         borderRadius: '6px',
                         border: '1px solid rgba(99, 102, 241, 0.2)',
                         marginLeft: '10px'
-                    }}>로그인</Link>
+                    }}>🔒 로그인</Link>
                 )}
             </nav>
 
@@ -531,7 +538,7 @@ function Layout() {
                 borderTop: '1px solid var(--glass-border)', color: 'var(--text-secondary)'
             }}>
                 <div style={{ textAlign: 'center', padding: '20px', color: '#64748b', fontSize: '0.8rem', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                    <p>&copy; 2026 Cheongan System. Ver {packageJson.version} (Updated: 2026-01-27 21:26)</p>
+                    <p>&copy; 2026 Cheongan System. Ver {packageJson.version} (Updated: 2026-01-28 02:34)</p>
                 </div>
             </footer>
         </div>

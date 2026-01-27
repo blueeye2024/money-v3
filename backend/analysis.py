@@ -1581,7 +1581,8 @@ def calculate_tech_indicators(df):
     if df is None: return {}
     if not hasattr(df, 'columns'): return {} # Not a DataFrame
     if 'Close' not in df.columns: return {}
-    if len(df) < 12: return {} # Absolute minimum for MA12
+    if len(df) < 12: 
+        return {} # Absolute minimum for MA12
     
     result = {}
     try:
@@ -1589,8 +1590,20 @@ def calculate_tech_indicators(df):
         
         # 1. MA12 (Priority for Signal 2)
         if len(df) >= 12:
-            ma12 = df['Close'].rolling(window=12).mean()
-            result['ma12'] = ma12.iloc[-1]
+            # [Ver 8.0.8] Robust calc: ffill() to handle potential NaNs at end
+            close_series = df['Close'].astype(float).ffill()
+            ma12 = close_series.rolling(window=12).mean()
+            
+            val = ma12.iloc[-1]
+            # Check for NaN result
+            if pd.isna(val):
+                valid_vals = ma12.dropna()
+                if not valid_vals.empty:
+                    val = valid_vals.iloc[-1]
+                else:
+                    val = 0
+            
+            result['ma12'] = val
             
         # 2. RSI (14)
         if len(df) >= 15: # 14 + 1 for diff
@@ -2637,8 +2650,9 @@ def run_v2_signal_analysis():
                     ma12_5 = prev_ma12
                     print(f"  ⚠️ {ticker} MA12 is 0 or invalid. Using Prev: {ma12_5:.2f}")
             
-            # [Ver 8.0.5] Inject MA12 to Results for persistent UI display
-            results[t]['ma12'] = float(ma12_5) if ma12_5 and float(ma12_5) > 0 else 0
+            
+            # [Ver 8.0.5] (Bug Fix) Removed invalid results[t] access
+            # results[t]['ma12'] = float(ma12_5) if ma12_5 and float(ma12_5) > 0 else 0
             
             # 30m Indicators
             ma10_30 = df_30['ma10'].iloc[-1]
@@ -3166,12 +3180,4 @@ def stitch_kis_candles(ticker, yf_df, interval_min):
 
     except Exception as e:
         print(f"Error in stitch_kis_candles: {e}")
-        return yf_df
-        combined = combined[~combined.index.duplicated(keep='last')]
-        combined.sort_index(inplace=True)
-        
-        return combined
-
-    except Exception as e:
-        print(f"Stitch Logic Error ({ticker}): {e}")
         return yf_df

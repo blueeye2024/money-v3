@@ -755,16 +755,39 @@ const DailyReportPage = () => {
 
     // 메인 렌더
     return (
-        <div style={{ minHeight: '100vh', padding: '30px 20px 40px 20px', background: 'var(--bg-primary)' }}>
+        <div className="daily-report-container" style={{ minHeight: '100vh', padding: '30px 20px 40px 20px', background: 'var(--bg-primary)' }}>
+            <style>{`
+                @media (max-width: 768px) {
+                    .daily-report-container {
+                        padding: 15px 10px !important;
+                    }
+                    .glass-panel {
+                        padding: 16px !important; 
+                        /* Reduce inner padding on mobile */
+                    }
+                    .mobile-hidden-text {
+                        display: none;
+                    }
+                    .calendar-scroll-container {
+                        overflow-x: auto;
+                        -webkit-overflow-scrolling: touch;
+                        padding-bottom: 20px; /* Scroll Thumb Space */
+                        width: 100%;
+                        display: block;
+                    }
+                    /* Force Calendar Width to trigger scroll - More robust selector */
+                    .calendar-scroll-container > div {
+                        min-width: 700px !important;
+                    }
+                }
+            `}</style>
             <div className="container" style={{ maxWidth: '1400px', margin: '0 auto' }}>
                 {/* 페이지 타이틀 */}
                 <div style={{ marginBottom: '24px' }}>
                     <h1 style={{ fontSize: '2rem', fontWeight: 'bold', color: 'white', margin: 0, display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        📊 일일 리포트 & 이벤트 관리
+                        📊 일일 리포트
+                        <span className="mobile-hidden-text" style={{ fontSize: '1.5rem', fontWeight: 'bold', opacity: 0.8 }}>& 이벤트 관리</span>
                     </h1>
-                    <p style={{ color: 'var(--text-secondary)', marginTop: '8px', fontSize: '0.95rem' }}>
-                        매일의 매매 전략과 결과를 기록하고, 마켓 이벤트를 관리합니다.
-                    </p>
                 </div>
 
                 {/* 자산 추이 차트 */}
@@ -931,7 +954,7 @@ const DailyReportPage = () => {
                 <div className="responsive-grid-1-2">
                     {/* 왼쪽: 캘린더 & 이벤트 목록 */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                        <div style={{ position: 'relative', zIndex: 100 }}>
+                        <div className="calendar-scroll-container" style={{ position: 'relative', zIndex: 100 }}>
                             <EventCalendar
                                 reports={reports}
                                 events={events}

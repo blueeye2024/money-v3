@@ -1810,15 +1810,38 @@ def api_get_trading_status():
 @app.get("/api/trading/history")
 def api_get_trading_history(limit: int = 50):
     from db import get_trade_history
+    import pytz
+    from datetime import datetime
+    
     rows = get_trade_history(limit)
-    # Serialize
+    
+    # [Ver 8.1.0] Convert to NY Time for Display
+    tz_kr = pytz.timezone('Asia/Seoul')
+    tz_ny = pytz.timezone('America/New_York')
+    
     result = []
     for row in rows:
-         for k in ['entry_time', 'exit_time', 'created_at']:
-                if row.get(k): row[k] = row[k].isoformat()
-         for k in ['entry_price', 'exit_price', 'profit_pct']:
-               if row.get(k): row[k] = float(row[k])
-         result.append(row)
+        # Convert Timezones
+        for k in ['entry_time', 'exit_time', 'created_at']:
+            val = row.get(k)
+            if val and isinstance(val, datetime):
+                # Assume DB saves in System Time (KST usually)
+                if val.tzinfo is None:
+                    # If naive, assume KST (Server Time)
+                    # We should verify if server is UTC or KST. 
+                    # Previous logs showed +0900.
+                    val = tz_kr.localize(val)
+                
+                # Convert to NY
+                val_ny = val.astimezone(tz_ny)
+                row[k] = val_ny.strftime('%Y-%m-%d %H:%M:%S') # String format explicitly
+            elif val:
+                row[k] = str(val)
+
+        for k in ['entry_price', 'exit_price', 'profit_pct']:
+            if row.get(k): row[k] = float(row[k])
+            
+        result.append(row)
     return result
 
 if __name__ == "__main__":

@@ -286,6 +286,23 @@ header h1 {
   /* Dashboard mobile improvements */
   .glass-panel {
     border-radius: 12px;
+    padding: 1rem !important;
+    /* Ensure override works */
+  }
+
+  /* Global Page Title Mobile Fix */
+  .page-title {
+    font-size: 1.5rem !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.2;
+    margin-bottom: 0.25rem;
+  }
+
+  .page-subtitle {
+    font-size: 0.9rem;
+    margin-bottom: 1.5rem;
   }
 }
 
@@ -611,5 +628,28 @@ header h1 {
 @media (max-width: 480px) {
   .score-progress-container {
     margin-top: 8px !important;
+  }
+}
+
+/* Mobile Header Title */
+.mobile-header-title {
+  display: none;
+  font-size: 1.2rem;
+  font-weight: 800;
+  background: linear-gradient(to right, #60a5fa, #34d399);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  position: fixed;
+  top: 0;
+  left: 1rem;
+  height: 56px;
+  align-items: center;
+  z-index: 1001;
+  letter-spacing: -0.5px;
+}
+
+@media (max-width: 768px) {
+  .mobile-header-title {
+    display: flex;
   }
 }

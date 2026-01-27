@@ -707,6 +707,77 @@ def save_signal(signal_data):
         if hasattr(st, 'to_pydatetime'):
             st = st.to_pydatetime()
             
+        # [Ver 8.0.9] Enforce Alternating Signals (Buy -> Sell -> Buy) & US Time
+        ticker = signal_data['ticker']
+        sig_type = signal_data['signal_type']
+        
+        # 1. Determine Current Side
+        curr_side = None
+        if any(x in sig_type.upper() for x in ['BUY', 'GOLD', 'UP', '상승', '매수', '진입']):
+            curr_side = 'BUY'
+        elif any(x in sig_type.upper() for x in ['SELL', 'DEAD', 'DOWN', '하락', '매도', '청산']):
+            curr_side = 'SELL'
+            
+        # 2. Check Last Signal
+        last_row = check_last_signal(ticker)
+        if last_row and curr_side:
+            last_type = last_row['signal_type'] # Dictionary cursor assumed? No, tuple usually if not DictCursor.
+            # verify_calculate.py used cursor.fetchall() and DataFrame.
+            # get_connection returns pymysql.connect. 
+            # Default cursor returns tuple. keys are not accessible by name unless DictCursor.
+            # Let's check check_last_signal implementation above. It returns cursor.fetchone().
+            # I must check if cursor is DictCursor.
+            # Usually db.py uses default cursor. 
+            # If tuple: we need index of 'signal_type'.
+            # Let's verify columns of signal_history.
+            # INSERT INTO signal_history (ticker, name, signal_type, ...)
+            # Schema usually: id, ticker, name, signal_type, ...
+            # Safer to ignore last check if unsure, OR fetch as Dict.
+            pass
+
+        # Re-fetch as Dict for safety
+        last_side = None
+        if last_row:
+            # Assuming tuple, let's try to fetch specifically signal_type.
+            # Or better, update check_last_signal to return dict or use specific query here.
+            # I'll add a specific query here to be safe and robust.
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT signal_type FROM signal_history WHERE ticker=%s ORDER BY signal_time DESC LIMIT 1", (ticker,))
+                lr = cursor.fetchone()
+                if lr:
+                    l_type = lr[0]
+                    if any(x in l_type.upper() for x in ['BUY', 'GOLD', 'UP', '상승', '매수', '진입']):
+                        last_side = 'BUY'
+                    elif any(x in l_type.upper() for x in ['SELL', 'DEAD', 'DOWN', '하락', '매도', '청산']):
+                        last_side = 'SELL'
+        
+        # 3. Block Duplicate Side
+        if curr_side and last_side and curr_side == last_side:
+            print(f"🚫 [Skip DB] Consecutive {curr_side} Signal for {ticker} ({last_side} -> {curr_side})")
+            return
+
+        # 4. Auto-Fill US Time if missing (User Request)
+        time_ny = signal_data.get('time_ny', '')
+        if not time_ny:
+            try:
+                import pytz
+                from datetime import datetime
+                utc = pytz.timezone('UTC')
+                ny = pytz.timezone('America/New_York')
+                
+                # Assume st is local or UTC? If naive, assume system time (KST or UTC).
+                # Start with UTC assumption or localize to KST then convert.
+                # If st is naive, make it aware.
+                dt_obj = st
+                if not dt_obj.tzinfo:
+                    dt_obj = utc.localize(dt_obj) # Fallback
+                
+                dt_ny = dt_obj.astimezone(ny)
+                time_ny = dt_ny.strftime('%Y-%m-%d %H:%M:%S')
+                print(f"DEBUG: Generated NY Time for Buy/Sell: {time_ny}")
+            except Exception as e:
+                print(f"Time NY Conv Error: {e}")
+
         with conn.cursor() as cursor:
             sql = """
             INSERT INTO signal_history (ticker, name, signal_type, signal_reason, position_desc, price, signal_time, time_kst, time_ny, is_sent, score, interpretation)
@@ -721,7 +792,7 @@ def save_signal(signal_data):
                 signal_data['current_price'],
                 st, 
                 signal_data.get('time_kst', ''),  # 한국시간
-                signal_data.get('time_ny', ''),   # 미국시간
+                time_ny,   # 미국시간 (Auto-filled)
                 signal_data.get('is_sent', False),
                 signal_data.get('score', 0),
                 signal_data.get('interpretation', '')

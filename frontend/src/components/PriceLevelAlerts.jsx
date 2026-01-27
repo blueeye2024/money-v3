@@ -236,7 +236,6 @@ const PriceLevelAlerts = ({ ticker, currentPrice }) => {
         const isActive = data.is_active === 'Y';
 
         // [Ver 6.0.1] Real-time validation of trigger state using currentPrice
-        // BUY: currentPrice >= alertPrice, SELL: currentPrice <= alertPrice
         let isTriggered = false;
         if (isActive && alertPrice > 0 && currentPrice > 0) {
             if (type === 'BUY') {
@@ -249,9 +248,10 @@ const PriceLevelAlerts = ({ ticker, currentPrice }) => {
         const label = LABELS[type][stage - 1];
         const typeCode = type === 'BUY' ? 'B' : 'S';
         const soundCode = `U${tickerCode}${typeCode}${stage}`;
+        const rowStyle = styles.row(isTriggered);
 
         return (
-            <div key={key} style={styles.row(isTriggered)}>
+            <div key={key} style={rowStyle} className="alert-row">
                 {/* Label */}
                 <div style={styles.label}>
                     {label} <span style={styles.soundCode}>({soundCode})</span>
@@ -266,7 +266,7 @@ const PriceLevelAlerts = ({ ticker, currentPrice }) => {
                     onChange={(e) => handleInputChange(key, e.target.value)}
                     onFocus={() => { focusedInputRef.current = key; }}
                     onBlur={() => { focusedInputRef.current = null; }}
-                    style={styles.input}
+                    className="alert-input"
                 />
 
                 {/* Toggle Button */}
@@ -298,12 +298,42 @@ const PriceLevelAlerts = ({ ticker, currentPrice }) => {
     return (
         <div style={{ ...styles.container, border: `1px solid ${themeColor}22` }}>
             <style>{cssAnimation}</style>
+            <style>{`
+                .price-alerts-grid {
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 8px;
+                }
+                .alert-input {
+                    width: 64px;
+                    padding: 2px 4px;
+                    background: #1e293b;
+                    border: 1px solid #334155;
+                    color: #fff;
+                    border-radius: 4px;
+                    text-align: right;
+                    font-size: 0.75rem;
+                    height: 24px;
+                }
+                @media (max-width: 480px) {
+                    .price-alerts-grid {
+                        grid-template-columns: 1fr; /* Stack vertically */
+                        gap: 12px;
+                    }
+                    .alert-input {
+                        width: 50px; /* Smaller width */
+                    }
+                    .alert-row {
+                        padding: 4px 6px !important;
+                    }
+                }
+            `}</style>
 
             <h4 style={{ ...styles.header, color: themeColor }}>
                 📢 {ticker} Price Alerts
             </h4>
 
-            <div style={styles.grid}>
+            <div className="price-alerts-grid">
                 {/* BUY Section */}
                 <div>
                     <div style={styles.sectionHeader('#10b981')}>📈 매수 (Breakout)</div>

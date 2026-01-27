@@ -4,7 +4,9 @@ import Swal from 'sweetalert2';
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, Area, ComposedChart
 } from 'recharts';
+import './LabPage.css'; // Import Responsive CSS
 
+// Helper: Calculate Statistics
 // Helper: Calculate Statistics
 const calculateStats = (data, buyScore, sellScore) => {
     if (!data || data.length === 0) return null;
@@ -12,6 +14,7 @@ const calculateStats = (data, buyScore, sellScore) => {
     let maxPrice = -Infinity, minPrice = Infinity, sumPrice = 0;
     let maxScore = -Infinity, minScore = Infinity, sumScore = 0;
     let buyCount = 0, sellCount = 0;
+    let hasPosition = false;
 
     data.forEach(d => {
         const p = d.close;
@@ -25,9 +28,20 @@ const calculateStats = (data, buyScore, sellScore) => {
         if (s < minScore) minScore = s;
         sumScore += s;
 
-        // Simple count of candles above/below threshold
-        if (s >= buyScore) buyCount++;
-        if (s <= sellScore) sellCount++;
+        // Trade Cycle Count Logic
+        if (!hasPosition) {
+            // Check Buy
+            if (s >= buyScore) {
+                buyCount++;
+                hasPosition = true;
+            }
+        } else {
+            // Check Sell
+            if (s <= sellScore) {
+                sellCount++;
+                hasPosition = false;
+            }
+        }
     });
 
     return {
@@ -156,7 +170,7 @@ const subTdValStyle = { padding: '4px', textAlign: 'right', fontWeight: 'bold', 
 const LabPage = () => {
     // UI State
     const [period, setPeriod] = useState('5m');
-    const [activeTab, setActiveTab] = useState('list'); // 'list' or 'chart'
+    const [activeTab, setActiveTab] = useState('chart'); // 'list' or 'chart'
 
     // Config State
     const [buyScore, setBuyScore] = useState(70);
@@ -471,10 +485,10 @@ const LabPage = () => {
     };
 
     return (
-        <div style={{ padding: '20px', minHeight: '100vh', background: '#0f172a', color: '#fff' }}>
+        <div className="lab-container">
             {/* Header Toolbar */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid #334155', paddingBottom: '15px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+            <div className="lab-header-toolbar">
+                <div className="lab-title-group">
                     <h2 style={{ margin: 0, color: '#38bdf8' }}>🧪 Lab 2.0</h2>
 
                     {/* Tab Switcher */}
@@ -495,9 +509,9 @@ const LabPage = () => {
                 </div>
 
                 {/* Right Actions: Config & Refresh */}
-                <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+                <div className="lab-actions-group">
                     {/* Config Inputs */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#1e293b', padding: '6px 12px', borderRadius: '6px', fontSize: '0.9rem' }}>
+                    <div className="lab-config-group">
                         <span style={{ color: '#ef4444' }}>Buy Line:</span>
                         <input
                             type="number"
@@ -517,24 +531,21 @@ const LabPage = () => {
                         </button>
                     </div>
 
-                    <button onClick={() => activeTab === 'list' ? fetchData() : fetchChartData()} style={{ background: '#334155', border: 'none', color: '#fff', padding: '8px', borderRadius: '6px', cursor: 'pointer' }}>
-                        🔄
-                    </button>
                 </div>
             </div>
 
             {/* Filter Bar */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                    <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={inputStyle} />
+            <div className="lab-filter-bar">
+                <div className="lab-filter-inputs">
+                    <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="lab-input-date" />
                     <span style={{ color: '#64748b' }}>~</span>
-                    <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} style={inputStyle} />
-                    <button onClick={() => activeTab === 'list' ? fetchData() : fetchChartData()} style={btnStyle}>🔍 Search</button>
+                    <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="lab-input-date" />
+                    <button onClick={() => activeTab === 'list' ? fetchData() : fetchChartData()} className="lab-btn">🔍 Search</button>
                 </div>
 
                 {/* List Specific Controls */}
                 {activeTab === 'list' && (
-                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                    <div className="lab-filter-controls">
                         {/* Ticker Radio */}
                         <div style={{ display: 'flex', gap: '5px', background: '#1e293b', padding: '4px', borderRadius: '6px', border: '1px solid #475569' }}>
                             {['SOXL', 'SOXS'].map(t => (
@@ -566,107 +577,109 @@ const LabPage = () => {
             </div>
 
             {/* Content Area */}
-            {activeTab === 'list' ? (
-                // --- LIST VIEW ---
-                <div style={{ background: '#1e293b', borderRadius: '12px', overflow: 'hidden' }}>
-                    <div style={{ overflowX: 'auto' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-                            <thead>
-                                <tr style={{ background: '#0f172a', color: '#94a3b8' }}>
-                                    <th style={{ ...thStyle, width: '40px', textAlign: 'center' }}>
-                                        <input type="checkbox" onChange={toggleSelectAll} checked={data.length > 0 && selectedIds.length === data.length} />
-                                    </th>
-                                    <th style={thStyle}>Time (US)</th>
-                                    <th style={thStyle}>Close</th>
-                                    <th style={thStyle}>Chg(%)</th>
-                                    <th style={{ ...thStyle, color: '#fbbf24' }}>Total</th>
-                                    <th style={thStyle}>C1</th>
-                                    <th style={thStyle}>C2</th>
-                                    <th style={thStyle}>C3</th>
-                                    <th style={thStyle}>Eng</th>
-                                    <th style={thStyle}>RSI</th>
-                                    <th style={thStyle}>MACD</th>
-                                    <th style={thStyle}>Vol</th>
-                                    <th style={thStyle}>ATR</th>
-                                    <th style={thStyle}>Ver</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {data.map((row) => {
-                                    const sum = (row.score_cheongan_1 || 0) + (row.score_cheongan_2 || 0) + (row.score_cheongan_3 || 0) +
-                                        (row.score_energy || 0) + (row.score_rsi || 0) + (row.score_macd || 0) +
-                                        (row.score_vol || 0) + (row.score_atr || 0);
-
-                                    const isMismatch = Math.abs(row.total_score - sum) > 1;
-                                    const isSelected = selectedIds.includes(row.id);
-                                    const rowBg = isMismatch && row.total_score !== 0 ? 'rgba(239, 68, 68, 0.15)' : isSelected ? '#334155' : 'transparent';
-
-                                    return (
-                                        <tr key={row.id} style={{ borderBottom: '1px solid #334155', background: rowBg }}>
-                                            <td style={{ ...tdStyle, textAlign: 'center' }}>
-                                                <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(row.id)} />
-                                            </td>
-                                            <td style={tdStyle}>{new Date(row.candle_time).toLocaleString()}</td>
-                                            <td style={tdStyle}>{row.close}</td>
-                                            <td style={{ ...tdStyle, color: row.change_pct > 0 ? '#4ade80' : row.change_pct < 0 ? '#f87171' : '#fff' }}>
-                                                {row.change_pct}%
-                                            </td>
-                                            <td style={{ ...tdStyle, color: isMismatch ? '#f87171' : '#fbbf24', fontWeight: 'bold' }}>{row.total_score}</td>
-                                            <td style={tdStyle}>{row.score_cheongan_1}</td>
-                                            <td style={tdStyle}>{row.score_cheongan_2}</td>
-                                            <td style={tdStyle}>{row.score_cheongan_3}</td>
-                                            <td style={tdStyle}>{row.score_energy}</td>
-                                            <td style={tdStyle}>{row.score_rsi}</td>
-                                            <td style={tdStyle}>{row.score_macd}</td>
-                                            <td style={tdStyle}>{row.score_vol}</td>
-                                            <td style={tdStyle}>{row.score_atr}</td>
-                                            <td style={{ ...tdStyle, fontSize: '0.75rem', color: '#94a3b8' }}>{row.algo_version || '-'}</td>
-                                        </tr>
-                                    );
-                                })}
-                                {data.length === 0 && (
-                                    <tr>
-                                        <td colSpan="15" style={{ padding: '30px', textAlign: 'center', color: '#64748b' }}>
-                                            No data found.
-                                        </td>
+            {
+                activeTab === 'list' ? (
+                    // --- LIST VIEW ---
+                    <div style={{ background: '#1e293b', borderRadius: '12px', overflow: 'hidden' }}>
+                        <div style={{ overflowX: 'auto' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                                <thead>
+                                    <tr style={{ background: '#0f172a', color: '#94a3b8' }}>
+                                        <th style={{ ...thStyle, width: '40px', textAlign: 'center' }}>
+                                            <input type="checkbox" onChange={toggleSelectAll} checked={data.length > 0 && selectedIds.length === data.length} />
+                                        </th>
+                                        <th style={thStyle}>Time (US)</th>
+                                        <th style={thStyle}>Close</th>
+                                        <th style={thStyle}>Chg(%)</th>
+                                        <th style={{ ...thStyle, color: '#fbbf24' }}>Total</th>
+                                        <th style={thStyle}>C1</th>
+                                        <th style={thStyle}>C2</th>
+                                        <th style={thStyle}>C3</th>
+                                        <th style={thStyle}>Eng</th>
+                                        <th style={thStyle}>RSI</th>
+                                        <th style={thStyle}>MACD</th>
+                                        <th style={thStyle}>Vol</th>
+                                        <th style={thStyle}>ATR</th>
+                                        <th style={thStyle}>Ver</th>
                                     </tr>
-                                )}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody>
+                                    {data.map((row) => {
+                                        const sum = (row.score_cheongan_1 || 0) + (row.score_cheongan_2 || 0) + (row.score_cheongan_3 || 0) +
+                                            (row.score_energy || 0) + (row.score_rsi || 0) + (row.score_macd || 0) +
+                                            (row.score_vol || 0) + (row.score_atr || 0);
+
+                                        const isMismatch = Math.abs(row.total_score - sum) > 1;
+                                        const isSelected = selectedIds.includes(row.id);
+                                        const rowBg = isMismatch && row.total_score !== 0 ? 'rgba(239, 68, 68, 0.15)' : isSelected ? '#334155' : 'transparent';
+
+                                        return (
+                                            <tr key={row.id} style={{ borderBottom: '1px solid #334155', background: rowBg }}>
+                                                <td style={{ ...tdStyle, textAlign: 'center' }}>
+                                                    <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(row.id)} />
+                                                </td>
+                                                <td style={tdStyle}>{new Date(row.candle_time).toLocaleString()}</td>
+                                                <td style={tdStyle}>{row.close}</td>
+                                                <td style={{ ...tdStyle, color: row.change_pct > 0 ? '#4ade80' : row.change_pct < 0 ? '#f87171' : '#fff' }}>
+                                                    {row.change_pct}%
+                                                </td>
+                                                <td style={{ ...tdStyle, color: isMismatch ? '#f87171' : '#fbbf24', fontWeight: 'bold' }}>{row.total_score}</td>
+                                                <td style={tdStyle}>{row.score_cheongan_1}</td>
+                                                <td style={tdStyle}>{row.score_cheongan_2}</td>
+                                                <td style={tdStyle}>{row.score_cheongan_3}</td>
+                                                <td style={tdStyle}>{row.score_energy}</td>
+                                                <td style={tdStyle}>{row.score_rsi}</td>
+                                                <td style={tdStyle}>{row.score_macd}</td>
+                                                <td style={tdStyle}>{row.score_vol}</td>
+                                                <td style={tdStyle}>{row.score_atr}</td>
+                                                <td style={{ ...tdStyle, fontSize: '0.75rem', color: '#94a3b8' }}>{row.algo_version || '-'}</td>
+                                            </tr>
+                                        );
+                                    })}
+                                    {data.length === 0 && (
+                                        <tr>
+                                            <td colSpan="15" style={{ padding: '30px', textAlign: 'center', color: '#64748b' }}>
+                                                No data found.
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
-                </div>
-            ) : (
-                // --- CHART VIEW ---
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                    {chartLoading ? (
-                        <div style={{ width: '100%', textAlign: 'center', padding: '50px', color: '#94a3b8' }}>Loading Charts...</div>
-                    ) : (
-                        <>
-                            <div style={{ display: 'flex', gap: '20px' }}>
-                                {renderChart('SOXL', chartData.SOXL, { showPriceOverlay: true })}
-                                {renderChart('SOXS', chartData.SOXS, { showPriceOverlay: true })}
-                            </div>
+                ) : (
+                    // --- CHART VIEW ---
+                    <div className="lab-chart-view">
+                        {chartLoading ? (
+                            <div style={{ width: '100%', textAlign: 'center', padding: '50px', color: '#94a3b8' }}>Loading Charts...</div>
+                        ) : (
+                            <>
+                                <div className="lab-chart-row">
+                                    {renderChart('SOXL', chartData.SOXL, { showPriceOverlay: true })}
+                                    {renderChart('SOXS', chartData.SOXS, { showPriceOverlay: true })}
+                                </div>
 
-                            {/* Analysis Panels */}
-                            <div style={{ display: 'flex', gap: '20px' }}>
-                                <AnalysisPanel ticker="SOXL" data={chartData.SOXL} buyScore={buyScore} sellScore={sellScore} />
-                                <AnalysisPanel ticker="SOXS" data={chartData.SOXS} buyScore={buyScore} sellScore={sellScore} />
-                            </div>
+                                {/* Analysis Panels */}
+                                <div className="lab-chart-row">
+                                    <AnalysisPanel ticker="SOXL" data={chartData.SOXL} buyScore={buyScore} sellScore={sellScore} />
+                                    <AnalysisPanel ticker="SOXS" data={chartData.SOXS} buyScore={buyScore} sellScore={sellScore} />
+                                </div>
 
-                            {/* UPRO Chart (Full Width) */}
-                            <div style={{ display: 'flex' }}>
-                                {renderChart('UPRO', chartData.UPRO || [], {
-                                    dataKey: 'close',
-                                    color: '#3b82f6',
-                                    yDomain: ['auto', 'auto'],
-                                    showThresholds: false,
-                                    titleSub: '(Price)'
-                                })}
-                            </div>
-                        </>
-                    )}
-                </div>
-            )}
+                                {/* UPRO Chart (Full Width) */}
+                                <div className="lab-chart-row">
+                                    {renderChart('UPRO', chartData.UPRO || [], {
+                                        dataKey: 'close',
+                                        color: '#3b82f6',
+                                        yDomain: ['auto', 'auto'],
+                                        showThresholds: false,
+                                        titleSub: '(Price)'
+                                    })}
+                                </div>
+                            </>
+                        )}
+                    </div>
+                )
+            }
         </div>
     );
 };

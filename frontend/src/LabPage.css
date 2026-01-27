@@ -1,0 +1,200 @@
+/* LabPage.css */
+
+/* General Container */
+.lab-container {
+    padding: 20px;
+    min-height: 100vh;
+    background: #0f172a;
+    color: #fff;
+}
+
+/* Header & Toolbar */
+.lab-header-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    border-bottom: 1px solid #334155;
+    padding-bottom: 15px;
+    flex-wrap: wrap;
+    /* Allow wrapping on small screens */
+    gap: 15px;
+}
+
+.lab-title-group {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.lab-actions-group {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+/* Config Inputs Group */
+.lab-config-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #1e293b;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    flex-wrap: wrap;
+}
+
+/* Filter Bar */
+.lab-filter-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.lab-filter-inputs {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.lab-filter-controls {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+/* Chart Layout */
+.lab-chart-view {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.lab-chart-row {
+    display: flex;
+    gap: 20px;
+}
+
+/* Chart Container Wrapper for standardized styling */
+.lab-chart-wrapper {
+    flex: 1;
+    min-width: 0;
+    background: #1e293b;
+    padding: 15px;
+    border-radius: 12px;
+}
+
+.lab-chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    border-bottom: 1px solid #334155;
+    padding-bottom: 10px;
+}
+
+.lab-chart-body {
+    height: 400px;
+}
+
+/* Analysis Panel */
+.lab-panel-wrapper {
+    flex: 1;
+    min-width: 0;
+    background: #1e293b;
+    padding: 15px;
+    border-radius: 12px;
+    font-size: 0.85rem;
+}
+
+/* Inputs & Buttons Helper Classes (Replacing inline styles where feasible for consistency) */
+.lab-input-date {
+    background: #1e293b;
+    border: 1px solid #475569;
+    color: #fff;
+    padding: 5px;
+    border-radius: 4px;
+}
+
+.lab-btn {
+    background: #334155;
+    border: none;
+    color: #fff;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+/* Mobile Media Query */
+@media (max-width: 768px) {
+    .lab-container {
+        padding: 10px;
+    }
+
+    /* Stack Header */
+    .lab-header-toolbar {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .lab-actions-group {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    /* Config inputs stack */
+    .lab-config-group {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    /* Stack Filter Bar */
+    .lab-filter-bar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .lab-filter-inputs {
+        justify-content: space-between;
+        flex-wrap: nowrap;
+        /* Force single line */
+        width: 100%;
+        overflow-x: auto;
+        /* Handle overflow if screens are tiny */
+    }
+
+    .lab-input-date {
+        flex: 1;
+        /* Share width */
+        min-width: 0;
+        /* Allow shrinking */
+        font-size: 0.8rem;
+    }
+
+    .lab-btn {
+        font-size: 0.8rem;
+        padding: 5px 8px;
+        white-space: nowrap;
+    }
+
+    .lab-filter-controls {
+        justify-content: flex-end;
+    }
+
+    /* Stack Charts */
+    .lab-chart-row {
+        flex-direction: column;
+    }
+
+    /* Reduce Chart Height on Mobile */
+    .lab-chart-body {
+        height: 300px;
+    }
+}

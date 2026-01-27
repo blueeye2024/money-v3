@@ -136,7 +136,7 @@ const TradingJournalPage = () => {
         <div className="page-container">
             {/* Super Container - Wrapping everything - Transparent Dark Glass */}
             <div className="glass-panel" style={{
-                padding: '2.5rem',
+                // padding: '2.5rem', // Removed hardcoded padding to allow CSS override
                 background: 'rgba(59, 130, 246, 0.08)',
                 borderRadius: '30px',
                 border: '1px solid rgba(147, 197, 253, 0.2)',
@@ -428,7 +428,7 @@ const TradingJournalPage = () => {
             {
                 isModalOpen && (
                     <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.7)', display: 'flex', justifyContent: 'center', padding: '2rem', zIndex: 1000, alignItems: 'center' }}>
-                        <div className="glass-panel" style={{ width: '600px', padding: '2rem', maxHeight: '90vh', overflowY: 'auto', position: 'relative' }}>
+                        <div className="glass-panel" style={{ width: '100%', maxWidth: '600px', padding: '2rem', maxHeight: '90vh', overflowY: 'auto', position: 'relative' }}>
                             <button onClick={handleCloseModal} style={{ position: 'absolute', top: '1.5rem', right: '1.5rem', background: 'transparent', border: 'none', color: '#fff', fontSize: '1.5rem', cursor: 'pointer' }}>×</button>
                             <h2 style={{ marginBottom: '1.5rem', color: '#ffffff', fontWeight: '800', textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>{editingId ? '거래 수정' : '새 매매 기록'}</h2>
                             <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -534,7 +534,7 @@ const TradingJournalPage = () => {
             {
                 showCloseModal && (
                     <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.7)', display: 'flex', justifyContent: 'center', padding: '2rem', zIndex: 1000, alignItems: 'center' }}>
-                        <div className="glass-panel" style={{ width: '500px', padding: '2rem', maxHeight: '90vh', overflowY: 'auto' }}>
+                        <div className="glass-panel" style={{ width: '100%', maxWidth: '500px', padding: '2rem', maxHeight: '90vh', overflowY: 'auto' }}>
                             <h2 style={{ marginBottom: '1.5rem' }}>거래 청산</h2>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                                 <div style={{ display: 'flex', gap: '1rem' }}>
