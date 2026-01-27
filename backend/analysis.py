@@ -913,7 +913,7 @@ def run_analysis(holdings=None, force_update=False):
     # -------------------------------------------------------------
     # MASTER CONTROL TOWER ONLY: SOXL, SOXS, UPRO
     # -------------------------------------------------------------
-    from db import get_total_capital, update_market_status
+    from db import get_total_capital_usd_aggregate, update_market_status
     from kis_api_v2 import kis_client  # Import singleton instance
     
     # Exchange Mapping for Speed
@@ -973,7 +973,7 @@ def run_analysis(holdings=None, force_update=False):
     
     # Fetch Holdings & Capital (for display only)
     # holdings is already passed or fetched
-    total_capital = get_total_capital()
+    total_capital = get_total_capital_usd_aggregate()
     
     # 4. Generate Trade Guidelines (Simplified)cators Data with Change %
     indicators = {}
@@ -1021,10 +1021,9 @@ def run_analysis(holdings=None, force_update=False):
         except Exception as e:
              indicators[name] = {"value": 0.0, "change": 0.0}
 
-    # Fetch Total Capital
     try:
-        from db import get_total_capital
-        total_cap = get_total_capital()
+        from db import get_total_capital_usd_aggregate
+        total_cap = get_total_capital_usd_aggregate()
     except:
         total_cap = 10000.0
 

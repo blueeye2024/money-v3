@@ -142,7 +142,7 @@ class TickerSettingUpdate(BaseModel):
     is_visible: bool
 
 class CapitalModel(BaseModel):
-    amount: float
+    amount: float = 0
 
 class HoldingUpdateModel(BaseModel):
     ticker: str
@@ -206,7 +206,7 @@ def set_sms_setting(setting: SMSSettingModel):
 def get_capital_api():
     try:
         from db import get_total_capital
-        return {"amount": get_total_capital()}
+        return get_total_capital()
     except Exception as e:
         return {"error": str(e)}
 

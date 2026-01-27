@@ -7,7 +7,7 @@ const JournalPage = () => {
     const [stocks, setStocks] = useState([]);
     const [exchangeRate, setExchangeRate] = useState(1444.5);
     const [totalCapitalKRW, setTotalCapitalKRW] = useState(14445000);
-    const [totalCapitalKRWInput, setTotalCapitalKRWInput] = useState('14,445,000'); // [Fixed] Add state for formatted input
+    const [totalCapitalKRWInput, setTotalCapitalKRWInput] = useState('14,445,000');
     const [showForm, setShowForm] = useState(false);
     const [showStockManager, setShowStockManager] = useState(false);
     const [loading, setLoading] = useState(true);
@@ -114,8 +114,8 @@ const JournalPage = () => {
                 // Determine is_holding
                 let isHolding = false;
                 if (typeof meta.is_holding !== 'undefined') {
-                    // Robust check for 1, '1', true
-                    isHolding = meta.is_holding === 1 || meta.is_holding === '1' || meta.is_holding === true;
+                    // Robust check for 'Y', 1, '1', true
+                    isHolding = meta.is_holding === 'Y' || meta.is_holding === 1 || meta.is_holding === '1' || meta.is_holding === true;
                 } else if (typeof tx.is_holding !== 'undefined') {
                     isHolding = tx.is_holding === 1 || tx.is_holding === true;
                 } else {
@@ -178,9 +178,21 @@ const JournalPage = () => {
     const fetchCapital = async () => {
         try {
             const res = await axios.get('/api/capital');
-            const cap = res.data.amount || 14445000;
-            setTotalCapitalKRW(cap);
-            setTotalCapitalKRWInput(cap.toLocaleString()); // [Fixed] Sync Formatted Input
+            const data = res.data;
+
+            let krw = 0;
+            if (typeof data === 'number' || typeof data === 'string') {
+                krw = parseFloat(data);
+            } else if (data && data.amount !== undefined) {
+                krw = data.amount;
+            } else if (data && data.krw !== undefined) {
+                krw = data.krw;
+            } else {
+                krw = 14445000;
+            }
+
+            setTotalCapitalKRW(krw);
+            setTotalCapitalKRWInput(krw.toLocaleString());
         } catch (e) { console.error(e); }
     };
 
@@ -206,36 +218,32 @@ const JournalPage = () => {
     };
 
     const handleCapitalChange = (e) => {
-        // Allow digits and comma only
         const raw = e.target.value.replace(/[^0-9,]/g, '');
         setTotalCapitalKRWInput(raw);
     };
 
-    const handleCapitalBlur = async () => {
-        // Parse "100,000" -> 100000
-        const raw = totalCapitalKRWInput.replace(/,/g, '');
-        const num = parseInt(raw, 10);
-        if (!isNaN(num)) {
-            setTotalCapitalKRW(num);
-            setTotalCapitalKRWInput(num.toLocaleString()); // Re-format
-            try {
-                // Save to Backend
-                await axios.post('/api/capital', { amount: num });
-                console.log("Capital saved:", num);
-            } catch (e) { console.error("Save capital error:", e); }
-        } else {
-            // Revert if invalid
-            setTotalCapitalKRWInput(totalCapitalKRW.toLocaleString());
-        }
+    const handleCapitalUSDChange = (e) => {
+        const raw = e.target.value.replace(/[^0-9,]/g, '');
+        setTotalCapitalUSDInput(raw);
     };
 
     const saveCapital = async () => {
         try {
-            const val = parseFloat(totalCapitalKRWInput.replace(/,/g, '')) || 0;
-            await axios.post('/api/capital', { amount: val });
-            setTotalCapitalKRW(val);
-            alert('총자산이 저장되었습니다.');
-        } catch (e) { console.error(e); alert('저장 실패'); }
+            const valKRW = parseFloat(totalCapitalKRWInput.replace(/,/g, '')) || 0;
+
+            await axios.post('/api/capital', { amount: valKRW });
+
+            setTotalCapitalKRW(valKRW);
+            // alert('총자산이 저장되었습니다.'); // User requested removal
+            console.log('Capital saved successfully');
+        } catch (e) {
+            console.error(e);
+            // alert('저장 실패'); 
+        }
+    };
+
+    const handleCapitalBlur = async () => {
+        saveCapital(); // Auto-save on blur
     };
 
     const handleSubmit = async (e) => {
@@ -345,9 +353,17 @@ const JournalPage = () => {
         } catch (e) { alert('삭제 실패'); }
     };
 
-    const totalValueUSD = allHoldings.reduce((sum, h) => sum + h.currentValue, 0);
+    // Total Value strictly unified to USD for calculation
+    const totalValueUSD = allHoldings.reduce((sum, h) => {
+        const val = h.currentValue || 0;
+        const isKRW = h.ticker && /^[0-9]{6}$/.test(h.ticker); // Simple KRW ticker check
+        return sum + (isKRW ? (val / exchangeRate) : val);
+    }, 0);
     const totalValueKRW = totalValueUSD * exchangeRate;
-    const totalCapitalUSD = totalCapitalKRW / exchangeRate;
+
+    // Aggregate Capital for Display (USD + KRW/Rate)
+    const totalCapitalAggregateUSD = (totalCapitalKRW / exchangeRate);
+    // const totalCapitalUSD = totalCapitalKRW / exchangeRate; // REMOVED
     const totalProfit = allHoldings.reduce((sum, h) => sum + h.profit, 0);
     const totalInvested = allHoldings.reduce((sum, h) => sum + h.totalCost, 0);
     const totalProfitPct = totalInvested > 0 ? (totalProfit / totalInvested) * 100 : 0;
@@ -510,7 +526,7 @@ const JournalPage = () => {
                                                         <td style={{ textAlign: 'right', padding: '0.6rem 0.5rem', fontWeight: '600', color: profit >= 0 ? '#34d399' : '#f87171', fontSize: '0.75rem' }}>
                                                             {profit >= 0 ? '+' : ''}₩{profitKRW.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                                         </td>
-                                                        <td style={{ textAlign: 'right', padding: '0.6rem 0.5rem', color: '#93c5fd', fontWeight: '700' }}>{(total > 0 ? value / total * 100 : 0).toFixed(1)}%</td>
+                                                        <td style={{ textAlign: 'right', padding: '0.6rem 0.5rem', color: '#93c5fd', fontWeight: '700' }}>{(total > 0 ? (value / total * 100) : 0).toFixed(1)}%</td>
                                                         <td style={{ textAlign: 'right', padding: '0.6rem 0.5rem', color: '#e0e7ff', fontWeight: '600' }}>${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
                                                     </tr>
                                                 );
@@ -559,13 +575,13 @@ const JournalPage = () => {
                                         <Pie
                                             data={[
                                                 { name: '주식', value: totalValueUSD },
-                                                { name: '현금', value: Math.max(0, totalCapitalUSD - totalValueUSD) }
+                                                { name: '현금', value: Math.max(0, totalCapitalAggregateUSD - totalValueUSD) }
                                             ]}
                                             cx="50%" cy="50%"
                                             innerRadius={65} outerRadius={105}
                                             paddingAngle={5}
                                             dataKey="value"
-                                            label={(entry) => `${entry.name}\n${((entry.value / (totalValueUSD + Math.max(0, totalCapitalUSD - totalValueUSD))) * 100).toFixed(0)}%`}
+                                            label={(entry) => `${entry.name}\n${((entry.value / Math.max(1, totalCapitalAggregateUSD)) * 100).toFixed(0)}%`}
                                             labelLine={false}
                                             activeIndex={activeIndexAsset}
                                             activeShape={(props) => {
@@ -611,9 +627,9 @@ const JournalPage = () => {
                                     <tbody>
                                         {[
                                             { name: '주식 (Stocks)', value: totalValueUSD, color: '#60a5fa', grad: 'grad_asset_1' },
-                                            { name: '현금 (Cash)', value: Math.max(0, totalCapitalUSD - totalValueUSD), color: '#c084fc', grad: 'grad_asset_2' }
+                                            { name: '현금 (Cash)', value: Math.max(0, totalCapitalAggregateUSD - totalValueUSD), color: '#c084fc', grad: 'grad_asset_2' }
                                         ].map((item, idx) => {
-                                            const total = totalValueUSD + Math.max(0, totalCapitalUSD - totalValueUSD);
+                                            const total = totalValueUSD + Math.max(0, totalCapitalAggregateUSD - totalValueUSD);
                                             const valueKRW = item.value * (exchangeRate || 1400);
                                             return (
                                                 <tr key={item.name} style={{ borderBottom: '1px solid rgba(59,130,246,0.2)' }}>
@@ -661,6 +677,7 @@ const JournalPage = () => {
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
                                         <span style={{ color: '#93c5fd', fontWeight: '700', fontSize: '0.85rem' }}>💰 총자산 설정</span>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                            <span style={{ color: '#94a3b8', fontSize: '0.75rem', width: '30px' }}>KRW</span>
                                             <input
                                                 type="text"
                                                 value={totalCapitalKRWInput}
@@ -668,19 +685,19 @@ const JournalPage = () => {
                                                 onBlur={handleCapitalBlur}
                                                 style={{ width: '120px', padding: '4px 8px', textAlign: 'right', fontSize: '0.85rem', fontWeight: '700', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(59,130,246,0.4)', borderRadius: '4px', color: '#e0e7ff' }}
                                             />
-                                            <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>원</span>
+                                            <span style={{ color: '#94a3b8', fontSize: '0.8rem', width: '15px' }}>원</span>
                                         </div>
                                     </div>
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', fontSize: '0.8rem' }}>
                                         <div>
-                                            <div style={{ color: '#94a3b8', marginBottom: '0.2rem' }}>평가액</div>
+                                            <div style={{ color: '#94a3b8', marginBottom: '0.2rem' }}>평가액 (Total)</div>
                                             <div style={{ color: '#60a5fa', fontWeight: '700' }}>${totalValueUSD.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
                                             <div style={{ color: '#94a3b8', fontSize: '0.75rem' }}>₩{totalValueKRW.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
                                         </div>
                                         <div>
-                                            <div style={{ color: '#94a3b8', marginBottom: '0.2rem' }}>현금 비중</div>
-                                            <div style={{ color: '#c084fc', fontWeight: '700' }}>{totalCapitalUSD > 0 ? ((totalCapitalUSD - totalValueUSD) / totalCapitalUSD * 100).toFixed(1) : 0}%</div>
-                                            <div style={{ color: '#94a3b8', fontSize: '0.75rem' }}>${(totalCapitalUSD - totalValueUSD).toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+                                            <div style={{ color: '#94a3b8', marginBottom: '0.2rem' }}>현금 비중 (Cash)</div>
+                                            <div style={{ color: '#c084fc', fontWeight: '700' }}>{totalCapitalAggregateUSD > 0 ? ((totalCapitalAggregateUSD - totalValueUSD) / totalCapitalAggregateUSD * 100).toFixed(1) : 0}%</div>
+                                            <div style={{ color: '#94a3b8', fontSize: '0.75rem' }}>${(totalCapitalAggregateUSD - totalValueUSD).toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
                                         </div>
                                     </div>
                                 </div>

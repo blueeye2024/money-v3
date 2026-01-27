@@ -384,6 +384,7 @@ const DailyReportPage = () => {
                                 <div
                                     key={report.report_date}
                                     onClick={() => handleViewReport(report)}
+                                    className="report-list-item" /* Add class for mobile targeting */
                                     style={{
                                         background: 'rgba(30, 41, 59, 0.4)',
                                         padding: '16px', borderRadius: '12px',
@@ -392,8 +393,8 @@ const DailyReportPage = () => {
                                         transition: 'all 0.2s'
                                     }}
                                 >
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                        <div style={{ flex: 1 }}>
+                                    <div className="report-list-item-content" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                        <div style={{ flex: 1, minWidth: 0 /* Allow shrinking */ }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
                                                 <span style={{ fontSize: '1.1rem', fontWeight: 'bold', color: 'white', fontFamily: 'monospace' }}>
                                                     {report.report_date}
@@ -408,8 +409,8 @@ const DailyReportPage = () => {
                                                 {report.pre_market_strategy || '(전략 미입력)'}
                                             </p>
                                         </div>
-                                        <div style={{ textAlign: 'right', minWidth: '120px' }}>
-                                            <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: profitColor }}>
+                                        <div className="report-list-profit" style={{ textAlign: 'right', minWidth: '120px' }}>
+                                            <div className="report-list-profit-val" style={{ fontSize: '1.2rem', fontWeight: 'bold', color: profitColor }}>
                                                 {profitRate > 0 ? '+' : ''}{profitRate.toFixed(2)}%
                                             </div>
                                             <div style={{ fontSize: '0.8rem', color: parseFloat(report.profit_amount || 0) > 0 ? '#f87171' : parseFloat(report.profit_amount || 0) < 0 ? '#60a5fa' : '#94a3b8', marginTop: '2px' }}>
@@ -768,23 +769,55 @@ const DailyReportPage = () => {
                     .mobile-hidden-text {
                         display: none;
                     }
-                    .calendar-scroll-container {
-                        overflow-x: auto;
-                        -webkit-overflow-scrolling: touch;
-                        padding-bottom: 20px; /* Scroll Thumb Space */
-                        width: 100%;
+                    /* 1. FORCE CHARTS TO SHRINK */
+                    .recharts-wrapper, .recharts-surface {
+                        max-width: 100% !important;
+                        overflow: hidden;
+                    }
+
+                    /* 2. CALENDAR LAYER FIX */
+                    .calendar-layer {
+                        width: 100vw !important;
+                        max-width: 100% !important;
+                        overflow-x: auto !important;
+                        display: block;
+                        margin-left: -20px; /* Counteract padding if needed */
+                        width: calc(100% + 40px);
+                    }
+                    /* Force Content Width to trigger scroll inside layer */
+                    .calendar-layer > * {
+                        min-width: 600px !important;
                         display: block;
                     }
-                    /* Force Calendar Width to trigger scroll - More robust selector */
-                    .calendar-scroll-container > div {
-                        min-width: 700px !important;
+
+                    /* 3. REPORT LIST WRAPPING - Use Column! */
+                    .report-list-item-content {
+                        flex-direction: column !important;
+                        align-items: stretch !important;
                     }
+                    .report-list-profit {
+                        width: 100% !important;
+                        text-align: left !important;
+                        margin-top: 12px;
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        border-top: 1px solid rgba(255,255,255,0.05);
+                        padding-top: 8px;
+                    }
+                    .report-list-profit-val {
+                        font-size: 1.5rem !important;
+                        order: 2;
+                    }
+                    
+                    /* REMOVE OLD STYLES */
+                    .calendar-scroll-container { display: none; }
                 }
             `}</style>
-            <div className="container" style={{ maxWidth: '1400px', margin: '0 auto' }}>
+            <div className="container" style={{ maxWidth: '1400px', margin: '0 auto', overflowX: 'hidden' }}>
                 {/* 페이지 타이틀 */}
                 <div style={{ marginBottom: '24px' }}>
-                    <h1 style={{ fontSize: '2rem', fontWeight: 'bold', color: 'white', margin: 0, display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <h1 style={{ fontSize: '2rem', fontWeight: 'bold', color: 'white', margin: 0, display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                         📊 일일 리포트
                         <span className="mobile-hidden-text" style={{ fontSize: '1.5rem', fontWeight: 'bold', opacity: 0.8 }}>& 이벤트 관리</span>
                     </h1>
@@ -954,7 +987,8 @@ const DailyReportPage = () => {
                 <div className="responsive-grid-1-2">
                     {/* 왼쪽: 캘린더 & 이벤트 목록 */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                        <div className="calendar-scroll-container" style={{ position: 'relative', zIndex: 100 }}>
+                        {/* Modified: Calendar Layer Wrapper */}
+                        <div className="calendar-layer" style={{ position: 'relative', zIndex: 100 }}>
                             <EventCalendar
                                 reports={reports}
                                 events={events}

@@ -1463,27 +1463,60 @@ def get_total_capital():
             row = cursor.fetchone()
             if row and row['value_json']:
                 import json
-                return float(json.loads(row['value_json']))
-            return 10000.0 # Default
+                data = json.loads(row['value_json'])
+                # Legacy numeric value storage (KRW)
+                if isinstance(data, (int, float)):
+                    return float(data)
+                if isinstance(data, dict):
+                    return float(data.get('krw', data.get('amount', 0)))
+                return float(data)
+            return 0.0
     except Exception as e:
         print(f"Error getting capital: {e}")
-        return 10000.0
+        return 0.0
     finally:
         conn.close()
 
 def set_total_capital(amount):
+    # amount: float (KRW)
     conn = get_connection()
     try:
         import json
         with conn.cursor() as cursor:
-            val = json.dumps(amount)
+            val = json.dumps(float(amount))
             # Upsert
             sql = "INSERT INTO global_config (key_name, value_json) VALUES ('total_capital', %s) ON DUPLICATE KEY UPDATE value_json=%s"
             cursor.execute(sql, (val, val))
         conn.commit()
         return True
+    except Exception as e:
+        print(f"Error setting capital: {e}")
+        return False
     finally:
         conn.close()
+
+def get_total_capital_usd_aggregate():
+    """Calculates Total Capital in USD (KRW/Rate)"""
+    krw = float(get_total_capital())
+    usd = 0.0 # Standard mode: No separate USD capital storage
+    
+    # Get Exchange Rate (Safe Fallback)
+    rate = 1450.0
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+             # Try to get USD/KRW rate
+             cursor.execute("SELECT current_price FROM market_indices WHERE ticker='USD/KRW' OR ticker='KRW=X' LIMIT 1")
+             row = cursor.fetchone()
+             if row and row['current_price']:
+                 rate = float(row['current_price'])
+    except: pass
+    finally:
+        conn.close()
+        
+    if rate <= 0: rate = 1450.0
+    
+    return usd + (krw / rate)
 
 def get_strategy_memo():
     """전략 지침 메모 조회"""

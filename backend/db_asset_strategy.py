@@ -143,7 +143,13 @@ def get_asset_summary():
             current_total = 0.0
             if row and row['value_json']:
                 import json
-                current_total = float(json.loads(row['value_json']))
+                data = json.loads(row['value_json'])
+                if isinstance(data, (int, float)):
+                    current_total = float(data)
+                elif isinstance(data, dict):
+                    current_total = float(data.get('krw', data.get('amount', 0)))
+                else:
+                    current_total = float(data)
             
             # Find closest date for display? Just use "Current"
             summary['latest'] = {
