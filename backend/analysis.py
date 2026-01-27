@@ -2419,7 +2419,7 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
     # recent_news = get_market_news_v2()
     
     # [Ver 5.8.2] Dynamic Version String
-    version_str = f"Ver 8.0.3 (Updated: {datetime.now().strftime('%Y-%m-%d %H:%M')})"
+    version_str = f"Ver 8.0.4 (Updated: {datetime.now().strftime('%Y-%m-%d %H:%M')})"
     
     details = {
         "version": version_str,
@@ -2800,7 +2800,8 @@ def run_v2_signal_analysis():
                     # Condition Lost (Price <= MA12)
                     if buy_record['buy_sig2_yn'] == 'Y':
                         try:
-                            save_v2_buy_signal(ticker, 'sig2', 0, 'N')
+                            # [Ver 8.0.4] Fix: Save actual MA12 value instead of 0 for UI reference
+                            save_v2_buy_signal(ticker, 'sig2', ma12_5 if ma12_5 > 0 else 0, 'N')
                             print(f"📉 {ticker} Signal 2 OFF (Price <= MA12)")
                         except: pass
             

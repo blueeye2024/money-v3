@@ -534,7 +534,7 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                                                         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
                                                             <div style={{ display: 'flex', flexDirection: 'column' }}>
                                                                 <span style={{ color: '#ccc' }}>2차: 상승 지속(1h)</span>
-                                                                <span style={{ fontSize: '0.65rem', color: '#64748b' }}>
+                                                                <span style={{ fontSize: '0.75rem', color: '#fbbf24', fontWeight: 'bold' }}>
                                                                     (MA12: ${Number(scoreObj.cheongan_details?.sig2_price || 0).toFixed(2)})
                                                                 </span>
                                                             </div>
@@ -735,7 +735,8 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
 
                     {['SOXL', 'SOXS'].map(ticker => {
                         // Use Persistent DB History instead of Simulation
-                        const history = dbSignals[ticker] || [];
+                        // [Ver 8.0.4] User Request: Limit to 5 items
+                        const history = (dbSignals[ticker] || []).slice(0, 5);
                         const mainColor = ticker === 'SOXL' ? '#06b6d4' : '#a855f7';
                         const title = ticker === 'SOXL' ? 'SOXL (BULL)' : 'SOXS (BEAR)';
 
@@ -966,7 +967,8 @@ const SystemTradingPanel = () => {
                     {data.length === 0 ? (
                         <tr><td colSpan="6" style={{ padding: '15px', textAlign: 'center', color: '#666' }}>No records found</td></tr>
                     ) : (
-                        data.map((trade, idx) => {
+                        // [Ver 8.0.4] Limit to 5
+                        data.slice(0, 5).map((trade, idx) => {
                             const isWin = trade.profit_pct > 0;
                             const profitColor = isWin ? '#ef4444' : trade.profit_pct < 0 ? '#3b82f6' : '#ddd'; // Red win, Blue loss
                             return (

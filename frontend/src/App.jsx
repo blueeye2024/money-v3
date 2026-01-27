@@ -531,7 +531,7 @@ function Layout() {
                 borderTop: '1px solid var(--glass-border)', color: 'var(--text-secondary)'
             }}>
                 <div style={{ textAlign: 'center', padding: '20px', color: '#64748b', fontSize: '0.8rem', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                    <p>&copy; 2026 BlueEye AI. All rights reserved. | System Status: <span style={{ color: '#4ade80' }}>Operational</span> | Ver {packageJson.version} (Updated: 2026-01-27 04:35)</p>
+                    <p>&copy; 2026 Cheongan System. Ver {packageJson.version} (Updated: 2026-01-27 21:05)</p>
                 </div>
             </footer>
         </div>
