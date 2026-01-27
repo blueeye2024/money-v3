@@ -735,7 +735,8 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
 
                     {['SOXL', 'SOXS'].map(ticker => {
                         // Use Persistent DB History instead of Simulation
-                        const history = dbSignals[ticker] || [];
+                        // [Ver 8.0.2] User Request: Limit to 3 items
+                        const history = (dbSignals[ticker] || []).slice(0, 3);
                         const mainColor = ticker === 'SOXL' ? '#06b6d4' : '#a855f7';
                         const title = ticker === 'SOXL' ? 'SOXL (BULL)' : 'SOXS (BEAR)';
 
@@ -966,7 +967,8 @@ const SystemTradingPanel = () => {
                     {data.length === 0 ? (
                         <tr><td colSpan="6" style={{ padding: '15px', textAlign: 'center', color: '#666' }}>No records found</td></tr>
                     ) : (
-                        data.map((trade, idx) => {
+                        // [Ver 8.0.2] User Request: Limit to 5 items
+                        data.slice(0, 5).map((trade, idx) => {
                             const isWin = trade.profit_pct > 0;
                             const profitColor = isWin ? '#ef4444' : trade.profit_pct < 0 ? '#3b82f6' : '#ddd'; // Red win, Blue loss
                             return (

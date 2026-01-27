@@ -2419,7 +2419,7 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
     # recent_news = get_market_news_v2()
     
     # [Ver 5.8.2] Dynamic Version String
-    version_str = f"Ver 8.0.1 (Updated: {datetime.now().strftime('%Y-%m-%d %H:%M')})"
+    version_str = f"Ver 8.0.2 (Updated: {datetime.now().strftime('%Y-%m-%d %H:%M')})"
     
     details = {
         "version": version_str,
