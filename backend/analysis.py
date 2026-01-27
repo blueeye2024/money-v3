@@ -2419,7 +2419,7 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
     # recent_news = get_market_news_v2()
     
     # [Ver 5.8.2] Dynamic Version String
-    version_str = f"Ver 8.0.4 (Updated: {datetime.now().strftime('%Y-%m-%d %H:%M')})"
+    version_str = f"Ver 8.0.5 (Updated: {datetime.now().strftime('%Y-%m-%d %H:%M')})"
     
     details = {
         "version": version_str,
@@ -2622,6 +2622,9 @@ def run_v2_signal_analysis():
                 if prev_ma12 and float(prev_ma12) > 0:
                     ma12_5 = prev_ma12
                     print(f"  ⚠️ {ticker} MA12 is 0 or invalid. Using Prev: {ma12_5:.2f}")
+            
+            # [Ver 8.0.5] Inject MA12 to Results for persistent UI display
+            results[t]['ma12'] = float(ma12_5) if ma12_5 and float(ma12_5) > 0 else 0
             
             # 30m Indicators
             ma10_30 = df_30['ma10'].iloc[-1]
