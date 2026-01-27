@@ -1600,7 +1600,11 @@ def calculate_tech_indicators(df):
         current_macd = macd.iloc[-1]
         current_signal = signal.iloc[-1]
         
-        return {"rsi": current_rsi, "macd": current_macd, "macd_sig": current_signal}
+        # [Ver 8.0.6] Add MA12 for Signal 2 Display
+        ma12 = df['Close'].rolling(window=12).mean()
+        current_ma12 = ma12.iloc[-1]
+        
+        return {"rsi": current_rsi, "macd": current_macd, "macd_sig": current_signal, "ma12": current_ma12}
     except:
         return {}
 
@@ -2164,6 +2168,9 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
         df_5m = data_5m.get(t) if data_5m else None
         techs[t] = calculate_tech_indicators(df_5m)
         
+        # [Ver 8.0.6] Ensure MA12 is in results before scoring
+        results[t]['ma12'] = techs[t].get('ma12', 0)
+        
         # [NEW] Inject Cross History for Frontend
         df_30 = data_30m.get(t) if data_30m else None
         history = get_cross_history(df_30, df_5m)
@@ -2419,7 +2426,7 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
     # recent_news = get_market_news_v2()
     
     # [Ver 5.8.2] Dynamic Version String
-    version_str = f"Ver 8.0.5 (Updated: {datetime.now().strftime('%Y-%m-%d %H:%M')})"
+    version_str = f"Ver 8.0.6 (Updated: {datetime.now().strftime('%Y-%m-%d %H:%M')})"
     
     details = {
         "version": version_str,
