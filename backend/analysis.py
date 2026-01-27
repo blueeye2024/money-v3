@@ -1581,32 +1581,39 @@ def calculate_tech_indicators(df):
     if df is None: return {}
     if not hasattr(df, 'columns'): return {} # Not a DataFrame
     if 'Close' not in df.columns: return {}
-    if len(df) < 26: return {}
+    if len(df) < 12: return {} # Absolute minimum for MA12
+    
+    result = {}
     try:
-        # RSI (14)
-        delta = df['Close'].diff()
-        gain = (delta.where(delta > 0, 0)).ewm(alpha=1/14, adjust=False).mean()
-        loss = (-delta.where(delta < 0, 0)).ewm(alpha=1/14, adjust=False).mean()
-        rs = gain / loss
-        df['RSI'] = 100 - (100 / (1 + rs))
+        # [Ver 8.0.7] Robust Calculation (Partial Data Support)
         
-        # MACD (12, 26, 9)
-        exp12 = df['Close'].ewm(span=12, adjust=False).mean()
-        exp26 = df['Close'].ewm(span=26, adjust=False).mean()
-        macd = exp12 - exp26
-        signal = macd.ewm(span=9, adjust=False).mean()
+        # 1. MA12 (Priority for Signal 2)
+        if len(df) >= 12:
+            ma12 = df['Close'].rolling(window=12).mean()
+            result['ma12'] = ma12.iloc[-1]
+            
+        # 2. RSI (14)
+        if len(df) >= 15: # 14 + 1 for diff
+            delta = df['Close'].diff()
+            gain = (delta.where(delta > 0, 0)).ewm(alpha=1/14, adjust=False).mean()
+            loss = (-delta.where(delta < 0, 0)).ewm(alpha=1/14, adjust=False).mean()
+            rs = gain / loss
+            df['RSI'] = 100 - (100 / (1 + rs))
+            result['rsi'] = df['RSI'].iloc[-1]
         
-        current_rsi = df['RSI'].iloc[-1]
-        current_macd = macd.iloc[-1]
-        current_signal = signal.iloc[-1]
-        
-        # [Ver 8.0.6] Add MA12 for Signal 2 Display
-        ma12 = df['Close'].rolling(window=12).mean()
-        current_ma12 = ma12.iloc[-1]
-        
-        return {"rsi": current_rsi, "macd": current_macd, "macd_sig": current_signal, "ma12": current_ma12}
-    except:
-        return {}
+        # 3. MACD (26)
+        if len(df) >= 26:
+            exp12 = df['Close'].ewm(span=12, adjust=False).mean()
+            exp26 = df['Close'].ewm(span=26, adjust=False).mean()
+            macd = exp12 - exp26
+            signal = macd.ewm(span=9, adjust=False).mean()
+            result['macd'] = macd.iloc[-1]
+            result['macd_sig'] = signal.iloc[-1]
+
+        return result
+    except Exception as e:
+        print(f"Tech Calc Error: {e}")
+        return result
 
 def calculate_market_energy(target_change, upro_change, is_bull=True):
     """
@@ -2426,7 +2433,7 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
     # recent_news = get_market_news_v2()
     
     # [Ver 5.8.2] Dynamic Version String
-    version_str = f"Ver 8.0.6 (Updated: {datetime.now().strftime('%Y-%m-%d %H:%M')})"
+    version_str = f"Ver 8.0.7 (Updated: {datetime.now().strftime('%Y-%m-%d %H:%M')})"
     
     details = {
         "version": version_str,
