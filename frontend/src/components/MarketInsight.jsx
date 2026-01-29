@@ -159,17 +159,15 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
         let rawEnergy = (relationIndex - 100) / 20;
         if (uproChange < 0) rawEnergy = -rawEnergy;
         rawEnergy = Math.max(-10, Math.min(10, rawEnergy));
-        const energyScore = isSoxl ? Math.trunc(rawEnergy) : Math.trunc(-rawEnergy);
-
         const d = scoreObj.cheongan_details || {};
         const pureSum = (d.sig1 || 0) + (d.sig2 || 0) + (d.sig3 || 0);
-        const cheonganWithEnergy = pureSum + energyScore;
+        const cheonganWithEnergy = pureSum + (d.energy || 0);
 
         const indicatorTotal = (scoreObj.breakdown?.rsi || 0) + (scoreObj.breakdown?.macd || 0) +
-            (scoreObj.breakdown?.atr || 0) + (scoreObj.breakdown?.bbi || 0);
+            (scoreObj.breakdown?.atr || 0) + (scoreObj.breakdown?.bbi || 0) + (scoreObj.breakdown?.slope || 0);
         const sellPenalty = scoreObj.breakdown?.sell_penalty || 0;
 
-        return cheonganWithEnergy + indicatorTotal + sellPenalty;
+        return Number((cheonganWithEnergy + indicatorTotal + sellPenalty).toFixed(1));
     };
 
     // [New] Audio Alert Logic
@@ -463,17 +461,14 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                             let rawEnergy = (relationIndex - 100) / 20;
                             if (uproChange < 0) rawEnergy = -rawEnergy;
                             rawEnergy = Math.max(-10, Math.min(10, rawEnergy));
-                            const energyScore = isSoxl ? Math.trunc(rawEnergy) : Math.trunc(-rawEnergy);
-
-                            // Calculate frontend total score [Jian 1.1]
                             const d = scoreObj.cheongan_details || {};
                             const pureSum = (d.sig1 || 0) + (d.sig2 || 0) + (d.sig3 || 0);
-                            const cheonganWithEnergy = pureSum + energyScore;
+                            const cheonganWithEnergy = pureSum + (d.energy || 0);
 
                             const indicatorTotal = (scoreObj.breakdown?.rsi || 0) + (scoreObj.breakdown?.macd || 0) +
-                                (scoreObj.breakdown?.atr || 0) + (scoreObj.breakdown?.bbi || 0);
+                                (scoreObj.breakdown?.atr || 0) + (scoreObj.breakdown?.bbi || 0) + (scoreObj.breakdown?.slope || 0);
                             const sellPenalty = scoreObj.breakdown?.sell_penalty || 0;
-                            const realTotalScore = cheonganWithEnergy + indicatorTotal + sellPenalty;
+                            const realTotalScore = Number((cheonganWithEnergy + indicatorTotal + sellPenalty).toFixed(1));
 
                             return (
                                 <div key={ticker} style={{ width: '100%', background: `rgba(${isSoxl ? '6,182,212' : '168,85,247'}, 0.05)`, padding: '1.5rem', borderRadius: '16px', border: `1px solid ${color}33` }}>
@@ -564,37 +559,43 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                                                 {/* 우측: 보조지표 */}
                                                 <div style={{ background: 'rgba(0,0,0,0.25)', padding: '10px', borderRadius: '8px' }}>
                                                     <div style={{ fontWeight: 'bold', color: '#94a3b8', marginBottom: '8px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '4px' }}>
-                                                        📊 보조지표 <span style={{ fontWeight: 'normal', color: '#64748b' }}>(0~34점)</span>
+                                                        📊 보조지표 <span style={{ fontWeight: 'normal', color: '#64748b' }}>(0~40점)</span>
                                                     </div>
                                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                                         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
                                                             <span style={{ color: '#ccc' }}>RSI</span>
-                                                            <span style={{ color: (scoreObj.breakdown?.rsi || 0) > 0 ? '#4ade80' : (scoreObj.breakdown?.rsi || 0) < 0 ? '#f87171' : '#ccc', fontWeight: 'bold' }}>
-                                                                {scoreObj.breakdown?.rsi > 0 ? '+' : ''}{scoreObj.breakdown?.rsi || 0}
+                                                            <span style={{ color: '#4ade80', fontWeight: 'bold' }}>
+                                                                {(scoreObj.breakdown?.rsi || 0).toFixed(1)}
                                                             </span>
                                                         </div>
                                                         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
                                                             <span style={{ color: '#ccc' }}>MACD</span>
-                                                            <span style={{ color: (scoreObj.breakdown?.macd || 0) > 0 ? '#4ade80' : (scoreObj.breakdown?.macd || 0) < 0 ? '#f87171' : '#ccc', fontWeight: 'bold' }}>
-                                                                {scoreObj.breakdown?.macd > 0 ? '+' : ''}{scoreObj.breakdown?.macd || 0}
+                                                            <span style={{ color: '#4ade80', fontWeight: 'bold' }}>
+                                                                {(scoreObj.breakdown?.macd || 0).toFixed(1)}
                                                             </span>
                                                         </div>
                                                         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
-                                                            <span style={{ color: '#fbbf24' }}>📦 BBI</span>
-                                                            <span style={{ color: (scoreObj.breakdown?.bbi || 0) > 0 ? '#4ade80' : (scoreObj.breakdown?.bbi || 0) < 0 ? '#f87171' : '#ccc', fontWeight: 'bold' }}>
-                                                                {scoreObj.breakdown?.bbi > 0 ? '+' : ''}{scoreObj.breakdown?.bbi || 0}
+                                                            <span style={{ color: '#ccc' }}>BBI</span>
+                                                            <span style={{ color: '#4ade80', fontWeight: 'bold' }}>
+                                                                {(scoreObj.breakdown?.bbi || 0).toFixed(1)}
                                                             </span>
                                                         </div>
                                                         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
                                                             <span style={{ color: '#ccc' }}>ATR</span>
-                                                            <span style={{ color: (scoreObj.breakdown?.atr || 0) > 0 ? '#4ade80' : (scoreObj.breakdown?.atr || 0) < 0 ? '#f87171' : '#ccc', fontWeight: 'bold' }}>
-                                                                {scoreObj.breakdown?.atr > 0 ? '+' : ''}{scoreObj.breakdown?.atr || 0}
+                                                            <span style={{ color: '#4ade80', fontWeight: 'bold' }}>
+                                                                {(scoreObj.breakdown?.atr || 0).toFixed(1)}
+                                                            </span>
+                                                        </div>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                                                            <span style={{ color: '#ccc' }}>Slope</span>
+                                                            <span style={{ color: '#4ade80', fontWeight: 'bold' }}>
+                                                                {(scoreObj.breakdown?.slope || 0).toFixed(1)}
                                                             </span>
                                                         </div>
                                                         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: '4px' }}>
                                                             <span style={{ fontWeight: 'bold', color: '#fff' }}>소계</span>
                                                             <span style={{ fontWeight: '900', color: '#94a3b8' }}>
-                                                                {(scoreObj.breakdown?.rsi || 0) + (scoreObj.breakdown?.macd || 0) + (scoreObj.breakdown?.atr || 0) + (scoreObj.breakdown?.bbi || 0)}
+                                                                {((scoreObj.breakdown?.rsi || 0) + (scoreObj.breakdown?.macd || 0) + (scoreObj.breakdown?.atr || 0) + (scoreObj.breakdown?.bbi || 0) + (scoreObj.breakdown?.slope || 0)).toFixed(1)}
                                                             </span>
                                                         </div>
                                                     </div>

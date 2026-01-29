@@ -601,8 +601,8 @@ def calculate_bbi(df, period=20):
         bbw_ratio = current_bbw / avg_bbw if avg_bbw > 0 else 1.0
         vol_factor = max(0, min(10, ((bbw_ratio - 0.8) / 0.7) * 10))
         
-        # 5. BBI 계산 [Ver 8.0] 0~10점 범위로 변경
-        bbi = round((trend_factor + vol_factor) / 2, 2)
+        # 5. BBI 계산 [Ver 8.2] 0~8점 범위로 변경 (Max 8pts)
+        bbi = round(((trend_factor + vol_factor) / 2) * 0.8, 1)
         
         # 6. 상태 텍스트 (0~10 기준)
         if bbi <= 2:
@@ -1732,7 +1732,7 @@ def get_evaluation_label(score):
     else: return "매도/리스크 관리 (Sell/Risk)"
 
 
-def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None, bbi_score=0, energy_score=0, strict_sum=False):
+def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None, bbi_score=0, energy_score=0, slope_score=4, strict_sum=False):
     """
     V4.0 안티그래비티 스코어 시스템 (Antigravity Score System)
     strict_sum: If True, disables penalties and range capping (returns raw sum of visible components).
@@ -1745,8 +1745,9 @@ def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None, bbi_score=0, e
         "rsi": 0,         # RSI 점수 0~8
         "macd": 0,        # MACD 점수 0~8
         "atr": 0,         # ATR 점수 0~8
-        "bbi": 0,         # BBI 점수 0~10
+        "bbi": 0,         # BBI 점수 0~8
         "energy": 0,      # Market Energy 0~10
+        "slope": 4,       # [Ver 8.3] 기울기 점수 0~8 (Base 4)
         "total": 0
     }
     
@@ -1761,9 +1762,10 @@ def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None, bbi_score=0, e
     sig3 = v2_buy and v2_buy.get('buy_sig3_yn') == 'Y'
     
     # [Jian 1.1] Cumulative Scoring
-    if sig1: cheongan_score += 20
-    if sig2: cheongan_score += 20  # 2차 20점 (User Feedback)
-    if sig3: cheongan_score += 20  # 3차 20점
+    # [Jian 1.1] Cumulative Scoring (Ver 8.1: 1st, 2nd 15pts each)
+    if sig1: cheongan_score += 15
+    if sig2: cheongan_score += 15  # 2차 15점 (User Feedback)
+    if sig3: cheongan_score += 20  # 3차 20점 (Sum: 50)
     
     breakdown['cheongan'] = cheongan_score
     
@@ -1842,14 +1844,17 @@ def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None, bbi_score=0, e
         atr_score = 0     # 강한 하락
     breakdown['atr'] = atr_score
     
-    # ---- D. BBI 채점 [Ver 8.0] 0~10점 (총점에 포함) ----
+    # ---- D. BBI 채점 [Ver 8.2] 0~8점 (총점에 포함) ----
     breakdown['bbi'] = bbi_score
+    
+    # ---- E. 기울기 채점 [Ver 8.3] 0~8점 (총점에 포함) ----
+    breakdown['slope'] = slope_score
 
     # ================================================
-    # 3. 총점 계산 [Ver 8.0] 0~100점 기준 (Vol 제거, BBI 포함)
+    # 3. 총점 계산 [Ver 8.3] 0~100점 기준 (BBI 8, Slope 8 포함)
     # ================================================
-    indicator_total = breakdown['rsi'] + breakdown['macd'] + breakdown['atr'] + breakdown['bbi'] + breakdown['energy']
-    total_score = int(breakdown['cheongan'] + indicator_total)
+    indicator_total = breakdown['rsi'] + breakdown['macd'] + breakdown['atr'] + breakdown['bbi'] + breakdown['energy'] + breakdown['slope']
+    total_score = round(breakdown['cheongan'] + indicator_total, 1) # [Ver 8.1] Round to 1 decimal
     
     # 범위 제한: 0 ~ 100 [Ver 8.0]
     if not strict_sum:
@@ -1875,10 +1880,11 @@ def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None, bbi_score=0, e
         "evaluation": evaluation,
         "new_metrics": new_metrics,
         "cheongan_details": {
-            "sig1": 20 if sig1 else 0,
-            "sig2": 20 if sig2 else 0,
+            "sig1": 15 if sig1 else 0,
+            "sig2": 15 if sig2 else 0,
             "sig3": 20 if sig3 else 0,
             "energy": energy_score,
+            "slope": slope_score,
             "sig2_price": res.get('ma12', 0)
         }
     }
@@ -2235,11 +2241,32 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
                 raw_energy = max(-5, min(5, raw_energy))  # -5~+5 제한
                 
                 if t == 'SOXL':
-                    energy_score = int(raw_energy + 5)  # 0~10
+                    energy_score = round(raw_energy + 5, 1)  # 0~10, 소수점 1자리
                 else: # SOXS
-                    energy_score = int(-raw_energy + 5)  # 0~10
+                    energy_score = round(-raw_energy + 5, 1) # 0~10, 소수점 1자리
         except Exception as e:
             print(f"Energy Calc Error {t}: {e}")
+
+        # [Ver 8.3] Calculate Slope Score (0~8점 범위)
+        slope_score = 4.0
+        try:
+            if t in ['SOXL', 'SOXS'] and data_30m:
+                df_curr = data_30m.get(t)
+                if df_curr is not None and len(df_curr) >= 20:
+                    # 컬럼명 소문자화 보장
+                    df_curr.columns = [c.lower() for c in df_curr.columns]
+                    if 'close' in df_curr.columns:
+                        y_vals = df_curr['close'].tail(20).astype(float).values
+                        x_vals = np.arange(len(y_vals))
+                        slope_coeff, _ = np.polyfit(x_vals, y_vals, 1)
+                        curr_price = float(y_vals[-1])
+                        # Threshold: 가격의 0.125%
+                        threshold = curr_price * 0.00125
+                        # 4점 기준 (-4 ~ +4 범위 생성)
+                        raw_slope = 4 + (slope_coeff / threshold) * 4
+                        slope_score = max(0, min(8, round(raw_slope, 1)))
+        except Exception as e:
+            print(f"Slope Calc Error {t}: {e}")
 
         # [Ver 7.5.0] Revert to DB-based Score (Honoring Latched System Signals)
         # Using pure calc caused valid past signals to be ignored.
@@ -2252,7 +2279,8 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
             v2_buy=results[t].get('v2_buy'), # Use DB Status
             v2_sell=results[t].get('v2_sell'), 
             bbi_score=bbi_score,
-            energy_score=energy_score
+            energy_score=energy_score,
+            slope_score=slope_score
         )
         scores[t] = score_model
         
