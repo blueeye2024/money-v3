@@ -166,7 +166,7 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
         const cheonganWithEnergy = pureSum + energyScore;
 
         const indicatorTotal = (scoreObj.breakdown?.rsi || 0) + (scoreObj.breakdown?.macd || 0) +
-            (scoreObj.breakdown?.vol || 0) + (scoreObj.breakdown?.atr || 0);
+            (scoreObj.breakdown?.atr || 0) + (scoreObj.breakdown?.bbi || 0);
         const sellPenalty = scoreObj.breakdown?.sell_penalty || 0;
 
         return cheonganWithEnergy + indicatorTotal + sellPenalty;
@@ -471,7 +471,7 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                             const cheonganWithEnergy = pureSum + energyScore;
 
                             const indicatorTotal = (scoreObj.breakdown?.rsi || 0) + (scoreObj.breakdown?.macd || 0) +
-                                (scoreObj.breakdown?.vol || 0) + (scoreObj.breakdown?.atr || 0);
+                                (scoreObj.breakdown?.atr || 0) + (scoreObj.breakdown?.bbi || 0);
                             const sellPenalty = scoreObj.breakdown?.sell_penalty || 0;
                             const realTotalScore = cheonganWithEnergy + indicatorTotal + sellPenalty;
 
@@ -564,7 +564,7 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                                                 {/* 우측: 보조지표 */}
                                                 <div style={{ background: 'rgba(0,0,0,0.25)', padding: '10px', borderRadius: '8px' }}>
                                                     <div style={{ fontWeight: 'bold', color: '#94a3b8', marginBottom: '8px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '4px' }}>
-                                                        📊 보조지표 <span style={{ fontWeight: 'normal', color: '#64748b' }}>(±40점)</span>
+                                                        📊 보조지표 <span style={{ fontWeight: 'normal', color: '#64748b' }}>(0~34점)</span>
                                                     </div>
                                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                                         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
@@ -580,9 +580,9 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                                                             </span>
                                                         </div>
                                                         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
-                                                            <span style={{ color: '#ccc' }}>Volume</span>
-                                                            <span style={{ color: (scoreObj.breakdown?.vol || 0) > 0 ? '#4ade80' : (scoreObj.breakdown?.vol || 0) < 0 ? '#f87171' : '#ccc', fontWeight: 'bold' }}>
-                                                                {scoreObj.breakdown?.vol > 0 ? '+' : ''}{scoreObj.breakdown?.vol || 0}
+                                                            <span style={{ color: '#fbbf24' }}>📦 BBI</span>
+                                                            <span style={{ color: (scoreObj.breakdown?.bbi || 0) > 0 ? '#4ade80' : (scoreObj.breakdown?.bbi || 0) < 0 ? '#f87171' : '#ccc', fontWeight: 'bold' }}>
+                                                                {scoreObj.breakdown?.bbi > 0 ? '+' : ''}{scoreObj.breakdown?.bbi || 0}
                                                             </span>
                                                         </div>
                                                         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
@@ -594,7 +594,7 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                                                         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: '4px' }}>
                                                             <span style={{ fontWeight: 'bold', color: '#fff' }}>소계</span>
                                                             <span style={{ fontWeight: '900', color: '#94a3b8' }}>
-                                                                {(scoreObj.breakdown?.rsi || 0) + (scoreObj.breakdown?.macd || 0) + (scoreObj.breakdown?.vol || 0) + (scoreObj.breakdown?.atr || 0)}
+                                                                {(scoreObj.breakdown?.rsi || 0) + (scoreObj.breakdown?.macd || 0) + (scoreObj.breakdown?.atr || 0) + (scoreObj.breakdown?.bbi || 0)}
                                                             </span>
                                                         </div>
                                                     </div>

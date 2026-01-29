@@ -538,7 +538,7 @@ function Layout() {
                 borderTop: '1px solid var(--glass-border)', color: 'var(--text-secondary)'
             }}>
                 <div style={{ textAlign: 'center', padding: '20px', color: '#64748b', fontSize: '0.8rem', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                    <div className="footer-timestamp">Update: 2026-01-28 04:55 (Ver {packageJson.version})</div>
+                    <div className="footer-timestamp">Update: 2026-01-30 04:02 (Ver {packageJson.version})</div>
                 </div>
             </footer>
         </div>

@@ -558,8 +558,8 @@ def calculate_rsi(series, window=14):
 # [Ver 6.5.8] 박스권 탈출 지수 (Box Breakout Index)
 def calculate_bbi(df, period=20):
     """
-    박스권 탈출 지수 계산
-    범위: -10 (극심한 횡보) ~ +10 (강력한 돌파)
+    [Ver 8.0] 박스권 탈출 지수 계산
+    범위: 0 (극심한 횡보) ~ 10 (강력한 돌파)
     
     Args:
         df: DataFrame with Close, High, Low columns
@@ -601,17 +601,17 @@ def calculate_bbi(df, period=20):
         bbw_ratio = current_bbw / avg_bbw if avg_bbw > 0 else 1.0
         vol_factor = max(0, min(10, ((bbw_ratio - 0.8) / 0.7) * 10))
         
-        # 5. BBI 계산
-        bbi = round((trend_factor + vol_factor) - 10, 2)
+        # 5. BBI 계산 [Ver 8.0] 0~10점 범위로 변경
+        bbi = round((trend_factor + vol_factor) / 2, 2)
         
-        # 6. 상태 텍스트
-        if bbi <= -7:
+        # 6. 상태 텍스트 (0~10 기준)
+        if bbi <= 2:
             status = '극심한 박스권'
-        elif bbi <= -1:
+        elif bbi <= 4:
             status = '일반 횡보'
-        elif bbi <= 3:
+        elif bbi <= 6:
             status = '변동성 시작'
-        elif bbi <= 7:
+        elif bbi <= 8:
             status = '박스권 돌파'
         else:
             status = '강력한 슈팅'
@@ -1739,15 +1739,14 @@ def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None, bbi_score=0, e
     """
     if not res: return {"score": 0, "breakdown": {}, "evaluation": "데이터 부족"}
 
-    # Initialize Breakdown
+    # Initialize Breakdown [Ver 8.0] Vol 제거, 0~100점 기준
     breakdown = {
-        "cheongan": 0,    # 청안 지수 (V2 Signals)
-        "rsi": 0,         # RSI 점수
-        "macd": 0,        # MACD 점수
-        "vol": 0,         # Vol Ratio 점수
-        "atr": 0,         # ATR 점수
-        "bbi": 0,         # [Ver 6.5.8] BBI 점수
-        "energy": 0,      # [Ver 7.2] Market Energy
+        "cheongan": 0,    # 청안 지수 (V2 Signals) 0~60
+        "rsi": 0,         # RSI 점수 0~8
+        "macd": 0,        # MACD 점수 0~8
+        "atr": 0,         # ATR 점수 0~8
+        "bbi": 0,         # BBI 점수 0~10
+        "energy": 0,      # Market Energy 0~10
         "total": 0
     }
     
@@ -1792,103 +1791,80 @@ def calculate_holding_score(res, tech, v2_buy=None, v2_sell=None, bbi_score=0, e
     breakdown['sell_penalty'] = sell_penalty
     
     # ================================================
-    # 2. 안티그래비티 보조지표 (+32 ~ -32점)
+    # 2. 안티그래비티 보조지표 [Ver 8.0] 0~24점 (마이너스 제거)
     # ================================================
     rsi = tech.get('rsi', 50)
     macd = tech.get('macd', 0)
     macd_sig = tech.get('macd_sig', 0)
     
     new_metrics = res.get('new_metrics', {})
-    vol_ratio = new_metrics.get('vol_ratio', 1.0)
     atr = new_metrics.get('atr', 0)
     current_price = res.get('current_price', 0)
     daily_change = res.get('daily_change', 0)
     
-    # ---- A. RSI 채점 (+8 ~ -4) ----
+    # ---- A. RSI 채점 [Ver 8.0] 0~8점 ----
     rsi_score = 0
     if 55 <= rsi < 70:
-        rsi_score = 8    # 상승 추세
+        rsi_score = 8    # 상승 추세 (최적)
     elif 70 <= rsi < 80:
         rsi_score = 4    # 경계 구간
     elif 45 <= rsi < 55:
-        rsi_score = 0    # 중립
+        rsi_score = 2    # 중립
     elif 30 <= rsi < 45:
-        rsi_score = -4   # 하락 추세
-    elif rsi >= 80:
-        rsi_score = -4   # 과열
-    elif rsi < 30:
-        rsi_score = -4   # 과매도
+        rsi_score = 1    # 약세
+    else:  # rsi >= 80 or rsi < 30
+        rsi_score = 0    # 과열/과매도
     breakdown['rsi'] = rsi_score
     
-    # ---- B. MACD 채점 (+8 ~ -8) ----
+    # ---- B. MACD 채점 [Ver 8.0] 0~8점 ----
     macd_score = 0
     if macd > macd_sig and macd > 0:
         macd_score = 8    # 골든크로스 + 양수
     elif macd > macd_sig:
-        macd_score = 4    # 골든크로스
+        macd_score = 6    # 골든크로스
     elif macd < macd_sig and macd >= 0:
-        macd_score = -4   # 데드크로스 시작
-    elif macd < 0 and macd < macd_sig:
-        macd_score = -8   # 강력 하락
+        macd_score = 2    # 데드크로스 시작
+    else:  # macd < 0 and macd < macd_sig
+        macd_score = 0    # 강력 하락
     breakdown['macd'] = macd_score
     
-    # ---- C. Vol Ratio 채점 (+8 ~ -8) ----
-    vol_score = 0
-    if vol_ratio > 2.5 and daily_change < 0:
-        vol_score = -8    # 투매
-    elif vol_ratio > 2.0 and daily_change < 0:
-        vol_score = -8    # 투매
-    elif vol_ratio > 2.0 and daily_change > 0 and rsi > 70:
-        vol_score = 0     # 경계
-    elif vol_ratio > 2.0 and daily_change > 0:
-        vol_score = 8     # 강력 매수세
-    elif vol_ratio > 1.5 and daily_change > 0:
-        vol_score = 3     # 평균 이상
-    elif vol_ratio > 1.0:
-        vol_score = 0     # 중립
-    elif 0.5 < vol_ratio <= 0.8:
-        vol_score = -3    # 매수세 부족
-    breakdown['vol'] = vol_score
-    
-    # ---- D. ATR 채점 (+8 ~ -8) ----
+    # ---- C. ATR 채점 [Ver 8.0] 0~8점 ----
     atr_score = 0
     atr_ratio = (atr / current_price) if current_price > 0 else 0
     
     if daily_change > 1 and atr_ratio > 0.02:
         atr_score = 8     # 강한 추세적 돌파
     elif daily_change > 0:
-        atr_score = 4     # 완만한 우상향
-    elif daily_change < 0 and atr_ratio > 0.02:
-        atr_score = -4    # 공포 섞인 하락
-    elif daily_change < -3 and atr_ratio > 0.03:
-        atr_score = -8    # 패닉셀 구간
+        atr_score = 6     # 완만한 우상향
+    elif daily_change < 0 and atr_ratio < 0.02:
+        atr_score = 2     # 약한 하락
+    else:
+        atr_score = 0     # 강한 하락
     breakdown['atr'] = atr_score
     
-    # [Ver 6.5.8] F. BBI 채점 (+10 ~ -10)
+    # ---- D. BBI 채점 [Ver 8.0] 0~10점 (총점에 포함) ----
     breakdown['bbi'] = bbi_score
 
     # ================================================
-    # 3. 총점 계산
+    # 3. 총점 계산 [Ver 8.0] 0~100점 기준 (Vol 제거, BBI 포함)
     # ================================================
-    # [Ver 7.6] BBI Excluded from Total Score (Reference Only)
-    indicator_total = breakdown['rsi'] + breakdown['macd'] + breakdown['vol'] + breakdown['atr'] + breakdown['energy']
-    sell_penalty = breakdown.get('sell_penalty', 0)
-    total_score = breakdown['cheongan'] + indicator_total + sell_penalty
+    indicator_total = breakdown['rsi'] + breakdown['macd'] + breakdown['atr'] + breakdown['bbi'] + breakdown['energy']
+    total_score = int(breakdown['cheongan'] + indicator_total)
     
-    # 범위 제한: -80 ~ 100 (Disable in strict_sum)
+    # 범위 제한: 0 ~ 100 [Ver 8.0]
     if not strict_sum:
-        total_score = max(-80, min(100, total_score))
+        total_score = max(0, min(100, total_score))
         
     breakdown['total'] = total_score
     
     # ================================================
-    # 4. 평가 라벨 (매수 기준)
+    # 4. 평가 라벨 [Ver 8.0] 80점/70점 기준
     # ================================================
-    if total_score >= 90:
+    if total_score >= 80:
         evaluation = "🚀 강력 매수 (Strong Buy)"
     elif total_score >= 70:
         evaluation = "✅ 매수 (Buy)"
-    elif total_score >= 60:
+    elif total_score >= 50:
         evaluation = "💡 매수 추천 (Recommended)"
     else:
         evaluation = "⏳ 관망 (Hold/Watch)"
@@ -2232,15 +2208,17 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
         # [Ver 6.5.8] Calculate BBI for Score Weighting
         bbi_score = 0
         try:
-            if t in ['SOXL', 'SOXS'] and df_30 is not None:
-                bbi_res = calculate_bbi(df_30)
-                bbi_score = bbi_res.get('bbi', 0)
+            if t in ['SOXL', 'SOXS'] and data_30m:
+                df_30 = data_30m.get(t)
+                if df_30 is not None:
+                    bbi_res = calculate_bbi(df_30)
+                    bbi_score = bbi_res.get('bbi', 0)
 
         except Exception as e:
             print(f"BBI Calc Error {t}: {e}")
 
-        # [Ver 7.6.2] Calculate Energy Score (Ported from Frontend MarketInsight.jsx)
-        energy_score = 0
+        # [Ver 8.0] Calculate Energy Score (0~10점 범위)
+        energy_score = 5  # 기본값 5 (중립)
         try:
             if t in ['SOXL', 'SOXS']:
                 upro_val = results.get('UPRO', {}).get('daily_change', 0)
@@ -2253,12 +2231,13 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
                 raw_energy = (relation_index - 100) / 20.0
                 if upro_val < 0: raw_energy = -raw_energy
                 
-                raw_energy = max(-10, min(10, raw_energy))
+                # 0~10 범위로 변환 (-10 ~ +10 -> 0 ~ 10)
+                raw_energy = max(-5, min(5, raw_energy))  # -5~+5 제한
                 
                 if t == 'SOXL':
-                    energy_score = int(raw_energy)
+                    energy_score = int(raw_energy + 5)  # 0~10
                 else: # SOXS
-                    energy_score = int(-raw_energy)
+                    energy_score = int(-raw_energy + 5)  # 0~10
         except Exception as e:
             print(f"Energy Calc Error {t}: {e}")
 
