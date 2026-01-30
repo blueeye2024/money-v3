@@ -190,9 +190,16 @@ const LabPage = () => {
     const [realtimePrices, setRealtimePrices] = useState({ SOXL: null, SOXS: null, UPRO: null });
     const [chartLoading, setChartLoading] = useState(false);
 
+    // US Date Helper (14h behind KST)
+    const getUSDate = () => {
+        const now = new Date();
+        const usTime = new Date(now.getTime() - (14 * 60 * 60 * 1000));
+        return usTime.toISOString().split('T')[0];
+    };
+
     // Filter
-    const [dateFrom, setDateFrom] = useState(new Date().toISOString().split('T')[0]);
-    const [dateTo, setDateTo] = useState(new Date().toISOString().split('T')[0]);
+    const [dateFrom, setDateFrom] = useState(getUSDate());
+    const [dateTo, setDateTo] = useState(getUSDate());
 
     // Initial Load
     useEffect(() => {
@@ -373,7 +380,7 @@ const LabPage = () => {
         const {
             dataKey = 'total_score',
             color = tickerName === 'SOXL' ? '#4ade80' : '#f87171',
-            yDomain = [-40, 100],
+            yDomain = [0, 100],
             showThresholds = true,
             titleSub = '(Total Score)',
             showPriceOverlay = false
@@ -397,6 +404,9 @@ const LabPage = () => {
                     </h3>
                     {(lastData || realtime) && (
                         <div style={{ textAlign: 'right' }}>
+                            <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#fbbf24', marginRight: '15px' }}>
+                                Score: {realtime ? (realtime.current_score || '-') : (lastData ? lastData.total_score : 0)}
+                            </span>
                             <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#fff', marginRight: '10px' }}>
                                 ${currentPrice}
                             </span>
@@ -419,7 +429,12 @@ const LabPage = () => {
                             <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
                             <XAxis
                                 dataKey="candle_time"
-                                tickFormatter={(t) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                tickFormatter={(t) => {
+                                    const dt = new Date(t);
+                                    const hh = dt.getHours().toString().padStart(2, '0');
+                                    const mm = dt.getMinutes().toString().padStart(2, '0');
+                                    return `${hh}:${mm}`;
+                                }}
                                 stroke="#94a3b8"
                                 fontSize={12}
                             />
