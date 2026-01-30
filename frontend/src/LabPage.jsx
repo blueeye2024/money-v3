@@ -170,22 +170,24 @@ const LabPage = () => {
     const [realtimePrices, setRealtimePrices] = useState({ SOXL: null, SOXS: null, UPRO: null });
     const [chartLoading, setChartLoading] = useState(false);
 
-    // KR Date Helper (User Request: Default Yesterday ~ Today)
-    const getKRDate = (offsetDays = 0) => {
-        const d = new Date();
-        d.setDate(d.getDate() + offsetDays);
-        const y = d.getFullYear();
-        const m = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
+    // US Date Helper (14h behind KST for ET)
+    const toUSTime = (date) => new Date(date.getTime() - (14 * 60 * 60 * 1000));
+
+    const getUSDate = (offsetDays = 0) => {
+        const usTime = toUSTime(new Date());
+        usTime.setDate(usTime.getDate() + offsetDays);
+        const y = usTime.getFullYear();
+        const m = String(usTime.getMonth() + 1).padStart(2, '0');
+        const day = String(usTime.getDate()).padStart(2, '0');
         return `${y}-${m}-${day}`;
     };
 
-    // [New] Time-based filter for Initial Load (6h)
-    const [initialLoadDone, setInitialLoadDone] = useState(false);
+    // [New] Real-time Auto Mode for Chart (User Req: No freezing, 1h window)
+    const [isAutoMode, setIsAutoMode] = useState(true);
 
     // Filter
-    const [dateFrom, setDateFrom] = useState(getKRDate(-1));
-    const [dateTo, setDateTo] = useState(getKRDate(0));
+    const [dateFrom, setDateFrom] = useState(getUSDate(-1));
+    const [dateTo, setDateTo] = useState(getUSDate(0));
 
     // Initial Load
     useEffect(() => {
@@ -227,6 +229,15 @@ const LabPage = () => {
         const interval = setInterval(fetchRealtime, 10000); // Poll every 10s
         return () => clearInterval(interval);
     }, []);
+
+    // Effect: Chart Auto-Polling (30s) - Fixes "Freezing" by moving time window forward
+    useEffect(() => {
+        if (!isAutoMode || activeTab !== 'chart') return;
+        const interval = setInterval(() => {
+            fetchChartData(false);
+        }, 30000);
+        return () => clearInterval(interval);
+    }, [isAutoMode, activeTab, period]);
 
     // --- API: Config ---
     const fetchConfig = async () => {
@@ -286,17 +297,27 @@ const LabPage = () => {
 
     const fetchChartData = async (isManualSearch = false) => {
         if (activeTab !== 'chart') return;
-        setChartLoading(true);
+
+        // Only show loading if manual search or first time load
+        const isFirstLoad = !chartData.SOXL.length && !chartData.SOXS.length;
+        if (isManualSearch || isFirstLoad) {
+            setChartLoading(true);
+        }
         try {
             const fetchOne = async (t) => {
                 let url = `/api/lab/data/${period}?page=1&limit=5000&ticker=${t}`;
 
-                // If not manual search and first load, limit to 6 hours (approx 72 candles for 5m, 12 for 30m)
-                // However, user said "Last 6 hours FROM DATABASE LATEST". 
-                // We'll apply this by not sending date filters if it's initial load, or calculating a 6h window.
-                if (!isManualSearch && !initialLoadDone) {
-                    const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
-                    url += `&date_from=${sixHoursAgo}`;
+                // [Ver 9.4.2] If AutoMode, always get latest 1 hour (US Time based)
+                if (isAutoMode && !isManualSearch) {
+                    const usNow = toUSTime(new Date());
+                    const oneHourAgo = new Date(usNow.getTime() - 60 * 60 * 1000);
+                    const formatted = oneHourAgo.getFullYear() + "-" +
+                        String(oneHourAgo.getMonth() + 1).padStart(2, '0') + "-" +
+                        String(oneHourAgo.getDate()).padStart(2, '0') + " " +
+                        String(oneHourAgo.getHours()).padStart(2, '0') + ":" +
+                        String(oneHourAgo.getMinutes()).padStart(2, '0') + ":" +
+                        String(oneHourAgo.getSeconds()).padStart(2, '0');
+                    url += `&date_from=${formatted}`;
                 } else {
                     if (dateFrom) url += `&date_from=${dateFrom}`;
                     if (dateTo) url += `&date_to=${dateTo}`;
@@ -311,7 +332,7 @@ const LabPage = () => {
 
             // --- UPRO Post-Processing ---
             // 1. Filter outliers (±10% from previous point)
-            // 2. Limit to latest 3 hours (approx 36 candles for 5m, 6 for 30m)
+            // 2. Limit to latest 3 hours (But if auto mode 1h, it will be 1h subset)
             let upro = uproRaw;
             if (upro.length > 0) {
                 const filtered = [];
@@ -324,14 +345,13 @@ const LabPage = () => {
                     }
                 });
 
-                // Limit to 3 hours
+                // Limit to 3 hours (Safety anchor, Auto mode 1h is smaller anyway)
                 const threeHoursMs = 3 * 60 * 60 * 1000;
                 const latestTime = new Date(filtered[filtered.length - 1].candle_time).getTime();
                 upro = filtered.filter(d => (latestTime - new Date(d.candle_time).getTime()) <= threeHoursMs);
             }
 
             setChartData({ SOXL: soxl, SOXS: soxs, UPRO: upro });
-            if (!isManualSearch) setInitialLoadDone(true);
 
         } catch (e) {
             console.error(e);
@@ -573,7 +593,13 @@ const LabPage = () => {
                     <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="lab-input-date" />
                     <span style={{ color: '#64748b' }}>~</span>
                     <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="lab-input-date" />
-                    <button onClick={() => activeTab === 'list' ? fetchData() : fetchChartData(true)} className="lab-btn">🔍 Search</button>
+                    <button onClick={() => { setIsAutoMode(false); activeTab === 'list' ? fetchData() : fetchChartData(true); }} className="lab-btn">🔍 Search</button>
+                    {activeTab === 'chart' && !isAutoMode && (
+                        <button onClick={() => setIsAutoMode(true)} style={{ ...btnStyle, background: '#10b981', marginLeft: '5px' }}>⚡ Auto Live</button>
+                    )}
+                    {activeTab === 'chart' && isAutoMode && (
+                        <span style={{ marginLeft: '10px', color: '#10b981', fontSize: '0.8rem', fontWeight: 'bold' }}>● LIVE (1h)</span>
+                    )}
                 </div>
 
                 {/* List Specific Controls */}
