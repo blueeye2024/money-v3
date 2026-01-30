@@ -598,7 +598,7 @@ const LabPage = () => {
                                         <th style={thStyle}>Eng</th>
                                         <th style={thStyle}>RSI</th>
                                         <th style={thStyle}>MACD</th>
-                                        <th style={thStyle}>Vol</th>
+                                        <th style={thStyle}>Slope</th>
                                         <th style={thStyle}>ATR</th>
                                         <th style={thStyle}>Ver</th>
                                     </tr>
@@ -607,7 +607,7 @@ const LabPage = () => {
                                     {data.map((row) => {
                                         const sum = (row.score_cheongan_1 || 0) + (row.score_cheongan_2 || 0) + (row.score_cheongan_3 || 0) +
                                             (row.score_energy || 0) + (row.score_rsi || 0) + (row.score_macd || 0) +
-                                            (row.score_vol || 0) + (row.score_atr || 0);
+                                            (row.score_slope || 0) + (row.score_atr || 0);
 
                                         const isMismatch = Math.abs(row.total_score - sum) > 1;
                                         const isSelected = selectedIds.includes(row.id);
@@ -630,7 +630,7 @@ const LabPage = () => {
                                                 <td style={tdStyle}>{row.score_energy}</td>
                                                 <td style={tdStyle}>{row.score_rsi}</td>
                                                 <td style={tdStyle}>{row.score_macd}</td>
-                                                <td style={tdStyle}>{row.score_vol}</td>
+                                                <td style={tdStyle}>{row.score_slope}</td>
                                                 <td style={tdStyle}>{row.score_atr}</td>
                                                 <td style={{ ...tdStyle, fontSize: '0.75rem', color: '#94a3b8' }}>{row.algo_version || '-'}</td>
                                             </tr>

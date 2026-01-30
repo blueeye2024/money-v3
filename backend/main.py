@@ -387,7 +387,8 @@ def monitor_signals():
                     s_bbi = breakdown.get('bbi', 0)
                     s_rsi = breakdown.get('rsi', 0)
                     s_macd = breakdown.get('macd', 0)
-                    s_vol = breakdown.get('vol', 0) # Correct key is 'vol'
+                    s_vol = breakdown.get('vol', 0) 
+                    s_slope = breakdown.get('slope', 0) # [Ver 9.2.0] New
 
                     lab_save_list.append({
                         'ticker': s.get('ticker'),
@@ -408,7 +409,8 @@ def monitor_signals():
                             'bbi': s_bbi,
                             'rsi': s_rsi,
                             'macd': s_macd,
-                            'vol': s_vol
+                            'vol': s_vol,
+                            'slope': s_slope
                         }
                     })
                 

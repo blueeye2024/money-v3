@@ -34,6 +34,7 @@ def init_lab_tables():
                     score_rsi INT DEFAULT 0,
                     score_macd INT DEFAULT 0,
                     score_vol INT DEFAULT 0,
+                    score_slope DECIMAL(10, 1) DEFAULT 0,
                     algo_version VARCHAR(20),
                     calculated_at DATETIME,
                     
@@ -68,6 +69,7 @@ def init_lab_tables():
                     score_rsi INT DEFAULT 0,
                     score_macd INT DEFAULT 0,
                     score_vol INT DEFAULT 0,
+                    score_slope DECIMAL(10, 1) DEFAULT 0,
                     algo_version VARCHAR(20),
                     calculated_at DATETIME,
                     
@@ -89,6 +91,7 @@ def init_lab_tables():
                 "score_rsi INT DEFAULT 0",
                 "score_macd INT DEFAULT 0",
                 "score_vol INT DEFAULT 0",
+                "score_slope DECIMAL(10, 1) DEFAULT 0",
                 "algo_version VARCHAR(20)",
                 "calculated_at DATETIME"
             ]
@@ -176,7 +179,7 @@ def bulk_update_scores(table_name, update_list):
                     total_score=%s,
                     score_cheongan_1=%s, score_cheongan_2=%s, score_cheongan_3=%s,
                     score_energy=%s, score_atr=%s, score_bbi=%s,
-                    score_rsi=%s, score_macd=%s, score_vol=%s,
+                    score_rsi=%s, score_macd=%s, score_vol=%s, score_slope=%s,
                     algo_version=%s, calculated_at=%s,
                     change_pct=%s
                 WHERE id=%s
@@ -221,11 +224,11 @@ def save_realtime_lab_data(data_list):
                 INSERT INTO lab_data_5m 
                 (ticker, candle_time, open, high, low, close, volume, ma10, ma30, change_pct,
                  total_score, score_cheongan_1, score_cheongan_2, score_cheongan_3,
-                 score_energy, score_atr, score_bbi, score_rsi, score_macd, score_vol,
+                 score_energy, score_atr, score_bbi, score_rsi, score_macd, score_vol, score_slope,
                  algo_version, calculated_at)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                         %s, %s, %s, %s,
-                        %s, %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s, %s, %s,
                         'true', NOW())
                 ON DUPLICATE KEY UPDATE
                 open=VALUES(open), high=VALUES(high), low=VALUES(low), close=VALUES(close),
@@ -233,7 +236,8 @@ def save_realtime_lab_data(data_list):
                 total_score=VALUES(total_score),
                 score_cheongan_1=VALUES(score_cheongan_1), score_cheongan_2=VALUES(score_cheongan_2), score_cheongan_3=VALUES(score_cheongan_3),
                 score_energy=VALUES(score_energy), score_atr=VALUES(score_atr), score_bbi=VALUES(score_bbi),
-                score_rsi=VALUES(score_rsi), score_macd=VALUES(score_macd), score_vol=VALUES(score_vol),
+                score_rsi=VALUES(score_rsi), score_macd=VALUES(score_macd), score_vol=VALUES(score_vol), 
+                score_slope=VALUES(score_slope),
                 algo_version='true', calculated_at=NOW()
             """
             
@@ -247,7 +251,8 @@ def save_realtime_lab_data(data_list):
                     scores.get('total', 0),
                     scores.get('sig1', 0), scores.get('sig2', 0), scores.get('sig3', 0),
                     scores.get('energy', 0), scores.get('atr', 0), scores.get('bbi', 0),
-                    scores.get('rsi', 0), scores.get('macd', 0), scores.get('vol', 0)
+                    scores.get('rsi', 0), scores.get('macd', 0), scores.get('vol', 0),
+                    scores.get('slope', 0)
                 ))
             
             if params:
