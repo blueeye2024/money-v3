@@ -180,6 +180,9 @@ const LabPage = () => {
         return `${y}-${m}-${day}`;
     };
 
+    // [New] Time-based filter for Initial Load (6h)
+    const [initialLoadDone, setInitialLoadDone] = useState(false);
+
     // Filter
     const [dateFrom, setDateFrom] = useState(getKRDate(-1));
     const [dateTo, setDateTo] = useState(getKRDate(0));
@@ -281,23 +284,54 @@ const LabPage = () => {
         setLoading(false);
     };
 
-    const fetchChartData = async () => {
+    const fetchChartData = async (isManualSearch = false) => {
         if (activeTab !== 'chart') return;
         setChartLoading(true);
         try {
-            // Fetch both SOXL and SOXS for the range
-            // Limit 10000 to get full range chart
             const fetchOne = async (t) => {
                 let url = `/api/lab/data/${period}?page=1&limit=5000&ticker=${t}`;
-                if (dateFrom) url += `&date_from=${dateFrom}`;
-                if (dateTo) url += `&date_to=${dateTo}`;
+
+                // If not manual search and first load, limit to 6 hours (approx 72 candles for 5m, 12 for 30m)
+                // However, user said "Last 6 hours FROM DATABASE LATEST". 
+                // We'll apply this by not sending date filters if it's initial load, or calculating a 6h window.
+                if (!isManualSearch && !initialLoadDone) {
+                    const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
+                    url += `&date_from=${sixHoursAgo}`;
+                } else {
+                    if (dateFrom) url += `&date_from=${dateFrom}`;
+                    if (dateTo) url += `&date_to=${dateTo}`;
+                }
+
                 const res = await fetch(url);
                 const json = await res.json();
-                return json.status === 'success' ? json.data.reverse() : []; // Reverse for Chart (Old -> New)
+                return json.status === 'success' ? json.data.reverse() : [];
             };
 
-            const [soxl, soxs, upro] = await Promise.all([fetchOne('SOXL'), fetchOne('SOXS'), fetchOne('UPRO')]);
+            const [soxl, soxs, uproRaw] = await Promise.all([fetchOne('SOXL'), fetchOne('SOXS'), fetchOne('UPRO')]);
+
+            // --- UPRO Post-Processing ---
+            // 1. Filter outliers (±10% from previous point)
+            // 2. Limit to latest 3 hours (approx 36 candles for 5m, 6 for 30m)
+            let upro = uproRaw;
+            if (upro.length > 0) {
+                const filtered = [];
+                upro.forEach((d, i) => {
+                    if (i === 0) { filtered.push(d); return; }
+                    const prev = filtered[filtered.length - 1].close;
+                    const diff = Math.abs(d.close - prev) / prev;
+                    if (diff <= 0.1) { // 10% limit
+                        filtered.push(d);
+                    }
+                });
+
+                // Limit to 3 hours
+                const threeHoursMs = 3 * 60 * 60 * 1000;
+                const latestTime = new Date(filtered[filtered.length - 1].candle_time).getTime();
+                upro = filtered.filter(d => (latestTime - new Date(d.candle_time).getTime()) <= threeHoursMs);
+            }
+
             setChartData({ SOXL: soxl, SOXS: soxs, UPRO: upro });
+            if (!isManualSearch) setInitialLoadDone(true);
 
         } catch (e) {
             console.error(e);
@@ -539,7 +573,7 @@ const LabPage = () => {
                     <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="lab-input-date" />
                     <span style={{ color: '#64748b' }}>~</span>
                     <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="lab-input-date" />
-                    <button onClick={() => activeTab === 'list' ? fetchData() : fetchChartData()} className="lab-btn">🔍 Search</button>
+                    <button onClick={() => activeTab === 'list' ? fetchData() : fetchChartData(true)} className="lab-btn">🔍 Search</button>
                 </div>
 
                 {/* List Specific Controls */}
@@ -653,21 +687,21 @@ const LabPage = () => {
                                     {renderChart('SOXS', chartData.SOXS, { showPriceOverlay: true })}
                                 </div>
 
-                                {/* Analysis Panels */}
-                                <div className="lab-chart-row">
-                                    <AnalysisPanel ticker="SOXL" data={chartData.SOXL} buyScore={buyScore} sellScore={sellScore} period={period} />
-                                    <AnalysisPanel ticker="SOXS" data={chartData.SOXS} buyScore={buyScore} sellScore={sellScore} period={period} />
-                                </div>
-
-                                {/* UPRO Chart (Full Width) */}
+                                {/* UPRO Chart (Moved above panels) */}
                                 <div className="lab-chart-row">
                                     {renderChart('UPRO', chartData.UPRO || [], {
                                         dataKey: 'close',
                                         color: '#3b82f6',
                                         yDomain: ['auto', 'auto'],
                                         showThresholds: false,
-                                        titleSub: '(Price)'
+                                        titleSub: '(Latest 3h, Filtered)'
                                     })}
+                                </div>
+
+                                {/* Analysis Panels */}
+                                <div className="lab-chart-row">
+                                    <AnalysisPanel ticker="SOXL" data={chartData.SOXL} buyScore={buyScore} sellScore={sellScore} period={period} />
+                                    <AnalysisPanel ticker="SOXS" data={chartData.SOXS} buyScore={buyScore} sellScore={sellScore} period={period} />
                                 </div>
                             </>
                         )}
