@@ -1284,8 +1284,9 @@ def get_v2_status(ticker: str):
              current_price = float(market_info['current_price']) if market_info else 0.0
              change_pct = float(market_info.get('change_pct', 0.0)) if market_info else 0.0
 
-        # [Ver 5.7.3] Inject Day High from Cached Analysis
+        # [Ver 5.7.3] Inject Day High & Score from Cached Analysis
         day_high = 0.0
+        current_score = 0.0
         try:
             from analysis import get_cached_report
             cached = get_cached_report()
@@ -1293,9 +1294,10 @@ def get_v2_status(ticker: str):
                 stock_data = next((s for s in cached['stocks'] if s['ticker'] == ticker), None)
                 if stock_data:
                     day_high = float(stock_data.get('day_high', 0.0))
-            print(f"DEBUG: {ticker} day_high found in cache: {day_high}")
+                    current_score = float(stock_data.get('score', 0.0))
+            print(f"DEBUG: {ticker} cached info: high={day_high}, score={current_score}")
         except Exception as e:
-            print(f"DEBUG Error getting day_high: {e}")
+            print(f"DEBUG Error getting cached values: {e}")
             pass
 
 
@@ -1338,7 +1340,8 @@ def get_v2_status(ticker: str):
             "market_info": {
                 "current_price": current_price,
                 "change_pct": change_pct,
-                "day_high": day_high
+                "day_high": day_high,
+                "current_score": current_score
             },
             "metrics": serialize(indicators),  # Add metrics from market_indicators_log
             "bbi": bbi_info  # [Ver 6.5.8] BBI 정보 추가

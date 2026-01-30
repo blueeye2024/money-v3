@@ -107,32 +107,6 @@ const SystemPerformanceReport = ({ trades = [] }) => {
 
 
 const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, setPollingMode, marketStatus, lastUpdateTime, isMuted, toggleMute }) => {
-    // [New] Local state for persistent DB signals
-    const [dbSignals, setDbSignals] = useState({ SOXL: [], SOXS: [] });
-
-    // Fetch DB signals on mount and polling
-    useEffect(() => {
-        const fetchDbSignals = async () => {
-            try {
-                const [soxlRes, soxsRes] = await Promise.all([
-                    fetch('/api/signals?ticker=SOXL&limit=10'),
-                    fetch('/api/signals?ticker=SOXS&limit=10')
-                ]);
-
-                const soxlData = soxlRes.ok ? await soxlRes.json() : [];
-                const soxsData = soxsRes.ok ? await soxsRes.json() : [];
-
-                setDbSignals({ SOXL: soxlData, SOXS: soxsData });
-            } catch (e) {
-                console.error("Failed to fetch DB signals:", e);
-            }
-        };
-
-        fetchDbSignals();
-        // Poll every 10 seconds to keep fresh (User Request)
-        const interval = setInterval(fetchDbSignals, 10000);
-        return () => clearInterval(interval);
-    }, []);
     if (!market) return <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>데이터 로딩 중...</div>;
 
     const { market_regime } = market;
@@ -451,24 +425,13 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                             const currentPrice = renderInfo?.current_price || 0;
                             const dailyChange = renderInfo?.change_pct ?? renderInfo?.daily_change ?? 0;
 
-                            // Calculate Energy Score [Jian 1.1 - moved outside IIFE for total]
-                            const soxlChange = regimeDetails?.soxl?.daily_change || 0;
-                            const uproChange = regimeDetails?.upro?.daily_change || 0;
-                            let relationIndex = 0;
-                            if (Math.abs(uproChange) > 0.05) {
-                                relationIndex = (soxlChange / uproChange) * 100;
-                            }
-                            let rawEnergy = (relationIndex - 100) / 20;
-                            if (uproChange < 0) rawEnergy = -rawEnergy;
-                            rawEnergy = Math.max(-10, Math.min(10, rawEnergy));
-                            const d = scoreObj.cheongan_details || {};
-                            const pureSum = (d.sig1 || 0) + (d.sig2 || 0) + (d.sig3 || 0);
-                            const cheonganWithEnergy = pureSum + (d.energy || 0);
+                            // Use scores from Backend (Consensus with Lab Save)
+                            const realTotalScore = scoreObj.score || 0;
+                            const cheongan = scoreObj.cheongan_details || {};
 
                             const indicatorTotal = (scoreObj.breakdown?.rsi || 0) + (scoreObj.breakdown?.macd || 0) +
                                 (scoreObj.breakdown?.atr || 0) + (scoreObj.breakdown?.bbi || 0) + (scoreObj.breakdown?.slope || 0);
                             const sellPenalty = scoreObj.breakdown?.sell_penalty || 0;
-                            const realTotalScore = Number((cheonganWithEnergy + indicatorTotal + sellPenalty).toFixed(1));
 
                             return (
                                 <div key={ticker} style={{ width: '100%', background: `rgba(${isSoxl ? '6,182,212' : '168,85,247'}, 0.05)`, padding: '1.5rem', borderRadius: '16px', border: `1px solid ${color}33` }}>
@@ -489,27 +452,11 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
 
                                     {/* Score Breakdown 2-Column Layout (V6.4.9) */}
                                     {(() => {
-                                        // Calculate Energy Score from UPRO relationIndex
-                                        const soxlChange = regimeDetails?.soxl?.daily_change || 0;
-                                        const uproChange = regimeDetails?.upro?.daily_change || 0;
-                                        let relationIndex = 0;
-                                        if (Math.abs(uproChange) > 0.05) {
-                                            relationIndex = (soxlChange / uproChange) * 100;
-                                        }
-                                        // Energy Score Logic [Jian 1.1]
-                                        // S = (RI - 100) / 20 (상승 시), S = -(RI - 100) / 20 (하락 시)
-                                        // 제한: ±10점
-                                        let rawEnergy = (relationIndex - 100) / 20;
-                                        if (uproChange < 0) rawEnergy = -rawEnergy;  // 시장 하락 시 부호 반전
-                                        rawEnergy = Math.max(-10, Math.min(10, rawEnergy));  // ±10 제한
-                                        const energyScore = isSoxl
-                                            ? Math.trunc(rawEnergy)
-                                            : Math.trunc(-rawEnergy);
-
-                                        // Recalculate cheongan total with energy
-                                        // [Ver 7.2.7 Fix] Force Subtotal to match displayed rows (Pure Algo Sum)
-                                        const d = scoreObj.cheongan_details || {};
-                                        const pureSum = (d.sig1 || 0) + (d.sig2 || 0) + (d.sig3 || 0);
+                                        // Use values from Backend scoreObj
+                                        const energyScore = scoreObj.cheongan_details?.energy || 0;
+                                        const pureSum = (scoreObj.cheongan_details?.sig1 || 0) +
+                                            (scoreObj.cheongan_details?.sig2 || 0) +
+                                            (scoreObj.cheongan_details?.sig3 || 0);
                                         const cheonganWithEnergy = pureSum + energyScore;
 
                                         return (
@@ -544,7 +491,7 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                                                             </span>
                                                         </div>
                                                         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
-                                                            <span style={{ color: '#fbbf24' }}>⚡ 에너지 <span style={{ fontSize: '0.65rem', color: '#64748b' }}>({Math.abs(relationIndex).toFixed(0)}%)</span></span>
+                                                            <span style={{ color: '#fbbf24' }}>⚡ 에너지</span>
                                                             <span style={{ color: energyScore > 0 ? '#4ade80' : energyScore < 0 ? '#f87171' : '#64748b', fontWeight: 'bold' }}>
                                                                 {energyScore > 0 ? '+' : ''}{energyScore}
                                                             </span>
@@ -728,124 +675,6 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                     );
                 })()}
 
-                {/* 3. Bottom Grid: Intelligence & History */}
-
-
-                {/* Col 2: Recent Cross History (SOXL / SOXS) */}
-                <div className="responsive-grid-2">
-
-                    {['SOXL', 'SOXS'].map(ticker => {
-                        // Use Persistent DB History instead of Simulation
-                        // [Ver 8.0.4] User Request: Limit to 5 items
-                        const history = (dbSignals[ticker] || []).slice(0, 5);
-                        const mainColor = ticker === 'SOXL' ? '#06b6d4' : '#a855f7';
-                        const title = ticker === 'SOXL' ? 'SOXL (BULL)' : 'SOXS (BEAR)';
-
-                        return (
-                            <div key={ticker} style={{
-                                background: 'rgba(0,0,0,0.25)', padding: '1.2rem', borderRadius: '16px', border: `1px solid ${mainColor}33`
-                            }}>
-                                <h4 style={{ margin: '0 0 12px 0', fontSize: '1rem', color: mainColor, display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '8px' }}>
-                                    <span style={{ fontSize: '1.2rem' }}>{ticker === 'SOXL' ? '🚀' : '🛡️'}</span> {title} Signal History
-                                </h4>
-
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-
-                                    {/* DB Signal History List */}
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                        {
-                                            (() => {
-                                                const signals = history;
-
-                                                if (signals.length === 0) {
-                                                    return (
-                                                        <div style={{ padding: '20px', textAlign: 'center', color: '#666', fontSize: '0.8rem', background: 'rgba(0,0,0,0.2)', borderRadius: '8px' }}>
-                                                            Waiting for signals...
-                                                        </div>
-                                                    );
-                                                }
-
-                                                return signals.map((sig, idx) => {
-                                                    // Determine Type (BUY/SELL)
-                                                    const isBuy = (sig.signal_type && sig.signal_type.includes('BUY')) ||
-                                                        (sig.position && sig.position.includes('매수')) ||
-                                                        (sig.position && sig.position.includes('진입'));
-
-                                                    // Context/Reason
-                                                    const reason = sig.signal_reason || sig.position || sig.interpretation || '-';
-
-                                                    // Time Formatting
-                                                    let displayTime = '-';
-                                                    if (sig.signal_time) {
-                                                        const d = new Date(sig.signal_time);
-                                                        const mo = String(d.getMonth() + 1).padStart(2, '0');
-                                                        const dy = String(d.getDate()).padStart(2, '0');
-                                                        const hr = String(d.getHours()).padStart(2, '0');
-                                                        const mi = String(d.getMinutes()).padStart(2, '0');
-                                                        displayTime = `${mo}-${dy} ${hr}:${mi}`;
-                                                    } else if (sig.created_at) {
-                                                        const d = new Date(sig.created_at);
-                                                        const mo = String(d.getMonth() + 1).padStart(2, '0');
-                                                        const dy = String(d.getDate()).padStart(2, '0');
-                                                        const hr = String(d.getHours()).padStart(2, '0');
-                                                        const mi = String(d.getMinutes()).padStart(2, '0');
-                                                        displayTime = `${mo}-${dy} ${hr}:${mi}`;
-                                                    }
-
-                                                    // Single Line Format: US Time | Type | Price | Score
-                                                    return (
-                                                        <div key={idx} style={{
-                                                            background: 'rgba(255,255,255,0.03)',
-                                                            padding: '8px 10px', // slightly more padding
-                                                            borderRadius: '6px',
-                                                            borderLeft: isBuy ? `3px solid ${mainColor}` : '3px solid #777',
-                                                            display: 'flex',
-                                                            justifyContent: 'space-between', // Spread items
-                                                            alignItems: 'center',
-                                                            fontSize: '0.85rem',
-                                                            color: '#ddd'
-                                                        }}>
-                                                            {/* 1. Time */}
-                                                            <span style={{ color: '#888', fontSize: '0.8rem', minWidth: '80px' }}>{displayTime}</span>
-
-                                                            {/* 2. Type */}
-                                                            <span style={{
-                                                                color: isBuy ? '#4ade80' : '#f87171',
-                                                                fontWeight: 'bold',
-                                                                minWidth: '35px',
-                                                                textAlign: 'center'
-                                                            }}>
-                                                                {isBuy ? '매수' : '매도'}
-                                                            </span>
-
-                                                            {/* 3. Price */}
-                                                            <span style={{ fontWeight: 'bold', color: '#fff', minWidth: '60px', textAlign: 'right' }}>
-                                                                ${Number(sig.price).toFixed(2)}
-                                                            </span>
-
-                                                            {/* 4. Score (New) replaces Reason */}
-                                                            <span style={{
-                                                                color: '#fbbf24',
-                                                                fontWeight: 'bold',
-                                                                minWidth: '40px',
-                                                                textAlign: 'right',
-                                                                fontSize: '0.8rem'
-                                                            }}>
-                                                                {sig.total_score ?? sig.score ?? '-'}점
-                                                            </span>
-                                                        </div>
-                                                    );
-                                                });
-                                            })()
-                                        }
-                                    </div>
-
-
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
 
                 {/* 4. System Trading Panel (Auto-Trading Log) */}
                 <SystemTradingPanel />
@@ -872,142 +701,198 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
 };
 
 // [Ver 7.2] System Trading Panel (Split SOXL/SOXS Tables)
+// [Ver 9.4.0] System Trading Panel (Synced with Lab Analysis Design)
 const SystemTradingPanel = () => {
-    const [trades, setTrades] = useState({ soxl: [], soxs: [] });
+    const [backtestData, setBacktestData] = useState({ SOXL: { trades: [], stats: null }, SOXS: { trades: [], stats: null } });
+    const [config, setConfig] = useState({ buy: 70, sell: 50 });
+    const [loading, setLoading] = useState(false);
+
+    // Helper: Calculate Statistics (Synced with LabPage.jsx)
+    const calculateStats = (data, buyScore, sellScore) => {
+        if (!data || data.length === 0) return null;
+        let maxPrice = -Infinity, minPrice = Infinity, sumPrice = 0;
+        let maxScore = -Infinity, minScore = Infinity, sumScore = 0;
+        let buyCount = 0, sellCount = 0;
+        let hasPosition = false;
+
+        const int = (v) => parseInt(v || 0); // Define int here
+
+        data.forEach(d => {
+            const p = parseFloat(d.close);
+            const s = int(d.total_score || 0);
+            if (p > maxPrice) maxPrice = p;
+            if (p < minPrice) minPrice = p;
+            sumPrice += p;
+            if (s > maxScore) maxScore = s;
+            if (s < minScore) minScore = s;
+            sumScore += s;
+            if (!hasPosition) {
+                if (s >= buyScore) { buyCount++; hasPosition = true; }
+            } else {
+                if (s <= sellScore) { sellCount++; hasPosition = false; }
+            }
+        });
+
+        return {
+            maxPrice, minPrice, avgPrice: (sumPrice / data.length).toFixed(2),
+            maxScore, minScore, avgScore: (sumScore / data.length).toFixed(1),
+            buyCount, sellCount
+        };
+    };
 
     const fetchData = async () => {
+        setLoading(true);
         try {
-            // Fetch both Open and Closed trades
-            // limit=50 to show recent history
-            const [statusRes, historyRes] = await Promise.all([
-                fetch('/api/trading/status'),
-                fetch('/api/trading/history?limit=50')
+            // 1. Fetch Config
+            const configRes = await fetch('/api/lab/config');
+            let buy = 70, sell = 50;
+            if (configRes.ok) {
+                const conf = await configRes.json();
+                buy = conf.lab_buy_score;
+                sell = conf.lab_sell_score;
+                setConfig({ buy, sell });
+            }
+
+            // 2. Fetch Backtest & Raw Data for Stats
+            const fetchTickerInfo = async (t) => {
+                const [backRes, dataRes] = await Promise.all([
+                    fetch(`/api/lab/backtest/${t}?period=5m`),
+                    fetch(`/api/lab/data/5m?page=1&limit=500&ticker=${t}`) // Last 500 candles for stats
+                ]);
+                const backJson = backRes.ok ? await backRes.json() : { trades: [] };
+                const dataJson = dataRes.ok ? await dataRes.json() : { data: [] };
+
+                return {
+                    trades: backJson.trades || [],
+                    stats: calculateStats(dataJson.data || [], buy, sell)
+                };
+            };
+
+            const [soxlInfo, soxsInfo] = await Promise.all([
+                fetchTickerInfo('SOXL'),
+                fetchTickerInfo('SOXS')
             ]);
 
-            let openTrades = [];
-            let closedTrades = [];
-
-            if (statusRes.ok) openTrades = await statusRes.json();
-            if (historyRes.ok) closedTrades = await historyRes.json();
-
-            // Combine and Sort
-            const allTrades = [...openTrades, ...closedTrades];
-
-            // Split by Ticker
-            const soxl = allTrades.filter(t => t.ticker === 'SOXL').sort((a, b) => new Date(b.entry_time) - new Date(a.entry_time));
-            const soxs = allTrades.filter(t => t.ticker === 'SOXS').sort((a, b) => new Date(b.entry_time) - new Date(a.entry_time));
-
-            setTrades({ soxl, soxs });
-
+            setBacktestData({ SOXL: soxlInfo, SOXS: soxsInfo });
         } catch (e) {
             console.error("Trading Data Error:", e);
+        } finally {
+            setLoading(false);
         }
     };
 
     useEffect(() => {
         fetchData();
-        const interval = setInterval(fetchData, 10000);
+        const interval = setInterval(fetchData, 30000); // 30s refresh for log is enough
         return () => clearInterval(interval);
     }, []);
 
-    const formatDate = (isoString) => {
-        if (!isoString) return '-';
-        const d = new Date(isoString);
-        // US Time Format (MM-DD)
-        return new Intl.DateTimeFormat('en-US', {
-            month: '2-digit', day: '2-digit',
-            timeZone: 'America/New_York'
-        }).format(d);
+    const renderTickerPanel = (ticker) => {
+        const info = backtestData[ticker];
+        const stats = info.stats;
+        const trades = info.trades;
+        const color = ticker === 'SOXL' ? '#06b6d4' : '#a855f7';
+
+        return (
+            <div className="glass-panel" style={{ flex: 1, minWidth: '300px', padding: '15px', background: 'rgba(30, 41, 59, 0.5)' }}>
+                <h4 style={{ color, margin: '0 0 10px 0', fontSize: '1.1rem', borderBottom: `2px solid ${color}44`, paddingBottom: '5px' }}>
+                    📊 {ticker} Statistics & Backtest
+                </h4>
+
+                {/* Stats Table (Same as Lab) */}
+                <table style={{ width: '100%', marginBottom: '15px', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+                    <tbody>
+                        <tr>
+                            <td style={subTdStyle}>Price (H/L)</td>
+                            <td style={subTdValStyle}>${stats ? stats.maxPrice : '-'} / ${stats ? stats.minPrice : '-'}</td>
+                            <td style={subTdStyle}>Score (H/L)</td>
+                            <td style={subTdValStyle}>{stats ? stats.maxScore : '-'} / {stats ? stats.minScore : '-'}</td>
+                        </tr>
+                        <tr>
+                            <td style={subTdStyle}>Avg Price</td>
+                            <td style={subTdValStyle}>${stats ? stats.avgPrice : '-'}</td>
+                            <td style={subTdStyle}>Avg Score</td>
+                            <td style={subTdValStyle}>{stats ? stats.avgScore : '-'}</td>
+                        </tr>
+                        <tr>
+                            <td style={subTdStyle}>Buy Count</td>
+                            <td style={{ ...subTdValStyle, color: '#ef4444' }}>{stats ? stats.buyCount : '-'}</td>
+                            <td style={subTdStyle}>Sell Count</td>
+                            <td style={{ ...subTdValStyle, color: '#3b82f6' }}>{stats ? stats.sellCount : '-'}</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                {/* Trades List (Same as Lab) */}
+                <h4 style={{ margin: '0 0 8px 0', color: '#94a3b8', fontSize: '0.8rem' }}>
+                    📜 Signal Returns ({loading ? '...' : trades.length})
+                </h4>
+                <div style={{ maxHeight: '250px', overflowY: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
+                        <thead>
+                            <tr style={{ background: 'rgba(15, 23, 42, 0.8)', color: '#888', position: 'sticky', top: 0 }}>
+                                <th style={subThStyle}>Entry</th>
+                                <th style={subThStyle}>Exit</th>
+                                <th style={subThStyle}>Yield</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {trades.length === 0 ? (
+                                <tr><td colSpan="3" style={{ padding: '20px', textAlign: 'center', color: '#666' }}>No records found</td></tr>
+                            ) : (
+                                trades.slice(0, 10).map((trade, idx) => {
+                                    const y = parseFloat(trade.yield);
+                                    const profitColor = y > 0 ? '#ef4444' : y < 0 ? '#3b82f6' : '#ddd';
+                                    return (
+                                        <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                            <td style={subTdStyle}>
+                                                <div style={{ color: '#ef4444', fontWeight: 'bold' }}>{config.buy}점 매수</div>
+                                                <div>{new Date(trade.entryTime).toLocaleTimeString('en-US', { hour12: false, month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York' })}</div>
+                                                <div style={{ opacity: 0.8 }}>${trade.entryPrice} ({trade.entryScore})</div>
+                                            </td>
+                                            <td style={subTdStyle}>
+                                                {trade.exitTime ? (
+                                                    <>
+                                                        <div style={{ color: '#3b82f6', fontWeight: 'bold' }}>{config.sell}점 매도</div>
+                                                        <div>{new Date(trade.exitTime).toLocaleTimeString('en-US', { hour12: false, month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York' })}</div>
+                                                        <div style={{ opacity: 0.8 }}>${trade.exitPrice} ({trade.exitScore})</div>
+                                                    </>
+                                                ) : <div style={{ color: '#888' }}>Running...</div>}
+                                            </td>
+                                            <td style={{ ...subTdStyle, textAlign: 'right', fontWeight: 'bold', color: profitColor, fontSize: '0.9rem' }}>
+                                                {trade.exitTime ? `${trade.yield}%` : '-'}
+                                            </td>
+                                        </tr>
+                                    );
+                                })
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        );
     };
-
-    const formatTime = (isoString) => {
-        if (!isoString) return '-';
-        const d = new Date(isoString);
-        // US Time Format (HH:mm)
-        return new Intl.DateTimeFormat('en-US', {
-            hour: '2-digit', minute: '2-digit',
-            hour12: false,
-            timeZone: 'America/New_York'
-        }).format(d);
-    };
-
-    const formatFullDateTime = (isoString) => {
-        if (!isoString) return '-';
-        const d = new Date(isoString);
-        // US Time Format (MM-DD HH:mm)
-        return new Intl.DateTimeFormat('en-US', {
-            month: '2-digit', day: '2-digit',
-            hour: '2-digit', minute: '2-digit',
-            hour12: false,
-            timeZone: 'America/New_York'
-        }).format(d);
-    }
-
-    const renderTable = (ticker, data) => (
-        <div className="glass-panel" style={{ padding: '15px', marginBottom: '20px', overflowX: 'auto' }}>
-            <h4 style={{
-                color: ticker === 'SOXL' ? '#06b6d4' : '#a855f7',
-                margin: '0 0 10px 0',
-                fontSize: '1.1rem',
-                borderBottom: `2px solid ${ticker === 'SOXL' ? 'rgba(6,182,212,0.3)' : 'rgba(168,85,247,0.3)'}`,
-                paddingBottom: '5px'
-            }}>
-                {ticker} Auto-Trading Log
-            </h4>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', color: '#ddd' }}>
-                <thead>
-                    <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#888' }}>
-                        <th style={{ padding: '8px', textAlign: 'left' }}>Date</th>
-                        <th style={{ padding: '8px', textAlign: 'left' }}>Time</th>
-                        <th style={{ padding: '8px', textAlign: 'left' }}>Entry Action</th>
-                        <th style={{ padding: '8px', textAlign: 'left' }}>Exit Time</th>
-                        <th style={{ padding: '8px', textAlign: 'left' }}>Exit Action</th>
-                        <th style={{ padding: '8px', textAlign: 'right' }}>Profit</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {data.length === 0 ? (
-                        <tr><td colSpan="6" style={{ padding: '15px', textAlign: 'center', color: '#666' }}>No records found</td></tr>
-                    ) : (
-                        // [Ver 8.0.4] Limit to 5
-                        data.slice(0, 5).map((trade, idx) => {
-                            const isWin = trade.profit_pct > 0;
-                            const profitColor = isWin ? '#ef4444' : trade.profit_pct < 0 ? '#3b82f6' : '#ddd'; // Red win, Blue loss
-                            return (
-                                <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                                    <td style={{ padding: '8px' }}>{formatDate(trade.entry_time)}</td>
-                                    <td style={{ padding: '8px' }}>{formatTime(trade.entry_time)}</td>
-                                    <td style={{ padding: '8px', color: '#ddd' }}>60점 매수</td>
-                                    <td style={{ padding: '8px' }}>{trade.status === 'CLOSED' ? formatFullDateTime(trade.exit_time) : '-'}</td>
-                                    <td style={{ padding: '8px' }}>{trade.status === 'CLOSED' ? '40점 매도' : '-'}</td>
-                                    <td style={{ padding: '8px', textAlign: 'right', color: trade.status === 'CLOSED' ? profitColor : '#aaa', fontWeight: 'bold' }}>
-                                        {trade.status === 'CLOSED' ? `${trade.profit_pct}%` : 'Running'}
-                                    </td>
-                                </tr>
-                            );
-                        })
-                    )}
-                </tbody>
-            </table>
-        </div>
-    );
 
     return (
-        <div style={{ marginTop: '2rem' }}>
+        <div style={{ marginTop: '2.5rem' }}>
             <h3 style={{
-                color: '#fff', fontSize: '1.2rem', margin: '0 0 1rem 0',
+                color: '#fff', fontSize: '1.2rem', margin: '0 0 1.5rem 0',
                 display: 'flex', alignItems: 'center', gap: '8px',
                 borderLeft: '4px solid #f59e0b', paddingLeft: '12px'
             }}>
-                🤖 System Trading Log <span style={{ fontSize: '0.8rem', color: '#888', fontWeight: 'normal' }}>(Score Strategy)</span>
+                🤖 System Trading Log <span style={{ fontSize: '0.8rem', color: '#888', fontWeight: 'normal' }}>(Synced with Lab Settings)</span>
             </h3>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {renderTable('SOXL', trades.soxl)}
-                {renderTable('SOXS', trades.soxs)}
+            <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+                {renderTickerPanel('SOXL')}
+                {renderTickerPanel('SOXS')}
             </div>
         </div>
     );
 };
+
+const subThStyle = { padding: '8px 5px', textAlign: 'left', fontWeight: 'normal' };
+const subTdStyle = { padding: '8px 5px', color: '#cbd5e1', verticalAlign: 'top' };
+const subTdValStyle = { padding: '8px 5px', textAlign: 'right', fontWeight: 'bold', color: '#fff' };
 
 export default MarketInsight;

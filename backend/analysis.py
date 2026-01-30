@@ -2237,13 +2237,13 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
                 raw_energy = (relation_index - 100) / 20.0
                 if upro_val < 0: raw_energy = -raw_energy
                 
-                # 0~10 범위로 변환 (-10 ~ +10 -> 0 ~ 10)
-                raw_energy = max(-5, min(5, raw_energy))  # -5~+5 제한
+                # [Ver 9.4.1] Unified with Frontend Logic: ±10 Range, Base 0
+                raw_energy = max(-10, min(10, raw_energy))  # ±10 Limit
                 
                 if t == 'SOXL':
-                    energy_score = round(raw_energy + 5, 1)  # 0~10, 소수점 1자리
+                    energy_score = int(raw_energy)  # Matches JS Math.trunc
                 else: # SOXS
-                    energy_score = round(-raw_energy + 5, 1) # 0~10, 소수점 1자리
+                    energy_score = int(-raw_energy)
         except Exception as e:
             print(f"Energy Calc Error {t}: {e}")
 
@@ -2370,9 +2370,11 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
             if prev_score is not None:
                 us_time = datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=-5))).strftime("%Y-%m-%d %H:%M") # EST/EDT approx
                 
-                # Check 60 Break (Up)
+                # [Ver 9.3.1] Enhanced Threshold Monitoring (60 & 40 Up/Down)
+                
+                # Check 60 Threshold
                 if prev_score <= 60 and curr_score > 60:
-                    msg = f"점수 60점 돌파! ({prev_score}->{curr_score}) [US: {us_time}]"
+                    msg = f"점수 60점 돌파! ({prev_score}->{curr_score}) [강력 매수 구간]"
                     save_signal({
                         'ticker': t,
                         'name': "BULL TOWER" if t == 'SOXL' else "BEAR TOWER",
@@ -2384,11 +2386,23 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
                         'score': curr_score,
                         'interpretation': f"매수 강화구간 진입 (US {us_time})"
                     })
-                    print(f"✅ {t} Score > 60 Logged")
+                elif prev_score > 60 and curr_score <= 60:
+                    msg = f"점수 60점 이탈! ({prev_score}->{curr_score}) [매수세 약화]"
+                    save_signal({
+                        'ticker': t,
+                        'name': "BULL TOWER" if t == 'SOXL' else "BEAR TOWER",
+                        'signal_type': "SCORE_DOWN_60",
+                        'position': msg,
+                        'current_price': curr_price,
+                        'signal_time_raw': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        'is_sent': False,
+                        'score': curr_score,
+                        'interpretation': f"매수세 일시 후퇴 (US {us_time})"
+                    })
 
-                # Check 40 Break (Down)
+                # Check 40 Threshold
                 if prev_score >= 40 and curr_score < 40:
-                    msg = f"점수 40점 이탈! ({prev_score}->{curr_score}) [US: {us_time}]"
+                    msg = f"점수 40점 이탈! ({prev_score}->{curr_score}) [위험/관망 구간]"
                     save_signal({
                         'ticker': t,
                         'name': "BULL TOWER" if t == 'SOXL' else "BEAR TOWER",
@@ -2400,7 +2414,19 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
                         'score': curr_score,
                         'interpretation': f"매수 약화구간 진입 (US {us_time})"
                     })
-                    print(f"✅ {t} Score < 40 Logged")
+                elif prev_score < 40 and curr_score >= 40:
+                    msg = f"점수 40점 회복! ({prev_score}->{curr_score}) [반등/중립 전환]"
+                    save_signal({
+                        'ticker': t,
+                        'name': "BULL TOWER" if t == 'SOXL' else "BEAR TOWER",
+                        'signal_type': "SCORE_UP_40",
+                        'position': msg,
+                        'current_price': curr_price,
+                        'signal_time_raw': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        'is_sent': False,
+                        'score': curr_score,
+                        'interpretation': f"위험구간 탈출 및 회복 (US {us_time})"
+                    })
 
             # --- 2. Auto Trading Log (Persistent Table) ---
             # Buy if Score >= 60 and No Open Trade

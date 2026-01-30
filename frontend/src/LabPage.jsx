@@ -51,53 +51,31 @@ const calculateStats = (data, buyScore, sellScore) => {
     };
 };
 
-// Helper: Calculate Backtest Trades
-const calculateTrades = (data, buyScore, sellScore) => {
-    if (!data || data.length === 0) return [];
+const AnalysisPanel = ({ ticker, data, buyScore, sellScore, period = '5m' }) => {
+    const [trades, setTrades] = useState([]);
+    const [loading, setLoading] = useState(false);
 
-    const trades = [];
-    let position = null; // { price, time, score }
-
-    // Ensure data is sorted by time (Old -> New)
-    // LabPage fetchChartData reverses it?
-    // fetchOne returns json.data.reverse(). So chartData is Old->New. Correct.
-
-    data.forEach(d => {
-        const p = d.close;
-        const s = d.total_score;
-        const t = d.candle_time;
-
-        if (!position) {
-            // Buy Condition
-            if (s >= buyScore) {
-                position = { price: p, time: t, score: s };
+    useEffect(() => {
+        const fetchBacktest = async () => {
+            setLoading(true);
+            try {
+                // Use buyScore/sellScore from props for real-time preview
+                const res = await fetch(`/api/lab/backtest/${ticker}?period=${period}&buy_score=${buyScore}&sell_score=${sellScore}`);
+                if (res.ok) {
+                    const result = await res.json();
+                    setTrades(result.trades || []);
+                }
+            } catch (e) {
+                console.error("Backtest Fetch Error:", e);
+            } finally {
+                setLoading(false);
             }
-        } else {
-            // Sell Condition
-            if (s <= sellScore) {
-                const yieldPct = ((p - position.price) / position.price * 100).toFixed(2);
-                trades.push({
-                    entryTime: position.time,
-                    entryPrice: position.price,
-                    entryScore: position.score,
-                    exitTime: t,
-                    exitPrice: p,
-                    exitScore: s,
-                    yield: yieldPct
-                });
-                position = null;
-            }
-        }
-    });
+        };
+        fetchBacktest();
+    }, [ticker, buyScore, sellScore, period]);
 
-    return trades.reverse(); // Newest first for list
-};
-
-const AnalysisPanel = ({ ticker, data, buyScore, sellScore }) => {
     if (!data || data.length === 0) return null;
-
     const stats = calculateStats(data, buyScore, sellScore);
-    const trades = calculateTrades(data, buyScore, sellScore);
 
     return (
         <div style={{ flex: 1, minWidth: '0', background: '#1e293b', padding: '15px', borderRadius: '12px', fontSize: '0.85rem' }}>
@@ -110,27 +88,29 @@ const AnalysisPanel = ({ ticker, data, buyScore, sellScore }) => {
                 <tbody>
                     <tr>
                         <td style={subTdStyle}>Price (H/L)</td>
-                        <td style={subTdValStyle}>${stats.maxPrice} / ${stats.minPrice}</td>
+                        <td style={subTdValStyle}>${stats ? stats.maxPrice : '-'} / ${stats ? stats.minPrice : '-'}</td>
                         <td style={subTdStyle}>Score (H/L)</td>
-                        <td style={subTdValStyle}>{stats.maxScore} / {stats.minScore}</td>
+                        <td style={subTdValStyle}>{stats ? stats.maxScore : '-'} / {stats ? stats.minScore : '-'}</td>
                     </tr>
                     <tr>
                         <td style={subTdStyle}>Avg Price</td>
-                        <td style={subTdValStyle}>${stats.avgPrice}</td>
+                        <td style={subTdValStyle}>${stats ? stats.avgPrice : '-'}</td>
                         <td style={subTdStyle}>Avg Score</td>
-                        <td style={subTdValStyle}>{stats.avgScore}</td>
+                        <td style={subTdValStyle}>{stats ? stats.avgScore : '-'}</td>
                     </tr>
                     <tr>
                         <td style={subTdStyle}>Buy Count</td>
-                        <td style={{ ...subTdValStyle, color: '#ef4444' }}>{stats.buyCount}</td>
+                        <td style={{ ...subTdValStyle, color: '#ef4444' }}>{stats ? stats.buyCount : '-'}</td>
                         <td style={subTdStyle}>Sell Count</td>
-                        <td style={{ ...subTdValStyle, color: '#3b82f6' }}>{stats.sellCount}</td>
+                        <td style={{ ...subTdValStyle, color: '#3b82f6' }}>{stats ? stats.sellCount : '-'}</td>
                     </tr>
                 </tbody>
             </table>
 
             {/* Trades List */}
-            <h4 style={{ margin: '0 0 10px 0', color: '#94a3b8', fontSize: '0.8rem' }}>📜 Signal Returns ({trades.length})</h4>
+            <h4 style={{ margin: '0 0 10px 0', color: '#94a3b8', fontSize: '0.8rem' }}>
+                📜 Signal Returns ({loading ? '...' : trades.length})
+            </h4>
             <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
                     <thead>
@@ -148,8 +128,8 @@ const AnalysisPanel = ({ ticker, data, buyScore, sellScore }) => {
                                     <div>${trade.entryPrice} ({trade.entryScore})</div>
                                 </td>
                                 <td style={subTdStyle}>
-                                    <div style={{ color: '#3b82f6' }}>{new Date(trade.exitTime).toLocaleTimeString([], { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
-                                    <div>${trade.exitPrice} ({trade.exitScore})</div>
+                                    <div style={{ color: '#3b82f6' }}>{trade.exitTime ? new Date(trade.exitTime).toLocaleTimeString([], { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'}</div>
+                                    <div>{trade.exitPrice ? `$${trade.exitPrice} (${trade.exitScore})` : '-'}</div>
                                 </td>
                                 <td style={{ ...subTdStyle, fontWeight: 'bold', color: parseFloat(trade.yield) > 0 ? '#4ade80' : '#f87171' }}>
                                     {trade.yield}%
@@ -190,16 +170,19 @@ const LabPage = () => {
     const [realtimePrices, setRealtimePrices] = useState({ SOXL: null, SOXS: null, UPRO: null });
     const [chartLoading, setChartLoading] = useState(false);
 
-    // US Date Helper (14h behind KST)
-    const getUSDate = () => {
-        const now = new Date();
-        const usTime = new Date(now.getTime() - (14 * 60 * 60 * 1000));
-        return usTime.toISOString().split('T')[0];
+    // KR Date Helper (User Request: Default Yesterday ~ Today)
+    const getKRDate = (offsetDays = 0) => {
+        const d = new Date();
+        d.setDate(d.getDate() + offsetDays);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
     };
 
     // Filter
-    const [dateFrom, setDateFrom] = useState(getUSDate());
-    const [dateTo, setDateTo] = useState(getUSDate());
+    const [dateFrom, setDateFrom] = useState(getKRDate(-1));
+    const [dateTo, setDateTo] = useState(getKRDate(0));
 
     // Initial Load
     useEffect(() => {
@@ -405,7 +388,7 @@ const LabPage = () => {
                     {(lastData || realtime) && (
                         <div style={{ textAlign: 'right' }}>
                             <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#fbbf24', marginRight: '15px' }}>
-                                Score: {realtime ? (realtime.current_score || '-') : (lastData ? lastData.total_score : 0)}
+                                Score: {realtime && realtime.current_score !== undefined ? realtime.current_score : (lastData ? lastData.total_score : 0)}
                             </span>
                             <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#fff', marginRight: '10px' }}>
                                 ${currentPrice}
@@ -490,6 +473,7 @@ const LabPage = () => {
                                 strokeWidth={2}
                                 dot={false}
                                 activeDot={{ r: 6 }}
+                                connectNulls={true}
                                 name={titleSub.replace(/[()]/g, '')}
                             />
                         </ComposedChart>
@@ -604,8 +588,8 @@ const LabPage = () => {
                                             <input type="checkbox" onChange={toggleSelectAll} checked={data.length > 0 && selectedIds.length === data.length} />
                                         </th>
                                         <th style={thStyle}>Time (US)</th>
-                                        <th style={thStyle}>Close</th>
-                                        <th style={thStyle}>Chg(%)</th>
+                                        <th style={thStyle}>가격</th>
+                                        <th style={thStyle}>등락률</th>
                                         <th style={{ ...thStyle, color: '#fbbf24' }}>Total</th>
                                         <th style={thStyle}>C1</th>
                                         <th style={thStyle}>C2</th>
@@ -620,13 +604,8 @@ const LabPage = () => {
                                 </thead>
                                 <tbody>
                                     {data.map((row) => {
-                                        const sum = (row.score_cheongan_1 || 0) + (row.score_cheongan_2 || 0) + (row.score_cheongan_3 || 0) +
-                                            (row.score_energy || 0) + (row.score_rsi || 0) + (row.score_macd || 0) +
-                                            (row.score_slope || 0) + (row.score_atr || 0);
-
-                                        const isMismatch = Math.abs(row.total_score - sum) > 1;
                                         const isSelected = selectedIds.includes(row.id);
-                                        const rowBg = isMismatch && row.total_score !== 0 ? 'rgba(239, 68, 68, 0.15)' : isSelected ? '#334155' : 'transparent';
+                                        const rowBg = isSelected ? '#334155' : 'transparent';
 
                                         return (
                                             <tr key={row.id} style={{ borderBottom: '1px solid #334155', background: rowBg }}>
@@ -638,7 +617,7 @@ const LabPage = () => {
                                                 <td style={{ ...tdStyle, color: row.change_pct > 0 ? '#4ade80' : row.change_pct < 0 ? '#f87171' : '#fff' }}>
                                                     {row.change_pct}%
                                                 </td>
-                                                <td style={{ ...tdStyle, color: isMismatch ? '#f87171' : '#fbbf24', fontWeight: 'bold' }}>{row.total_score}</td>
+                                                <td style={{ ...tdStyle, color: '#fbbf24', fontWeight: 'bold' }}>{row.total_score}</td>
                                                 <td style={tdStyle}>{row.score_cheongan_1}</td>
                                                 <td style={tdStyle}>{row.score_cheongan_2}</td>
                                                 <td style={tdStyle}>{row.score_cheongan_3}</td>
@@ -676,8 +655,8 @@ const LabPage = () => {
 
                                 {/* Analysis Panels */}
                                 <div className="lab-chart-row">
-                                    <AnalysisPanel ticker="SOXL" data={chartData.SOXL} buyScore={buyScore} sellScore={sellScore} />
-                                    <AnalysisPanel ticker="SOXS" data={chartData.SOXS} buyScore={buyScore} sellScore={sellScore} />
+                                    <AnalysisPanel ticker="SOXL" data={chartData.SOXL} buyScore={buyScore} sellScore={sellScore} period={period} />
+                                    <AnalysisPanel ticker="SOXS" data={chartData.SOXS} buyScore={buyScore} sellScore={sellScore} period={period} />
                                 </div>
 
                                 {/* UPRO Chart (Full Width) */}

@@ -620,3 +620,85 @@ async def calculate_score(period: str = "30m", ticker: str = "SOXL", offset: int
         "message": f"Processed {len(updates)} rows.",
         "updated_count": updated
     }
+
+def calculate_trades_internal(data, buy_score, sell_score):
+    """
+    Internal logic to calculate trades based on score thresholds.
+    Matches the logic in frontend LabPage.jsx
+    """
+    if not data: return []
+
+    trades = []
+    position = None # {'price', 'time', 'score'}
+
+    # Expects data sorted by time ASC
+    for d in data:
+        p = float(d['close'])
+        s = int(d['total_score'])
+        t = d['candle_time']
+
+        if position is None:
+            # Buy Condition
+            if s >= buy_score:
+                position = {'price': p, 'time': t, 'score': s}
+        else:
+            # Sell Condition
+            if s <= sell_score:
+                yield_pct = round(((p - position['price']) / position['price'] * 100), 2)
+                trades.append({
+                    'entryTime': position['time'],
+                    'entryPrice': position['price'],
+                    'entryScore': position['score'],
+                    'exitTime': t,
+                    'exitPrice': p,
+                    'exitScore': s,
+                    'yield': yield_pct
+                })
+                position = None
+    
+    # Return newest first
+    return trades[::-1]
+
+@router.get("/backtest/{ticker}")
+def get_lab_backtest(ticker: str, period: str = "5m", limit: int = 500, buy_score: int = None, sell_score: int = None):
+    """
+    Get Signal Returns (historical trades) based on Lab settings.
+    If buy_score/sell_score provided, use them for simulation. 
+    Otherwise use global config.
+    """
+    from db import get_global_config, get_connection
+    
+    if buy_score is None:
+        buy_score = int(get_global_config("lab_buy_score", 70))
+    if sell_score is None:
+        sell_score = int(get_global_config("lab_sell_score", 50))
+
+    table = "lab_data_30m" if period == "30m" else "lab_data_5m"
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            # Fetch recent history
+            sql = f"SELECT candle_time, close, total_score FROM {table} WHERE ticker=%s AND total_score != 0 ORDER BY candle_time ASC"
+            cursor.execute(sql, (ticker,))
+            rows = cursor.fetchall()
+            
+            # Serialize for internal calculation
+            data = []
+            for r in rows:
+                data.append({
+                    'candle_time': r['candle_time'].isoformat() if isinstance(r['candle_time'], datetime.datetime) else r['candle_time'],
+                    'close': float(r['close']),
+                    'total_score': int(r['total_score'])
+                })
+                
+            trades = calculate_trades_internal(data, buy_score, sell_score)
+            
+            return {
+                "status": "success",
+                "ticker": ticker,
+                "buy_score": buy_score,
+                "sell_score": sell_score,
+                "trades": trades
+            }
+    finally:
+        conn.close()
