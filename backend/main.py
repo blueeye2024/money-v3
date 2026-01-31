@@ -364,7 +364,7 @@ def monitor_signals():
         if now_dt.minute % 5 == 0:
             print(f"🧪 [Lab Data] 5m Auto-Save Triggered (Time: {now_dt.strftime('%H:%M:%S')})")
             try:
-                from db_lab import save_realtime_lab_data
+                from db_lab import save_realtime_lab_data, get_last_lab_data
                 import pytz
                 
                 # Calc US Time
@@ -400,7 +400,44 @@ def monitor_signals():
                     # [v9.5.7] Logic Change: Allow Score 0 (User Request)
                     # We only skip if Price is essentially 0 after retry.
                     if price <= 0.01:
-                         continue
+                         # [v9.6.6] Zero Price Fallback Logic
+                         # Retrieve last valid record from DB
+                         fallback_data = get_last_lab_data(s.get('ticker'))
+                         if fallback_data:
+                             price = fallback_data['close']
+                             s['current_price'] = price
+                             s['change_pct'] = fallback_data['change_pct']
+                             
+                             # Restore Score Data
+                             db_scores = fallback_data.get('scores', {})
+                             s['score'] = db_scores.get('total', 0)
+                             
+                             # Reconstruct details/breakdown for lab_save_list
+                             # Note: s.get('cheongan_details') might initially be empty if price failed
+                             # We update 's' so breakdown can pick it up? 
+                             # Actually below we use `details` and `breakdown` dicts.
+                             # Let's mock them or inject them.
+                             
+                             s['score_breakdown'] = {
+                                 'energy': db_scores.get('energy'),
+                                 'atr': db_scores.get('atr'),
+                                 'bbi': db_scores.get('bbi'),
+                                 'rsi': db_scores.get('rsi'),
+                                 'macd': db_scores.get('macd'),
+                                 'vol': db_scores.get('vol'),
+                                 'slope': db_scores.get('slope')
+                             }
+                             # 'details' used for sig1, sig2, sig3
+                             s['cheongan_details'] = {
+                                 'sig1': db_scores.get('sig1'),
+                                 'sig2': db_scores.get('sig2'),
+                                 'sig3': db_scores.get('sig3')
+                             }
+                             
+                             print(f"🛡️ [Zero Fallback] Restored {s.get('ticker')} with Last Valid Price: {price}, Score: {s['score']}")
+                         else:
+                             print(f"❌ [Zero Fallback] No previous data found for {s.get('ticker')}. Skipping.")
+                             continue
                     
                     details = s.get('cheongan_details', {})
                     breakdown = s.get('score_breakdown', {})

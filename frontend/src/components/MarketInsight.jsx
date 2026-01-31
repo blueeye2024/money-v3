@@ -530,10 +530,15 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                             const isSoxl = ticker === 'SOXL';
                             const color = isSoxl ? '#06b6d4' : '#a855f7';
 
-                            // Get price and change data (동일 소스: BULL TOWER와 일치)
-                            const renderInfo = v2Status[ticker]?.market_info || (isSoxl ? regimeDetails?.soxl : regimeDetails?.soxs);
-                            const currentPrice = renderInfo?.current_price || 0;
-                            const dailyChange = renderInfo?.change_pct ?? renderInfo?.daily_change ?? 0;
+                            // [Ver 9.6.7] Unified Price Source (Priority: v2Status > regimeDetails)
+                            // User Request: Must use KIS Data (v2Status)
+                            const v2Info = v2Status[ticker]?.market_info;
+                            const regimeInfo = isSoxl ? regimeDetails?.soxl : regimeDetails?.soxs;
+
+                            // Prefer v2Status (Real-time KIS)
+                            const finalInfo = v2Info || regimeInfo || {};
+                            const currentPrice = finalInfo.current_price || finalInfo.price || 0;
+                            const dailyChange = finalInfo.change_pct ?? finalInfo.daily_change ?? 0;
 
                             // Use scores from Backend (Consensus with Lab Save)
                             const realTotalScore = scoreObj.score || 0;

@@ -267,3 +267,43 @@ def save_realtime_lab_data(data_list):
         conn.close()
         
     return inserted_count
+
+def get_last_lab_data(ticker):
+    """
+    [v9.6.6] Fetch the latest valid record (Price > 0) for Fallback.
+    Returns dict or None.
+    """
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            # Get latest 5m data where close > 0
+            sql = """
+                SELECT open, high, low, close, volume, ma10, ma30, change_pct,
+                       total_score, score_cheongan_1, score_cheongan_2, score_cheongan_3,
+                       score_energy, score_atr, score_bbi, score_rsi, score_macd, score_vol, score_slope
+                FROM lab_data_5m
+                WHERE ticker = %s AND close > 0
+                ORDER BY candle_time DESC
+                LIMIT 1
+            """
+            cursor.execute(sql, (ticker,))
+            row = cursor.fetchone()
+            
+            if row:
+                return {
+                    'open': float(row[0]), 'high': float(row[1]), 'low': float(row[2]), 'close': float(row[3]),
+                    'volume': int(row[4]),
+                    'ma10': float(row[5]), 'ma30': float(row[6]), 'change_pct': float(row[7]),
+                    'scores': {
+                        'total': int(row[8]),
+                        'sig1': int(row[9]), 'sig2': int(row[10]), 'sig3': int(row[11]),
+                        'energy': int(row[12]), 'atr': int(row[13]), 'bbi': int(row[14]),
+                        'rsi': int(row[15]), 'macd': int(row[16]), 'vol': int(row[17]), 'slope': float(row[18])
+                    }
+                }
+            return None
+    except Exception as e:
+        print(f"❌ Get Last Lab Data Error ({ticker}): {e}")
+        return None
+    finally:
+        conn.close()
