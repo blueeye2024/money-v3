@@ -55,24 +55,29 @@ const AnalysisPanel = ({ ticker, data, buyScore, sellScore, period = '5m' }) => 
     const [trades, setTrades] = useState([]);
     const [loading, setLoading] = useState(false);
 
-    useEffect(() => {
-        const fetchBacktest = async () => {
-            setLoading(true);
-            try {
-                // Use buyScore/sellScore from props for real-time preview
-                const res = await fetch(`/api/lab/backtest/${ticker}?period=${period}&buy_score=${buyScore}&sell_score=${sellScore}`);
-                if (res.ok) {
-                    const result = await res.json();
-                    setTrades(result.trades || []);
-                }
-            } catch (e) {
-                console.error("Backtest Fetch Error:", e);
-            } finally {
-                setLoading(false);
+    const fetchBacktest = async () => {
+        setLoading(true);
+        // User Req: Clear previous data first
+        setTrades([]);
+        try {
+            const res = await fetch(`/api/lab/backtest/${ticker}?period=${period}&buy_score=${buyScore}&sell_score=${sellScore}`);
+            if (res.ok) {
+                const result = await res.json();
+                setTrades(result.trades || []);
             }
-        };
+        } catch (e) {
+            console.error("Backtest Fetch Error:", e);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Auto-fetch only on mount or ticker/period change. 
+    // Do NOT auto-fetch on buyScore/sellScore change anymore (User Req).
+    useEffect(() => {
         fetchBacktest();
-    }, [ticker, buyScore, sellScore, period]);
+        // eslint-disable-next-line
+    }, [ticker, period]);
 
     if (!data || data.length === 0) return null;
     const stats = calculateStats(data, buyScore, sellScore);
@@ -107,10 +112,20 @@ const AnalysisPanel = ({ ticker, data, buyScore, sellScore, period = '5m' }) => 
                 </tbody>
             </table>
 
-            {/* Trades List */}
-            <h4 style={{ margin: '0 0 10px 0', color: '#94a3b8', fontSize: '0.8rem' }}>
-                📜 Signal Returns ({loading ? '...' : trades.length})
-            </h4>
+            {/* Trades List Header with Reset Button */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                <h4 style={{ margin: 0, color: '#94a3b8', fontSize: '0.8rem' }}>
+                    📜 Signal Returns ({loading ? '...' : trades.length})
+                </h4>
+                <button
+                    onClick={fetchBacktest}
+                    disabled={loading}
+                    style={{ background: '#334155', border: '1px solid #475569', color: '#fff', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem', padding: '2px 8px' }}
+                >
+                    {loading ? 'Running...' : '🔄 Reset'}
+                </button>
+            </div>
+
             <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
                     <thead>
@@ -121,21 +136,36 @@ const AnalysisPanel = ({ ticker, data, buyScore, sellScore, period = '5m' }) => 
                         </tr>
                     </thead>
                     <tbody>
-                        {trades.map((trade, idx) => (
-                            <tr key={idx} style={{ borderBottom: '1px solid #334155' }}>
-                                <td style={subTdStyle}>
-                                    <div style={{ color: '#ef4444' }}>{new Date(trade.entryTime).toLocaleTimeString([], { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
-                                    <div>${trade.entryPrice} ({trade.entryScore})</div>
-                                </td>
-                                <td style={subTdStyle}>
-                                    <div style={{ color: '#3b82f6' }}>{trade.exitTime ? new Date(trade.exitTime).toLocaleTimeString([], { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'}</div>
-                                    <div>{trade.exitPrice ? `$${trade.exitPrice} (${trade.exitScore})` : '-'}</div>
-                                </td>
-                                <td style={{ ...subTdStyle, fontWeight: 'bold', color: parseFloat(trade.yield) > 0 ? '#4ade80' : '#f87171' }}>
-                                    {trade.yield}%
-                                </td>
-                            </tr>
-                        ))}
+                        {trades.map((trade, idx) => {
+                            const isOpen = trade.isOpen === true;
+                            const rowStyle = {
+                                borderBottom: '1px solid #334155',
+                                background: isOpen ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
+                                borderLeft: isOpen ? '3px solid #3b82f6' : 'none'
+                            };
+
+                            return (
+                                <tr key={idx} style={rowStyle}>
+                                    <td style={subTdStyle}>
+                                        <div style={{ color: '#ef4444' }}>{new Date(trade.entryTime).toLocaleTimeString([], { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
+                                        <div>${trade.entryPrice} ({trade.entryScore})</div>
+                                    </td>
+                                    <td style={subTdStyle}>
+                                        {isOpen ? (
+                                            <div style={{ color: '#fbbf24', fontWeight: 'bold' }}>HOLDING...</div>
+                                        ) : (
+                                            <>
+                                                <div style={{ color: '#3b82f6' }}>{trade.exitTime ? new Date(trade.exitTime).toLocaleTimeString([], { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'}</div>
+                                                <div>{trade.exitPrice ? `$${trade.exitPrice} (${trade.exitScore})` : '-'}</div>
+                                            </>
+                                        )}
+                                    </td>
+                                    <td style={{ ...subTdStyle, fontWeight: 'bold', color: parseFloat(trade.yield) > 0 ? '#4ade80' : '#f87171' }}>
+                                        {trade.yield}%
+                                    </td>
+                                </tr>
+                            );
+                        })}
                     </tbody>
                 </table>
             </div>
@@ -170,22 +200,32 @@ const LabPage = () => {
     const [realtimePrices, setRealtimePrices] = useState({ SOXL: null, SOXS: null, UPRO: null });
     const [chartLoading, setChartLoading] = useState(false);
 
-    // KR Date Helper (User Req: One day ago ~ Today in KST)
-    const getKRDate = (offsetDays = 0) => {
-        const d = new Date(); // KST (System Time)
+    // KR Date Helper with Time (User Req: DateTime Picker)
+    const getKRDateTime = (offsetDays = 0, isStart = false) => {
+        const d = new Date(); // KST
         d.setDate(d.getDate() + offsetDays);
         const y = d.getFullYear();
         const m = String(d.getMonth() + 1).padStart(2, '0');
         const day = String(d.getDate()).padStart(2, '0');
-        return `${y}-${m}-${day}`;
+        const hh = isStart ? '00' : String(d.getHours()).padStart(2, '0');
+        const mm = isStart ? '00' : String(d.getMinutes()).padStart(2, '0');
+        return `${y}-${m}-${day}T${hh}:${mm}`;
     };
 
     // [New] Real-time Auto Mode for Chart (User Req: No freezing, 1h window)
     const [isAutoMode, setIsAutoMode] = useState(true);
 
+    // [v9.5.5] Clock Trigger (Update every second to keep minute sync)
+    const [clockTrigger, setClockTrigger] = useState(0);
+    useEffect(() => {
+        const timer = setInterval(() => setClockTrigger(prev => prev + 1), 1000);
+        return () => clearInterval(timer);
+    }, []);
+
     // Filter
-    const [dateFrom, setDateFrom] = useState(getKRDate(-1));
-    const [dateTo, setDateTo] = useState(getKRDate(0));
+    // Filter
+    const [dateFrom, setDateFrom] = useState(getKRDateTime(-1, true)); // Yesterday 00:00
+    const [dateTo, setDateTo] = useState(getKRDateTime(0, false));   // Today Current
 
     // Auto-disable AutoMode when user manually changes filters
     const handleDateChange = (type, val) => {
@@ -317,13 +357,36 @@ const LabPage = () => {
                 if (isAutoMode && !isManualSearch) {
                     url = `/api/lab/data/${period}?page=1&limit=50&ticker=${t}`;
                 } else {
-                    if (dateFrom) url += `&date_from=${dateFrom}`;
-                    if (dateTo) url += `&date_to=${dateTo}`;
+                    if (dateFrom) url += `&date_from=${dateFrom.replace('T', ' ')}`;
+                    if (dateTo) url += `&date_to=${dateTo.replace('T', ' ')}`;
                 }
 
                 const res = await fetch(url);
                 const json = await res.json();
-                return json.status === 'success' ? json.data.reverse() : [];
+
+                if (json.status !== 'success') return [];
+
+                // [Ver 9.4.9] Fix 0 price data (fill with prev value)
+                let data = json.data.reverse();
+                for (let i = 0; i < data.length; i++) {
+                    if (Number(data[i].close) === 0) {
+                        // Find previous valid close
+                        let prevClose = 0;
+                        for (let j = i - 1; j >= 0; j--) {
+                            if (Number(data[j].close) > 0) {
+                                prevClose = data[j].close;
+                                break;
+                            }
+                        }
+                        // If no previous valid (e.g. first processing), try next? 
+                        // Or just keep 0 if absolutely no data. 
+                        // Usually previous data exists.
+                        if (prevClose > 0) {
+                            data[i].close = prevClose;
+                        }
+                    }
+                }
+                return data;
             };
 
             const [soxl, soxs, uproRaw] = await Promise.all([fetchOne('SOXL'), fetchOne('SOXS'), fetchOne('UPRO')]);
@@ -343,10 +406,8 @@ const LabPage = () => {
                     }
                 });
 
-                // Limit to 3 hours (Safety anchor, Auto mode 1h is smaller anyway)
-                const threeHoursMs = 3 * 60 * 60 * 1000;
-                const latestTime = new Date(filtered[filtered.length - 1].candle_time).getTime();
-                upro = filtered.filter(d => (latestTime - new Date(d.candle_time).getTime()) <= threeHoursMs);
+                // Limit to 3 hours logic removed (limit=50 is enough)
+                upro = filtered;
             }
 
             setChartData({ SOXL: soxl, SOXS: soxs, UPRO: upro });
@@ -548,6 +609,38 @@ const LabPage = () => {
                 <div className="lab-title-group">
                     <h2 style={{ margin: 0, color: '#38bdf8' }}>🧪 Lab 2.0</h2>
 
+                    {/* [v9.5.5] Real-time Clock UI */}
+                    <div style={{ marginLeft: '20px', display: 'flex', flexDirection: 'column', fontSize: '0.75rem', color: '#94a3b8', gap: '2px', paddingLeft: '15px', borderLeft: '1px solid #334155' }}>
+                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                            <span style={{ fontSize: '0.8rem' }}>🇰🇷</span>
+                            <span style={{ fontWeight: 'bold', color: '#e2e8f0', fontFamily: 'monospace', paddingTop: '1px' }}>
+                                {(() => {
+                                    const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+                                    const y = d.getFullYear();
+                                    const m = String(d.getMonth() + 1).padStart(2, '0');
+                                    const day = String(d.getDate()).padStart(2, '0');
+                                    const h = String(d.getHours()).padStart(2, '0');
+                                    const min = String(d.getMinutes()).padStart(2, '0');
+                                    return `${y}.${m}.${day} ${h}:${min}`;
+                                })()}
+                            </span>
+                        </div>
+                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                            <span style={{ fontSize: '0.8rem' }}>🇺🇸</span>
+                            <span style={{ fontWeight: 'bold', color: '#94a3b8', fontFamily: 'monospace', paddingTop: '1px' }}>
+                                {(() => {
+                                    const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+                                    const y = d.getFullYear();
+                                    const m = String(d.getMonth() + 1).padStart(2, '0');
+                                    const day = String(d.getDate()).padStart(2, '0');
+                                    const h = String(d.getHours()).padStart(2, '0');
+                                    const min = String(d.getMinutes()).padStart(2, '0');
+                                    return `${y}.${m}.${day} ${h}:${min}`;
+                                })()}
+                            </span>
+                        </div>
+                    </div>
+
                     {/* Tab Switcher */}
                     <div style={{ display: 'flex', background: '#1e293b', borderRadius: '6px', padding: '4px' }}>
                         <button
@@ -594,9 +687,9 @@ const LabPage = () => {
             {/* Filter Bar */}
             <div className="lab-filter-bar">
                 <div className="lab-filter-inputs">
-                    <input type="date" value={dateFrom} onChange={e => handleDateChange('from', e.target.value)} className="lab-input-date" />
+                    <input type="datetime-local" value={dateFrom} onChange={e => handleDateChange('from', e.target.value)} className="lab-input-date" />
                     <span style={{ color: '#64748b' }}>~</span>
-                    <input type="date" value={dateTo} onChange={e => handleDateChange('to', e.target.value)} className="lab-input-date" />
+                    <input type="datetime-local" value={dateTo} onChange={e => handleDateChange('to', e.target.value)} className="lab-input-date" />
                     <button onClick={() => { setIsAutoMode(false); activeTab === 'list' ? fetchData() : fetchChartData(true); }} className="lab-btn">🔍 Search</button>
                     {activeTab === 'chart' && !isAutoMode && (
                         <button onClick={() => setIsAutoMode(true)} style={{ ...btnStyle, background: '#10b981', marginLeft: '5px' }}>⚡ Auto Live</button>
@@ -720,11 +813,12 @@ const LabPage = () => {
                                 {/* UPRO Chart (Moved above panels) */}
                                 <div className="lab-chart-row">
                                     {renderChart('UPRO', chartData.UPRO || [], {
-                                        dataKey: 'close',
+                                        dataKey: 'total_score',
                                         color: '#3b82f6',
-                                        yDomain: ['auto', 'auto'],
-                                        showThresholds: false,
-                                        titleSub: '(Latest 3h, Filtered)'
+                                        yDomain: [0, 100],
+                                        showThresholds: true,
+                                        showPriceOverlay: true,
+                                        titleSub: '(Score & Price)'
                                     })}
                                 </div>
 

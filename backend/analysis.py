@@ -970,6 +970,31 @@ def run_analysis(holdings=None, force_update=False):
     print(f"DEBUG: run_analysis results count: {len(results)}")
     if len(results) > 0:
          print(f"DEBUG: result tickers: {[r.get('ticker') for r in results]}")
+
+    # [Ver 9.5.8] Price Synchronization (Overwrite YF with KIS)
+    # User Request: Fix flickering between 1.86 (YF) and 1.97 (KIS)
+    try:
+        from db import get_stock_current_price
+        for res in results:
+            t_tick = res.get('ticker')
+            # Get data from DB (Source of Truth for Dashboard Header)
+            kis_info = get_stock_current_price(t_tick)
+            
+            if kis_info and kis_info.get('price', 0) > 0:
+                old_p = res.get('current_price', 0)
+                new_p = float(kis_info['price'])
+                new_chg = float(kis_info.get('change_pct', 0.0))
+                
+                # Overwrite
+                res['current_price'] = new_p
+                res['change_pct'] = new_chg
+                if 'close' in res: res['close'] = new_p # Consistency
+                
+                # Debug Log
+                if abs(old_p - new_p) > 0.01:
+                    print(f"🔄 [Price Sync] {t_tick}: YF({old_p}) -> KIS({new_p}) Fixed.")
+    except Exception as e:
+        print(f"Price Sync Error: {e}")
     
     # Fetch Holdings & Capital (for display only)
     # holdings is already passed or fetched

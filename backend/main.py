@@ -376,7 +376,31 @@ def monitor_signals():
                 
                 lab_save_list = []
                 for s in stocks_data:
+                    # [v9.5.6 Zero Filter] Skip if invalid data
                     if 'score' not in s: continue
+                    
+                    price = float(s.get('current_price', 0))
+                    score = int(s.get('score', 0))
+                    
+                    # [v9.5.7 Retry Strategy]
+                    # If Price is invalid, try to fetch again immediately from KIS
+                    if price <= 0.01:
+                        print(f"⚠️ [Lab Save] Price 0 Detected for {s.get('ticker')}. Attempting Retry...")
+                        from kis_api_v2 import get_current_price
+                        # Attempt Retry
+                        retry_res = get_current_price(s.get('ticker')) # Returns {'price': float, ...} or None
+                        if retry_res and retry_res.get('price') > 0:
+                            price = float(retry_res['price'])
+                            s['current_price'] = price # Update in obj too for consistency
+                            print(f"✅ [Lab Save] Retry Success! {s.get('ticker')} Price: {price}")
+                        else:
+                            print(f"❌ [Lab Save] Retry Failed. Skipping {s.get('ticker')}.")
+                            continue
+
+                    # [v9.5.7] Logic Change: Allow Score 0 (User Request)
+                    # We only skip if Price is essentially 0 after retry.
+                    if price <= 0.01:
+                         continue
                     
                     details = s.get('cheongan_details', {})
                     breakdown = s.get('score_breakdown', {})

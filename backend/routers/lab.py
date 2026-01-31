@@ -637,6 +637,10 @@ def calculate_trades_internal(data, buy_score, sell_score):
         s = int(d['total_score'])
         t = d['candle_time']
 
+        # [Ver 9.5.4] Skip invalid/uncalculated scores for signals
+        # But we still iterate so 'data[-1]' at the end will be correct for Open Position
+        if s == 0: continue
+
         if position is None:
             # Buy Condition
             if s >= buy_score:
@@ -655,12 +659,32 @@ def calculate_trades_internal(data, buy_score, sell_score):
                     'yield': yield_pct
                 })
                 position = None
+
+    # [Ver 9.5.3] Check for Open Position (Holding)
+    if position is not None and len(data) > 0:
+        # Calculate floating yield based on the LATEST available data point
+        last_d = data[-1]
+        last_p = float(last_d['close'])
+        last_s = int(last_d['total_score'])
+        # last_t = last_d['candle_time'] # Not strictly exit time, but current time
+        
+        yield_pct = round(((last_p - position['price']) / position['price'] * 100), 2)
+        trades.append({
+            'entryTime': position['time'],
+            'entryPrice': position['price'],
+            'entryScore': position['score'],
+            'exitTime': None, # Indicates OPEN
+            'exitPrice': last_p, # Current Price
+            'exitScore': last_s, # Current Score
+            'yield': yield_pct,
+            'isOpen': True
+        })
     
     # Return newest first
     return trades[::-1]
 
 @router.get("/backtest/{ticker}")
-def get_lab_backtest(ticker: str, period: str = "5m", limit: int = 500, buy_score: int = None, sell_score: int = None):
+def get_lab_backtest(ticker: str, period: str = "5m", limit: int = 2000, buy_score: int = None, sell_score: int = None):
     """
     Get Signal Returns (historical trades) based on Lab settings.
     If buy_score/sell_score provided, use them for simulation. 
@@ -677,10 +701,14 @@ def get_lab_backtest(ticker: str, period: str = "5m", limit: int = 500, buy_scor
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
-            # Fetch recent history
-            sql = f"SELECT candle_time, close, total_score FROM {table} WHERE ticker=%s AND total_score != 0 ORDER BY candle_time ASC"
-            cursor.execute(sql, (ticker,))
+            # [Ver 9.5.4] Fetch recent history with Limit & Latest Data (Allow 0 score)
+            # Use DESC LIMIT to get latest, then reverse.
+            sql = f"SELECT candle_time, close, total_score FROM {table} WHERE ticker=%s ORDER BY candle_time DESC LIMIT %s"
+            cursor.execute(sql, (ticker, limit))
             rows = cursor.fetchall()
+            
+            # Sort ASC for calculation
+            rows = rows[::-1]
             
             # Serialize for internal calculation
             data = []
