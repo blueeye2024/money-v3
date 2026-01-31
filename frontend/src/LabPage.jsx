@@ -170,15 +170,13 @@ const LabPage = () => {
     const [realtimePrices, setRealtimePrices] = useState({ SOXL: null, SOXS: null, UPRO: null });
     const [chartLoading, setChartLoading] = useState(false);
 
-    // US Date Helper (14h behind KST for ET)
-    const toUSTime = (date) => new Date(date.getTime() - (14 * 60 * 60 * 1000));
-
-    const getUSDate = (offsetDays = 0) => {
-        const usTime = toUSTime(new Date());
-        usTime.setDate(usTime.getDate() + offsetDays);
-        const y = usTime.getFullYear();
-        const m = String(usTime.getMonth() + 1).padStart(2, '0');
-        const day = String(usTime.getDate()).padStart(2, '0');
+    // KR Date Helper (User Req: One day ago ~ Today in KST)
+    const getKRDate = (offsetDays = 0) => {
+        const d = new Date(); // KST (System Time)
+        d.setDate(d.getDate() + offsetDays);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
         return `${y}-${m}-${day}`;
     };
 
@@ -186,8 +184,15 @@ const LabPage = () => {
     const [isAutoMode, setIsAutoMode] = useState(true);
 
     // Filter
-    const [dateFrom, setDateFrom] = useState(getUSDate(-1));
-    const [dateTo, setDateTo] = useState(getUSDate(0));
+    const [dateFrom, setDateFrom] = useState(getKRDate(-1));
+    const [dateTo, setDateTo] = useState(getKRDate(0));
+
+    // Auto-disable AutoMode when user manually changes filters
+    const handleDateChange = (type, val) => {
+        setIsAutoMode(false);
+        if (type === 'from') setDateFrom(val);
+        else setDateTo(val);
+    };
 
     // Initial Load
     useEffect(() => {
@@ -230,12 +235,12 @@ const LabPage = () => {
         return () => clearInterval(interval);
     }, []);
 
-    // Effect: Chart Auto-Polling (30s) - Fixes "Freezing" by moving time window forward
+    // Effect: Chart Auto-Polling (10s) - Faster refresh with no animation for smooth flow
     useEffect(() => {
         if (!isAutoMode || activeTab !== 'chart') return;
         const interval = setInterval(() => {
             fetchChartData(false);
-        }, 30000);
+        }, 10000); // 10s polling
         return () => clearInterval(interval);
     }, [isAutoMode, activeTab, period]);
 
@@ -298,26 +303,19 @@ const LabPage = () => {
     const fetchChartData = async (isManualSearch = false) => {
         if (activeTab !== 'chart') return;
 
-        // Only show loading if manual search or first time load
+        // ONLY show loading for manual search or true first load when not in auto mode
         const isFirstLoad = !chartData.SOXL.length && !chartData.SOXS.length;
-        if (isManualSearch || isFirstLoad) {
+        if (isManualSearch || (isFirstLoad && !isAutoMode)) {
             setChartLoading(true);
         }
         try {
             const fetchOne = async (t) => {
                 let url = `/api/lab/data/${period}?page=1&limit=5000&ticker=${t}`;
 
-                // [Ver 9.4.2] If AutoMode, always get latest 1 hour (US Time based)
+                // Version: Ver 9.4.3
+                // We rely on 'limit' instead of 'date_from' to avoid client-server time sync issues.
                 if (isAutoMode && !isManualSearch) {
-                    const usNow = toUSTime(new Date());
-                    const oneHourAgo = new Date(usNow.getTime() - 60 * 60 * 1000);
-                    const formatted = oneHourAgo.getFullYear() + "-" +
-                        String(oneHourAgo.getMonth() + 1).padStart(2, '0') + "-" +
-                        String(oneHourAgo.getDate()).padStart(2, '0') + " " +
-                        String(oneHourAgo.getHours()).padStart(2, '0') + ":" +
-                        String(oneHourAgo.getMinutes()).padStart(2, '0') + ":" +
-                        String(oneHourAgo.getSeconds()).padStart(2, '0');
-                    url += `&date_from=${formatted}`;
+                    url = `/api/lab/data/${period}?page=1&limit=50&ticker=${t}`;
                 } else {
                     if (dateFrom) url += `&date_from=${dateFrom}`;
                     if (dateTo) url += `&date_to=${dateTo}`;
@@ -355,8 +353,12 @@ const LabPage = () => {
 
         } catch (e) {
             console.error(e);
+        } finally {
+            // Only toggle loading off if it was actually turned on
+            if (isManualSearch || !chartData.SOXL.length) {
+                setChartLoading(false);
+            }
         }
-        setChartLoading(false);
     }
 
     // --- Handlers ---
@@ -454,7 +456,7 @@ const LabPage = () => {
                     )}
                 </div>
 
-                <div style={{ height: '400px' }}>
+                <div style={{ height: '200px' }}>
                     <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart data={dataPoints}>
                             <defs>
@@ -515,6 +517,7 @@ const LabPage = () => {
                                     fillOpacity={1}
                                     fill="url(#colorPrice)"
                                     name="Price"
+                                    isAnimationActive={false}
                                 />
                             )}
 
@@ -529,6 +532,7 @@ const LabPage = () => {
                                 activeDot={{ r: 6 }}
                                 connectNulls={true}
                                 name={titleSub.replace(/[()]/g, '')}
+                                isAnimationActive={false}
                             />
                         </ComposedChart>
                     </ResponsiveContainer>
@@ -590,9 +594,9 @@ const LabPage = () => {
             {/* Filter Bar */}
             <div className="lab-filter-bar">
                 <div className="lab-filter-inputs">
-                    <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="lab-input-date" />
+                    <input type="date" value={dateFrom} onChange={e => handleDateChange('from', e.target.value)} className="lab-input-date" />
                     <span style={{ color: '#64748b' }}>~</span>
-                    <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="lab-input-date" />
+                    <input type="date" value={dateTo} onChange={e => handleDateChange('to', e.target.value)} className="lab-input-date" />
                     <button onClick={() => { setIsAutoMode(false); activeTab === 'list' ? fetchData() : fetchChartData(true); }} className="lab-btn">🔍 Search</button>
                     {activeTab === 'chart' && !isAutoMode && (
                         <button onClick={() => setIsAutoMode(true)} style={{ ...btnStyle, background: '#10b981', marginLeft: '5px' }}>⚡ Auto Live</button>
