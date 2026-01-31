@@ -4,7 +4,102 @@ import PriceLevelAlerts from './PriceLevelAlerts';
 import PriceAlertChart from './PriceAlertChart';
 import TodayEventsWidget from './TodayEventsWidget';
 
+// [Ver 9.6.2] Dual Clock Component (MM월 dd일 HH:mm, 1-min interval)
+const ClockDisplay = () => {
+    const [timeStr, setTimeStr] = useState({ kst: '', et: '' });
 
+    useEffect(() => {
+        const updateTime = () => {
+            const now = new Date();
+
+            // Format: MM월 dd일 HH:mm
+            const format = (date, tz) => {
+                const options = {
+                    timeZone: tz,
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour12: false,
+                    hour: '2-digit',
+                    minute: '2-digit'
+                };
+
+                const formatter = new Intl.DateTimeFormat('en-US', {
+                    ...options,
+                    year: undefined
+                });
+                const parts = formatter.formatToParts(now);
+                const m = parts.find(p => p.type === 'month').value;
+                const d = parts.find(p => p.type === 'day').value;
+                const h = parts.find(p => p.type === 'hour').value;
+                const min = parts.find(p => p.type === 'minute').value;
+                return `${m}월 ${d}일 ${h}:${min}`;
+            };
+
+            setTimeStr({
+                kst: format(now, 'Asia/Seoul'),
+                et: format(now, 'America/New_York')
+            });
+        };
+
+        updateTime();
+
+        // Sync to next minute for efficiency
+        const now = new Date();
+        const delay = (60 - now.getSeconds()) * 1000;
+
+        const timeoutId = setTimeout(() => {
+            updateTime();
+            const intervalId = setInterval(updateTime, 60000);
+            // Cleanup interval on unmount
+            return () => clearInterval(intervalId);
+        }, delay);
+
+        return () => clearTimeout(timeoutId);
+    }, []);
+
+    return (
+        <>
+            <span style={{ color: '#94a3b8' }}>🇰🇷 {timeStr.kst}</span>
+            <span style={{ color: '#475569', margin: '0 8px' }}>|</span>
+            <span style={{ color: '#60a5fa' }}>🇺🇸 {timeStr.et}</span>
+        </>
+    );
+};
+
+// [Ver 9.6.3] Investment Rules Ticker (Cycling)
+const InvestmentRulesTicker = () => {
+    const rules = [
+        "🚫 SOXL&SOXS 3시 이전 정리 및 오버 나잇 금지",
+        "🔪 절대 손절 10% 준수",
+        "💰 단일 주식 1,000만원 이상 보유 금지",
+        "🛑 SOXL&SOXS 최대 매수 금액 1500만원"
+    ];
+    const [index, setIndex] = useState(0);
+
+    useEffect(() => {
+        const timer = setInterval(() => {
+            setIndex(prev => (prev + 1) % rules.length);
+        }, 5000); // 5 seconds per rule
+        return () => clearInterval(timer);
+    }, []);
+
+    return (
+        <div style={{
+            fontSize: '0.85rem',
+            color: '#fca5a5', // Light Red for warning
+            background: 'rgba(127, 29, 29, 0.3)', // Dark Red bg
+            padding: '4px 12px',
+            borderRadius: '20px',
+            border: '1px solid rgba(248, 113, 113, 0.3)',
+            fontWeight: 'bold',
+            minWidth: '240px', // Prevent jitter
+            textAlign: 'center',
+            transition: 'all 0.3s ease'
+        }}>
+            {rules[index]}
+        </div>
+    );
+};
 
 const SystemPerformanceReport = ({ trades = [] }) => {
     // Calculate Stats on the fly
@@ -383,6 +478,21 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                             매매일지
                         </span>
                         <span style={{ width: '1px', height: '12px', background: '#334155', margin: '0 8px' }}></span>
+
+                        {/* [Ver 9.6.2] Dual Clock (KST/ET) - Style Matched */}
+                        <span style={{
+                            fontWeight: '500',
+                            fontSize: '0.85rem',
+                            marginRight: '12px',
+                            display: 'inline-flex',
+                            gap: '12px',
+                            alignItems: 'center'
+                        }}>
+                            <ClockDisplay />
+                        </span>
+
+                        <span style={{ width: '1px', height: '12px', background: '#334155', margin: '0 8px' }}></span>
+
                         <span
                             onClick={toggleMute}
                             style={{
@@ -408,7 +518,7 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                             <div style={{ width: '12px', height: '12px', background: '#38bdf8', borderRadius: '50%', boxShadow: '0 0 15px #38bdf8', flexShrink: 0 }} />
                             <h3 style={{ margin: 0, fontSize: '1.4rem', color: '#38bdf8', fontWeight: '900', letterSpacing: '-0.5px', whiteSpace: 'nowrap' }}>청안 Prime Guide : Action Plan</h3>
                         </div>
-                        <div style={{ fontSize: '0.8rem', color: '#64748b', background: '#0f172a', padding: '4px 10px', borderRadius: '20px' }}>Ver 5.7 Market Intelligence</div>
+                        <InvestmentRulesTicker />
                     </div>
 
                     {/* Dual Guide Layout */}

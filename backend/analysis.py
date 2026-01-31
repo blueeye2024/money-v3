@@ -971,30 +971,7 @@ def run_analysis(holdings=None, force_update=False):
     if len(results) > 0:
          print(f"DEBUG: result tickers: {[r.get('ticker') for r in results]}")
 
-    # [Ver 9.5.8] Price Synchronization (Overwrite YF with KIS)
-    # User Request: Fix flickering between 1.86 (YF) and 1.97 (KIS)
-    try:
-        from db import get_stock_current_price
-        for res in results:
-            t_tick = res.get('ticker')
-            # Get data from DB (Source of Truth for Dashboard Header)
-            kis_info = get_stock_current_price(t_tick)
-            
-            if kis_info and kis_info.get('price', 0) > 0:
-                old_p = res.get('current_price', 0)
-                new_p = float(kis_info['price'])
-                new_chg = float(kis_info.get('change_pct', 0.0))
-                
-                # Overwrite
-                res['current_price'] = new_p
-                res['change_pct'] = new_chg
-                if 'close' in res: res['close'] = new_p # Consistency
-                
-                # Debug Log
-                if abs(old_p - new_p) > 0.01:
-                    print(f"🔄 [Price Sync] {t_tick}: YF({old_p}) -> KIS({new_p}) Fixed.")
-    except Exception as e:
-        print(f"Price Sync Error: {e}")
+
     
     # Fetch Holdings & Capital (for display only)
     # holdings is already passed or fetched
@@ -2150,6 +2127,21 @@ def determine_market_regime_v2(daily_data=None, data_30m=None, data_5m=None):
     for t in tickers:
         results[t] = check_triple_filter(t, data_30m, data_5m)
         results[t]['ticker'] = t # [FIX] Add Ticker for main.py iteration
+        
+        # [Ver 9.6.5] Force KIS Real-time Price (Source of Truth)
+        # Fixes 1.86 (YF) vs 1.97 (KIS) flickering
+        try:
+             from db import get_stock_current_price
+             kis_data = get_stock_current_price(t)
+             if kis_data and kis_data.get('price', 0) > 0:
+                 r_price = float(kis_data['price'])
+                 r_chg = float(kis_data.get('change_pct', 0.0))
+                 results[t]['current_price'] = r_price
+                 results[t]['change_pct'] = r_chg
+                 results[t]['close'] = r_price 
+                 # print(f"✅ {t} Price Sync: {r_price}")
+        except Exception as e:
+             print(f"⚠️ Price Sync Failed {t}: {e}")
         
         # [NEW] Inject Cheongan V2 Status
         if t in ['SOXL', 'SOXS']:
