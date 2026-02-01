@@ -132,6 +132,15 @@ def get_detailed_market_status():
 
     return "CLOSED"
 
+def is_market_active():
+    """
+    [Ver 9.7.2] Checks if market is 'Active' for polling purposes.
+    Includes: Regular (OPEN), Pre-Market (PRE), Post-Market (POST), and KIS Daytime (DAYTIME).
+    Returns True if data should be streaming.
+    """
+    status = get_detailed_market_status()
+    return status != "CLOSED"
+
 
 def refresh_market_indices():
     """

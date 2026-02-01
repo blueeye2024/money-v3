@@ -1325,6 +1325,7 @@ def get_v2_status(ticker: str):
     """Get V2 Signal Status (Buy/Sell) + Market Info"""
     try:
         from db import get_v2_buy_status, get_v2_sell_status, get_market_indices, get_latest_market_indicators, get_stock_current_price
+        from analysis import is_market_active # [Ver 9.7.2]
         ticker = ticker.upper()
         
         buy_record = get_v2_buy_status(ticker)
@@ -1402,7 +1403,8 @@ def get_v2_status(ticker: str):
                 "current_price": current_price,
                 "change_pct": change_pct,
                 "day_high": day_high,
-                "current_score": current_score
+                "current_score": current_score,
+                "is_market_open": is_market_active() # [Ver 9.7.2] True for Pre/Post/Daytime
             },
             "metrics": serialize(indicators),  # Add metrics from market_indicators_log
             "bbi": bbi_info  # [Ver 6.5.8] BBI 정보 추가

@@ -322,8 +322,14 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
     // [Ver 7.2.6] State to trigger local refresh
     const [manualRefreshTrigger, setManualRefreshTrigger] = useState(0);
 
-    // [Ver 7.2.6] Separate Effect for V2 Status Fetching (Both Interval & Manual Trigger)
+    // [Ver 9.7.0] Sticky Price Memory (Last Valid Price)
+    const lastValidPrices = React.useRef({ SOXL: { price: 0, change: 0 }, SOXS: { price: 0, change: 0 } });
+
+    // [Ver 9.7.0] Separate Effect for V2 Status Fetching (Dynamic Polling)
     React.useEffect(() => {
+        let timerId = null;
+        let pollingInterval = 10000; // Default: 10s (Market Open)
+
         const fetchV2Status = async () => {
             try {
                 const [soxlRes, soxsRes, uproRes] = await Promise.all([
@@ -341,27 +347,43 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                         SOXS: soxsData,
                         UPRO: uproData.status === 'success' ? uproData : null
                     });
+
+                    // [Ver 9.7.0] Update Sticky Prices
+                    if (soxlData.market_info?.current_price > 0) {
+                        lastValidPrices.current.SOXL = {
+                            price: soxlData.market_info.current_price,
+                            change: soxlData.market_info.change_pct
+                        };
+                    }
+                    if (soxsData.market_info?.current_price > 0) {
+                        lastValidPrices.current.SOXS = {
+                            price: soxsData.market_info.current_price,
+                            change: soxsData.market_info.change_pct
+                        };
+                    }
+
+                    // [Ver 9.7.0] Dynamic Polling Adjustment
+                    // If backend says market is closed, slow down to 10 min (600s)
+                    const isMarketOpen = soxlData.market_info?.is_market_open ?? true;
+                    const newInterval = isMarketOpen ? 10000 : 600000;
+
+                    if (newInterval !== pollingInterval) {
+                        console.log(`⏳ Market Status Changed (Open=${isMarketOpen}). Updating Polling Interval: ${newInterval / 1000}s`);
+                        pollingInterval = newInterval;
+                        clearInterval(timerId);
+                        timerId = setInterval(fetchV2Status, pollingInterval);
+                    }
                 }
             } catch (e) {
                 console.error('V2 Status fetch error:', e);
             }
         };
 
-        fetchV2Status();
+        fetchV2Status(); // Initial Call
+        timerId = setInterval(fetchV2Status, pollingInterval);
 
-        // Polling Logic
-        let delay = 10000; // Default 10s
-        if (pollingMode === 'off') {
-            delay = null;
-        } else if (pollingMode === 'auto' && marketStatus === 'closed') {
-            delay = 60000; // Slow down to 60s when closed
-        }
-
-        if (!delay) return;
-
-        const interval = setInterval(fetchV2Status, delay);
-        return () => clearInterval(interval);
-    }, [pollingMode, marketStatus, lastUpdateTime, manualRefreshTrigger]); // Add trigger dependency
+        return () => clearInterval(timerId);
+    }, [manualRefreshTrigger]);
 
     const activeStocks = stocks && Array.isArray(stocks)
         ? [...stocks].sort((a, b) => (b.current_ratio || 0) - (a.current_ratio || 0))
@@ -530,15 +552,19 @@ const MarketInsight = ({ market, stocks, signalHistory, onRefresh, pollingMode, 
                             const isSoxl = ticker === 'SOXL';
                             const color = isSoxl ? '#06b6d4' : '#a855f7';
 
-                            // [Ver 9.6.7] Unified Price Source (Priority: v2Status > regimeDetails)
-                            // User Request: Must use KIS Data (v2Status)
+                            // [Ver 9.7.0] Sticky Price Rendering
+                            // 1. Try Real-time (v2Status)
+                            // 2. If 0 (Loading/Missing), Use Last Valid Price (Sticky)
+                            // 3. Never fallback to regimeDetails to avoid 1.86 issue
                             const v2Info = v2Status[ticker]?.market_info;
-                            const regimeInfo = isSoxl ? regimeDetails?.soxl : regimeDetails?.soxs;
+                            let currentPrice = v2Info?.current_price || 0;
+                            let dailyChange = v2Info?.change_pct ?? 0;
 
-                            // Prefer v2Status (Real-time KIS)
-                            const finalInfo = v2Info || regimeInfo || {};
-                            const currentPrice = finalInfo.current_price || finalInfo.price || 0;
-                            const dailyChange = finalInfo.change_pct ?? finalInfo.daily_change ?? 0;
+                            // Apply Sticky Logic
+                            if (currentPrice === 0 && lastValidPrices.current[ticker]?.price > 0) {
+                                currentPrice = lastValidPrices.current[ticker].price;
+                                dailyChange = lastValidPrices.current[ticker].change;
+                            }
 
                             // Use scores from Backend (Consensus with Lab Save)
                             const realTotalScore = scoreObj.score || 0;
