@@ -5,14 +5,19 @@ import MarketStats from './components/MarketStats';
 import MarketInsight from './components/MarketInsight';
 import JournalPage from './JournalPage';
 import TradingJournalPage from './TradingJournalPage';
-import SignalPage from './SignalPage';
+import LabPage from './LabPage';
+import SimulatorPage from './SimulatorPage'; // [Ver 9.8.0]
+import './index.css';
 import ManagedStocksPage from './ManagedStocksPage';
 import BacktestPage from './BacktestPage';
 import AssetDashboardPage from './AssetDashboardPage';
 import CryptoPage from './CryptoPage';
 import DailyReportPage from './DailyReportPage';
-import LabPage from './LabPage';
-import './index.css';
+
+// ... (Inside Routes)
+                <Route path="/lab" element={<LabPage />} />
+                <Route path="/simulator" element={<SimulatorPage />} /> {/* [Ver 9.8.0] */ }
+<Route path="/asset-dashboard" element={<AssetDashboardPage />} />
 import packageJson from '../package.json'; // Version Import
 
 // 시장 상태 판단 함수 (EST 기준)
@@ -485,6 +490,10 @@ function Layout() {
                     color: location.pathname === '/lab' ? 'var(--accent-blue)' : 'var(--text-primary)',
                     fontWeight: location.pathname === '/lab' ? 'bold' : 'normal',
                 }}>🧪 실험실</Link>
+                <Link to="/simulator" className="nav-link" style={{
+                    color: location.pathname === '/simulator' ? 'var(--accent-blue)' : 'var(--text-primary)',
+                    fontWeight: location.pathname === '/simulator' ? 'bold' : 'normal',
+                }}>🕹️ 시뮬레이터</Link> {/* [Ver 9.8.0] */}
 
 
                 {isAuthenticated ? (
@@ -527,6 +536,7 @@ function Layout() {
                 <Route path="/requests" element={<RequestPage />} />
                 <Route path="/daily-reports" element={<DailyReportPage />} />
                 <Route path="/lab" element={<LabPage />} />
+                <Route path="/simulator" element={<SimulatorPage />} /> {/* [Ver 9.8.0] */}
                 <Route path="/asset-dashboard" element={<AssetDashboardPage />} />
                 <Route path="/asset-dashboard" element={<AssetDashboardPage />} />
                 <Route path="/login" element={<LoginPage />} />

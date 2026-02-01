@@ -35,13 +35,14 @@ app.add_middleware(
 app.mount("/uploads", StaticFiles(directory="../frontend/public/uploads"), name="uploads")
 
 # Include Routers
-app.include_router(reports.router)
+from routers import events, trading, reports, crypto, lab, simulator # [Ver 9.8.0]
+
 app.include_router(events.router)
 app.include_router(trading.router)
-from routers import crypto
+app.include_router(reports.router)
 app.include_router(crypto.router)
-from routers import lab
 app.include_router(lab.router)
+app.include_router(simulator.router) # [Ver 9.8.0]
 
 # 1. Initialize DB & Scheduler
 @app.on_event("startup")
